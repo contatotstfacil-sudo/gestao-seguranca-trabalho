@@ -1,0 +1,20 @@
+CREATE TABLE `modelosCertificados` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`nome` varchar(255) NOT NULL,
+	`descricao` text,
+	`htmlTemplate` text NOT NULL,
+	`corFundo` varchar(7) DEFAULT '#ffffff',
+	`corTexto` varchar(7) DEFAULT '#000000',
+	`corPrimaria` varchar(7) DEFAULT '#1e40af',
+	`orientacao` enum('portrait','landscape') NOT NULL DEFAULT 'landscape',
+	`textoCabecalho` text,
+	`textoRodape` text,
+	`mostrarDataEmissao` boolean DEFAULT true,
+	`mostrarValidade` boolean DEFAULT true,
+	`mostrarNR` boolean DEFAULT true,
+	`empresaId` int,
+	`padrao` boolean DEFAULT false,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `modelosCertificados_id` PRIMARY KEY(`id`)
+);
