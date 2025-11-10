@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: tst-facil
+    env: node
+    region: oregon
+    plan: free
+
+    buildCommand: |
+      echo "🛠️ Iniciando instalação das dependências..."
+      pnpm install --no-frozen-lockfile
+      echo "🏗️ Gerando build do projeto..."
+      pnpm run build
+
+    startCommand: |
+      echo "🚀 Iniciando servidor Node..."
+      pnpm run start
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+
+    autoDeploy: true
