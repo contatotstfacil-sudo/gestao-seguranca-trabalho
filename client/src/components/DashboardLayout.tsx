@@ -237,6 +237,50 @@ function DashboardLayoutContent({
               })}
             </SidebarMenu>
           </SidebarContent>
+          
+          {/* Separador e Botão de Sair - Fora do SidebarContent para ficar fixo no final */}
+          <div className="border-t px-2 py-1">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={async () => {
+                    if (window.confirm("Tem certeza que deseja sair do sistema?")) {
+                      try {
+                        await logout();
+                        // Limpar localStorage
+                        localStorage.removeItem("manus-runtime-user-info");
+                        // Aguardar um pouco para garantir que o logout foi processado
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        // Redirecionar para login usando replace para forçar o redirecionamento
+                        const loginUrl = getLoginUrl();
+                        if (loginUrl.startsWith("/")) {
+                          // URL relativa - usar replace
+                          window.location.replace(loginUrl);
+                        } else {
+                          // URL absoluta (OAuth) - usar href
+                          window.location.href = loginUrl;
+                        }
+                      } catch (error) {
+                        console.error("Erro ao fazer logout:", error);
+                        // Mesmo com erro, tentar redirecionar
+                        const loginUrl = getLoginUrl();
+                        if (loginUrl.startsWith("/")) {
+                          window.location.replace(loginUrl);
+                        } else {
+                          window.location.href = loginUrl;
+                        }
+                      }
+                    }
+                  }}
+                  tooltip="Sair do Sistema"
+                  className="h-10 transition-all font-normal text-destructive hover:text-destructive hover:bg-destructive/10 group-data-[collapsible=icon]:text-destructive"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Sair do Sistema</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
 
           <SidebarFooter className="p-3">
             <DropdownMenu>

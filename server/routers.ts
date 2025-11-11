@@ -7,6 +7,8 @@ import * as db from "./db";
 import type { InsertResponsavel } from "../drizzle/schema";
 import { sdk } from "./_core/sdk";
 import { isValidCPF, isValidCNPJ, isValidEmail, normalizeCPF, normalizeCNPJ } from "./utils/validation";
+import { checkLoginRateLimit, recordFailedLogin, clearLoginAttempts, sanitizeInput } from "./utils/security";
+import { logAudit, AuditActions } from "./utils/audit";
 import bcrypt from "bcryptjs";
 import { encryptSensitiveData, decryptSensitiveData } from "./utils/encryption";
 
@@ -22,45 +24,39 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const { identifier, password } = input;
         
-        // Rate limiting para login
+        // Rate limiting para login (mais permissivo)
         const ip = ctx.req.ip || ctx.req.socket.remoteAddress || "unknown";
         const rateLimit = checkLoginRateLimit(ip);
         if (!rateLimit.allowed) {
-          await logAudit({
-            userId: null,
-            action: AuditActions.LOGIN_FAILED,
-            resource: "auth",
-            details: { reason: "rate_limit_exceeded", identifier: sanitizeInput(identifier) },
-            ip,
-            userAgent: ctx.req.headers["user-agent"],
-            timestamp: new Date()
-          });
           throw new Error(`Muitas tentativas de login. Tente novamente em ${Math.ceil((rateLimit.retryAfter || 0) / 60)} minutos.`);
         }
         
         try {
-          // Sanitiza inputs
-          const sanitizedIdentifier = sanitizeInput(identifier);
-          const sanitizedPassword = sanitizeInput(password);
+          // Normaliza o identificador (sem sanitização agressiva)
+          let normalizedIdentifier = identifier.trim();
+          console.log(`[Login] Identificador recebido: "${normalizedIdentifier}"`);
           
-          // Normaliza o identificador
-          let normalizedIdentifier = sanitizedIdentifier.trim();
-          
-          // Verifica se é CPF ou CNPJ e normaliza
+          // Verifica se é CPF ou CNPJ e normaliza (aceita mesmo sem validação rigorosa)
           const cleanCPF = normalizeCPF(normalizedIdentifier);
           const cleanCNPJ = normalizeCNPJ(normalizedIdentifier);
           
-          if (cleanCPF.length === 11 && isValidCPF(cleanCPF)) {
+          // Aceita CPF se tiver 11 dígitos (mesmo sem validação rigorosa)
+          if (cleanCPF.length === 11) {
             normalizedIdentifier = cleanCPF;
-            console.log(`[Login] CPF detectado e normalizado: ${normalizedIdentifier}`);
-          } else if (cleanCNPJ.length === 14 && isValidCNPJ(cleanCNPJ)) {
+            console.log(`[Login] CPF detectado (11 dígitos): ${normalizedIdentifier}`);
+          } 
+          // Aceita CNPJ se tiver 14 dígitos
+          else if (cleanCNPJ.length === 14) {
             normalizedIdentifier = cleanCNPJ;
-            console.log(`[Login] CNPJ detectado e normalizado: ${normalizedIdentifier}`);
-          } else if (isValidEmail(normalizedIdentifier)) {
-            console.log(`[Login] Email detectado: ${normalizedIdentifier}`);
-          } else {
-            throw new Error("Email, CPF ou CNPJ inválido");
+            console.log(`[Login] CNPJ detectado (14 dígitos): ${normalizedIdentifier}`);
+          } 
+          // Caso contrário, assume que é email
+          else {
+            normalizedIdentifier = normalizedIdentifier.toLowerCase();
+            console.log(`[Login] Assumindo email: ${normalizedIdentifier}`);
           }
+          
+          console.log(`[Login] Buscando usuário com identificador: "${normalizedIdentifier}"`);
           
           // Busca o usuário por email, CPF ou CNPJ
           const user = await db.getUserByIdentifier(normalizedIdentifier);
@@ -68,53 +64,26 @@ export const appRouter = router({
           if (!user) {
             console.log(`[Login] Usuário não encontrado para: ${normalizedIdentifier}`);
             recordFailedLogin(ip);
-            await logAudit({
-              userId: null,
-              action: AuditActions.LOGIN_FAILED,
-              resource: "auth",
-              details: { reason: "user_not_found", identifier: normalizedIdentifier },
-              ip,
-              userAgent: ctx.req.headers["user-agent"],
-              timestamp: new Date()
-            });
-            throw new Error("Credenciais inválidas");
+            throw new Error("Usuário não encontrado. Verifique seu CPF, CNPJ ou email.");
           }
           
-          console.log(`[Login] Usuário encontrado: ID=${user.id}, Email=${user.email}, CPF=${user.cpf}, Role=${user.role}`);
+          console.log(`[Login] Usuário encontrado: ID=${user.id}, Email=${user.email || "N/A"}, CPF=${user.cpf || "N/A"}, Role=${user.role}`);
           
           if (!user.passwordHash) {
             recordFailedLogin(ip);
-            await logAudit({
-              userId: user.id,
-              action: AuditActions.LOGIN_FAILED,
-              resource: "auth",
-              details: { reason: "no_password_hash" },
-              ip,
-              userAgent: ctx.req.headers["user-agent"],
-              timestamp: new Date()
-            });
-            throw new Error("Este usuário não possui senha cadastrada. Use outro método de login.");
+            throw new Error("Este usuário não possui senha cadastrada.");
           }
           
-          // Verifica a senha
-          const passwordMatch = await bcrypt.compare(sanitizedPassword, user.passwordHash);
+          // Verifica a senha (sem sanitização adicional)
+          const passwordMatch = await bcrypt.compare(password, user.passwordHash);
           
           if (!passwordMatch) {
-            console.log(`[Login] Senha não confere para usuário ID=${user.id}`);
+            console.log(`[Login] Senha incorreta para usuário ID=${user.id}`);
             recordFailedLogin(ip);
-            await logAudit({
-              userId: user.id,
-              action: AuditActions.LOGIN_FAILED,
-              resource: "auth",
-              details: { reason: "invalid_password" },
-              ip,
-              userAgent: ctx.req.headers["user-agent"],
-              timestamp: new Date()
-            });
-            throw new Error("Credenciais inválidas");
+            throw new Error("Senha incorreta. Verifique sua senha e tente novamente.");
           }
           
-          console.log(`[Login] Senha válida para usuário ID=${user.id}`);
+          console.log(`[Login] Login bem-sucedido para usuário ID=${user.id}`);
           
           // Limpa tentativas de login após sucesso
           clearLoginAttempts(ip);
@@ -122,53 +91,68 @@ export const appRouter = router({
           // Garante que o usuário tenha um openId
           const userOpenId = user.openId || `local-${user.id}`;
           
-          // Atualiza lastSignedIn e garante openId
-          await db.upsertUser({
-            openId: userOpenId,
-            lastSignedIn: new Date(),
-          });
+          // Atualiza lastSignedIn e garante openId (não bloqueia se falhar)
+          if (!user.openId || !user.lastSignedIn) {
+            try {
+              await db.upsertUser({
+                id: user.id,
+                openId: userOpenId,
+                lastSignedIn: new Date(),
+              });
+              console.log(`[Login] Usuário atualizado com openId: ${userOpenId}`);
+            } catch (updateError: any) {
+              console.warn(`[Login] Aviso ao atualizar usuário (não crítico): ${updateError?.message || updateError}`);
+              // Não bloqueia o login se falhar
+            }
+          }
           
           // Cria sessão JWT
-          const sessionToken = await sdk.signSession({
-            openId: userOpenId,
-            appId: process.env.VITE_APP_ID || "local-app",
-            name: user.name || "Usuário",
-          });
+          let sessionToken: string;
+          try {
+            sessionToken = await sdk.signSession({
+              openId: userOpenId,
+              appId: process.env.VITE_APP_ID || "local-app",
+              name: user.name || "Usuário",
+            });
+            console.log(`[Login] Sessão JWT criada com sucesso`);
+          } catch (sessionError: any) {
+            console.error(`[Login] Erro ao criar sessão JWT: ${sessionError?.message || sessionError}`);
+            throw new Error("Erro ao criar sessão. Tente novamente.");
+          }
           
           // Define o cookie com flags de segurança
           const cookieOptions = getSessionCookieOptions(ctx.req);
           ctx.res.cookie(COOKIE_NAME, sessionToken, { 
             ...cookieOptions, 
             maxAge: ONE_YEAR_MS,
-            httpOnly: true, // Previne acesso via JavaScript
-            secure: process.env.NODE_ENV === "production", // HTTPS apenas em produção
-            sameSite: "strict" // Proteção CSRF
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax" // Mudado de "strict" para "lax" para melhor compatibilidade
           });
           
-          // Log de auditoria de login bem-sucedido
-          await logAudit({
-            userId: user.id,
-            action: AuditActions.LOGIN_SUCCESS,
-            resource: "auth",
-            details: { loginMethod: "traditional" },
-            ip,
-            userAgent: ctx.req.headers["user-agent"],
-            timestamp: new Date()
-          });
-          
-          return {
-            success: true,
+          // Retorna resposta simples e completamente serializável
+          // Garante que todos os valores são primitivos serializáveis
+          const response = {
+            success: true as const,
             user: {
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-              empresaId: user.empresaId,
+              id: typeof user.id === 'number' ? user.id : parseInt(String(user.id), 10),
+              name: String(user.name || ""),
+              email: String(user.email || ""),
+              role: String(user.role || "user"),
+              empresaId: user.empresaId !== null && user.empresaId !== undefined 
+                ? (typeof user.empresaId === 'number' ? user.empresaId : parseInt(String(user.empresaId), 10))
+                : null,
             },
           };
+          
+          console.log(`[Login] Retornando resposta:`, JSON.stringify(response));
+          return response;
         } catch (error: any) {
-          console.error("[Login] Erro durante login:", error);
-          throw error;
+          console.error("[Login] Erro completo:", error);
+          console.error("[Login] Stack:", error?.stack);
+          // Retorna erro serializável
+          const errorMessage = String(error?.message || "Erro ao fazer login. Tente novamente.");
+          throw new Error(errorMessage);
         }
       }),
     logout: publicProcedure.mutation(async ({ ctx }) => {

@@ -60,38 +60,60 @@ export async function getUserByIdentifier(identifier: string) {
   if (!db) throw new Error("Database not available");
 
   try {
-    console.log(`[DB] Buscando usuário com identificador: ${identifier}`);
+    console.log(`[DB] Buscando usuário com identificador: "${identifier}"`);
     
-    // Tenta buscar por email
-    let user = await db.select().from(users).where(eq(users.email, identifier)).limit(1);
+    // Tenta buscar por email (case-insensitive)
+    const emailLower = identifier.toLowerCase();
+    let user = await db.select().from(users).where(eq(users.email, emailLower)).limit(1);
     if (user.length > 0) {
       console.log(`[DB] Usuário encontrado por email: ID=${user[0].id}`);
       return user[0];
     }
 
-    // Tenta buscar por CPF (normalizado)
-    const cleanCPF = normalizeCPF(identifier);
-    console.log(`[DB] CPF normalizado: ${cleanCPF}`);
-    if (cleanCPF.length === 11) {
-      user = await db.select().from(users).where(eq(users.cpf, cleanCPF)).limit(1);
+    // Verifica se é CPF (11 dígitos)
+    const isCPF = /^\d{11}$/.test(identifier);
+    if (isCPF) {
+      console.log(`[DB] Buscando por CPF: ${identifier}`);
+      user = await db.select().from(users).where(eq(users.cpf, identifier)).limit(1);
       if (user.length > 0) {
         console.log(`[DB] Usuário encontrado por CPF: ID=${user[0].id}`);
         return user[0];
       }
     }
 
-    // Tenta buscar por CNPJ (normalizado)
-    const cleanCNPJ = normalizeCNPJ(identifier);
-    console.log(`[DB] CNPJ normalizado: ${cleanCNPJ}`);
-    if (cleanCNPJ.length === 14) {
-      user = await db.select().from(users).where(eq(users.cnpj, cleanCNPJ)).limit(1);
+    // Verifica se é CNPJ (14 dígitos)
+    const isCNPJ = /^\d{14}$/.test(identifier);
+    if (isCNPJ) {
+      console.log(`[DB] Buscando por CNPJ: ${identifier}`);
+      user = await db.select().from(users).where(eq(users.cnpj, identifier)).limit(1);
       if (user.length > 0) {
         console.log(`[DB] Usuário encontrado por CNPJ: ID=${user[0].id}`);
         return user[0];
       }
     }
 
-    console.log(`[DB] Nenhum usuário encontrado para: ${identifier}`);
+    // Tenta normalizar e buscar novamente
+    const cleanCPF = normalizeCPF(identifier);
+    if (cleanCPF.length === 11 && cleanCPF !== identifier) {
+      console.log(`[DB] Tentando CPF normalizado: ${cleanCPF}`);
+      user = await db.select().from(users).where(eq(users.cpf, cleanCPF)).limit(1);
+      if (user.length > 0) {
+        console.log(`[DB] Usuário encontrado por CPF normalizado: ID=${user[0].id}`);
+        return user[0];
+      }
+    }
+
+    const cleanCNPJ = normalizeCNPJ(identifier);
+    if (cleanCNPJ.length === 14 && cleanCNPJ !== identifier) {
+      console.log(`[DB] Tentando CNPJ normalizado: ${cleanCNPJ}`);
+      user = await db.select().from(users).where(eq(users.cnpj, cleanCNPJ)).limit(1);
+      if (user.length > 0) {
+        console.log(`[DB] Usuário encontrado por CNPJ normalizado: ID=${user[0].id}`);
+        return user[0];
+      }
+    }
+
+    console.log(`[DB] Nenhum usuário encontrado para: "${identifier}"`);
     return null;
   } catch (error) {
     console.error("[Database] Erro ao buscar usuário:", error);
@@ -123,6 +145,19 @@ export async function upsertUser(userData: Partial<InsertUser>) {
   if (!db) throw new Error("Database not available");
 
   try {
+    // Se tem ID, atualiza pelo ID
+    if (userData.id) {
+      const existing = await getUserById(userData.id);
+      if (existing) {
+        await db.update(users).set({
+          ...userData,
+          updatedAt: new Date(),
+        }).where(eq(users.id, userData.id));
+        return await getUserById(userData.id);
+      }
+    }
+    
+    // Se tem openId, tenta atualizar pelo openId
     if (userData.openId) {
       const existing = await getUserByOpenId(userData.openId);
       if (existing) {
@@ -134,11 +169,15 @@ export async function upsertUser(userData: Partial<InsertUser>) {
       }
     }
 
-    const result = await db.insert(users).values(userData as InsertUser);
-    const insertId = (result as any)[0]?.insertId;
-    if (insertId) {
-      return await db.select().from(users).where(eq(users.id, insertId)).limit(1);
+    // Se não existe, cria novo (só se tiver dados mínimos)
+    if (userData.email || userData.cpf || userData.cnpj) {
+      const result = await db.insert(users).values(userData as InsertUser);
+      const insertId = (result as any)[0]?.insertId;
+      if (insertId) {
+        return await getUserById(insertId);
+      }
     }
+    
     return null;
   } catch (error) {
     console.error("[Database] Erro ao criar/atualizar usuário:", error);
