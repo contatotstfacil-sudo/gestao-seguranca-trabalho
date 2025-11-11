@@ -29,11 +29,28 @@ O script mostrará uma lista numerada e você escolhe qual restaurar.
 .\restaurar-ponto-restauracao.ps1 restore-point-2025-11-10_23-55-21
 ```
 
+## 🔒 Sistema de Backup Automático
+
+**IMPORTANTE**: O script de restauração SEMPRE cria backups completos antes de qualquer operação destrutiva!
+
+### O que é feito automaticamente:
+
+1. **Stash de mudanças não commitadas**: Todas as alterações não salvas são guardadas em um stash com nome único
+2. **Branch de backup**: Um backup completo do estado atual é criado em uma branch separada
+3. **Verificação de integridade**: O sistema verifica se o backup foi criado corretamente antes de prosseguir
+4. **Recuperação automática**: Se algo der errado durante a restauração, o sistema tenta restaurar automaticamente do backup
+
+### Formato dos backups:
+
+- **Branch**: `backup-before-restore-YYYYMMDD-HHmmss`
+- **Stash**: `backup-stash-YYYYMMDD-HHmmss` (se houver mudanças não commitadas)
+
 ## ⚠️ Importante
 
-- **Todas as mudanças não commitadas serão descartadas** ao restaurar
-- Um backup automático será criado em uma branch antes da restauração
+- **Todas as mudanças não commitadas serão descartadas** ao restaurar, mas são salvas em backup primeiro
+- **Backups são criados automaticamente** - você não precisa se preocupar em perder dados
 - Após restaurar, pode ser necessário executar `pnpm install` para reinstalar dependências
+- Se algo der errado, o sistema tenta restaurar automaticamente do backup criado
 
 ## 🔄 Criar um Novo Ponto de Restauração
 
@@ -61,4 +78,23 @@ git tag -a $tagName -m "Ponto de restauração criado em $data"
 - Crie um ponto de restauração antes de fazer mudanças grandes
 - Use nomes descritivos nos commits para facilitar a identificação
 - Os backups automáticos ficam em branches com o formato `backup-before-restore-YYYYMMDD-HHmmss`
+- Você pode ver todos os backups com: `git branch | grep backup-before-restore`
+- Para ver os stashes de backup: `git stash list | grep backup-stash`
+- Para restaurar um backup manualmente: `git checkout backup-before-restore-YYYYMMDD-HHmmss`
+
+## 🔄 Recuperar de um Backup
+
+Se precisar voltar ao estado antes da restauração:
+
+```powershell
+# Ver branches de backup disponíveis
+git branch | grep backup-before-restore
+
+# Restaurar um backup específico
+git checkout backup-before-restore-YYYYMMDD-HHmmss
+
+# Se houver mudanças no stash, aplicar também
+git stash list
+git stash apply stash@{N}  # Substitua N pelo índice do stash
+```
 
