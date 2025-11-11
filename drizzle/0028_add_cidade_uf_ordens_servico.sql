@@ -3,3 +3,4 @@ ALTER TABLE `ordensServico` ADD COLUMN `cidade` varchar(255) NULL;
 ALTER TABLE `ordensServico` ADD COLUMN `uf` varchar(2) NULL;
 
 
+

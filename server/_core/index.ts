@@ -30,7 +30,13 @@ function isPortAvailable(port: number): Promise<boolean> {
 }
 
 async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
+  // Tentar a porta preferida primeiro
+  if (await isPortAvailable(startPort)) {
+    return startPort;
+  }
+  
+  // Se não estiver disponível, tentar outras portas
+  for (let port = startPort + 1; port < startPort + 50; port++) {
     if (await isPortAvailable(port)) {
       return port;
     }
@@ -41,9 +47,18 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  
+  // Trust proxy para obter IP real em produção
+  app.set("trust proxy", 1);
+  
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  
+  // Middleware de segurança global
+  const { securityMiddleware } = await import("../utils/security");
+  app.use(securityMiddleware);
+  
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   
@@ -58,7 +73,23 @@ async function startServer() {
   }
   app.use("/uploads", express.static(uploadsPath));
   
-  // tRPC API
+  // development mode uses Vite, production mode uses static files
+  // IMPORTANTE: Vite deve ser configurado ANTES do tRPC para servir arquivos estáticos
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Server] Configurando Vite em modo desenvolvimento...");
+    try {
+      await setupVite(app, server);
+      console.log("[Server] ✅ Vite configurado com sucesso");
+    } catch (error) {
+      console.error("[Server] ❌ Erro ao configurar Vite:", error);
+      throw error;
+    }
+  } else {
+    console.log("[Server] Modo produção - servindo arquivos estáticos");
+    serveStatic(app);
+  }
+  
+  // tRPC API - depois do Vite para não interferir no roteamento
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -66,23 +97,41 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
 
   if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+    console.log(`[Server] Porta ${preferredPort} ocupada, usando porta ${port}`);
   }
 
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`[Server] ✅ Servidor rodando em http://localhost:${port}/`);
+    console.log(`[Server] Ambiente: ${process.env.NODE_ENV || "development"}`);
+    console.log(`[Server] Banco: ${process.env.DATABASE_URL ? "Configurado" : "Não configurado"}`);
+    console.log(`[Server] Acesse: http://localhost:${port}/`);
+  });
+
+  server.on("error", (error: any) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`[Server] ❌ Porta ${port} já está em uso`);
+      console.log(`[Server] Tentando encontrar outra porta...`);
+      findAvailablePort(port + 1).then(newPort => {
+        server.listen(newPort, "0.0.0.0", () => {
+          console.log(`[Server] ✅ Servidor rodando em http://localhost:${newPort}/`);
+        });
+      }).catch(err => {
+        console.error("[Server] ❌ Erro ao iniciar servidor:", err);
+        process.exit(1);
+      });
+    } else {
+      console.error("[Server] ❌ Erro no servidor:", error);
+      process.exit(1);
+    }
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((error) => {
+  console.error("[Server] ❌ Erro fatal ao iniciar servidor:", error);
+  process.exit(1);
+});

@@ -8,6 +8,7 @@ import type { InsertResponsavel } from "../drizzle/schema";
 import { sdk } from "./_core/sdk";
 import { isValidCPF, isValidCNPJ, isValidEmail, normalizeCPF, normalizeCNPJ } from "./utils/validation";
 import bcrypt from "bcryptjs";
+import { encryptSensitiveData, decryptSensitiveData } from "./utils/encryption";
 
 export const appRouter = router({
   system: systemRouter,
@@ -21,71 +22,169 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const { identifier, password } = input;
         
-        // Normaliza o identificador
-        let normalizedIdentifier = identifier.trim();
-        
-        // Verifica se é CPF ou CNPJ e normaliza
-        const cleanCPF = normalizeCPF(normalizedIdentifier);
-        const cleanCNPJ = normalizeCNPJ(normalizedIdentifier);
-        
-        if (cleanCPF.length === 11 && isValidCPF(cleanCPF)) {
-          normalizedIdentifier = cleanCPF;
-        } else if (cleanCNPJ.length === 14 && isValidCNPJ(cleanCNPJ)) {
-          normalizedIdentifier = cleanCNPJ;
-        } else if (!isValidEmail(normalizedIdentifier)) {
-          throw new Error("Email, CPF ou CNPJ inválido");
+        // Rate limiting para login
+        const ip = ctx.req.ip || ctx.req.socket.remoteAddress || "unknown";
+        const rateLimit = checkLoginRateLimit(ip);
+        if (!rateLimit.allowed) {
+          await logAudit({
+            userId: null,
+            action: AuditActions.LOGIN_FAILED,
+            resource: "auth",
+            details: { reason: "rate_limit_exceeded", identifier: sanitizeInput(identifier) },
+            ip,
+            userAgent: ctx.req.headers["user-agent"],
+            timestamp: new Date()
+          });
+          throw new Error(`Muitas tentativas de login. Tente novamente em ${Math.ceil((rateLimit.retryAfter || 0) / 60)} minutos.`);
         }
         
-        // Busca o usuário por email, CPF ou CNPJ
-        const user = await db.getUserByIdentifier(normalizedIdentifier);
-        
-        if (!user) {
-          throw new Error("Credenciais inválidas");
+        try {
+          // Sanitiza inputs
+          const sanitizedIdentifier = sanitizeInput(identifier);
+          const sanitizedPassword = sanitizeInput(password);
+          
+          // Normaliza o identificador
+          let normalizedIdentifier = sanitizedIdentifier.trim();
+          
+          // Verifica se é CPF ou CNPJ e normaliza
+          const cleanCPF = normalizeCPF(normalizedIdentifier);
+          const cleanCNPJ = normalizeCNPJ(normalizedIdentifier);
+          
+          if (cleanCPF.length === 11 && isValidCPF(cleanCPF)) {
+            normalizedIdentifier = cleanCPF;
+            console.log(`[Login] CPF detectado e normalizado: ${normalizedIdentifier}`);
+          } else if (cleanCNPJ.length === 14 && isValidCNPJ(cleanCNPJ)) {
+            normalizedIdentifier = cleanCNPJ;
+            console.log(`[Login] CNPJ detectado e normalizado: ${normalizedIdentifier}`);
+          } else if (isValidEmail(normalizedIdentifier)) {
+            console.log(`[Login] Email detectado: ${normalizedIdentifier}`);
+          } else {
+            throw new Error("Email, CPF ou CNPJ inválido");
+          }
+          
+          // Busca o usuário por email, CPF ou CNPJ
+          const user = await db.getUserByIdentifier(normalizedIdentifier);
+          
+          if (!user) {
+            console.log(`[Login] Usuário não encontrado para: ${normalizedIdentifier}`);
+            recordFailedLogin(ip);
+            await logAudit({
+              userId: null,
+              action: AuditActions.LOGIN_FAILED,
+              resource: "auth",
+              details: { reason: "user_not_found", identifier: normalizedIdentifier },
+              ip,
+              userAgent: ctx.req.headers["user-agent"],
+              timestamp: new Date()
+            });
+            throw new Error("Credenciais inválidas");
+          }
+          
+          console.log(`[Login] Usuário encontrado: ID=${user.id}, Email=${user.email}, CPF=${user.cpf}, Role=${user.role}`);
+          
+          if (!user.passwordHash) {
+            recordFailedLogin(ip);
+            await logAudit({
+              userId: user.id,
+              action: AuditActions.LOGIN_FAILED,
+              resource: "auth",
+              details: { reason: "no_password_hash" },
+              ip,
+              userAgent: ctx.req.headers["user-agent"],
+              timestamp: new Date()
+            });
+            throw new Error("Este usuário não possui senha cadastrada. Use outro método de login.");
+          }
+          
+          // Verifica a senha
+          const passwordMatch = await bcrypt.compare(sanitizedPassword, user.passwordHash);
+          
+          if (!passwordMatch) {
+            console.log(`[Login] Senha não confere para usuário ID=${user.id}`);
+            recordFailedLogin(ip);
+            await logAudit({
+              userId: user.id,
+              action: AuditActions.LOGIN_FAILED,
+              resource: "auth",
+              details: { reason: "invalid_password" },
+              ip,
+              userAgent: ctx.req.headers["user-agent"],
+              timestamp: new Date()
+            });
+            throw new Error("Credenciais inválidas");
+          }
+          
+          console.log(`[Login] Senha válida para usuário ID=${user.id}`);
+          
+          // Limpa tentativas de login após sucesso
+          clearLoginAttempts(ip);
+          
+          // Garante que o usuário tenha um openId
+          const userOpenId = user.openId || `local-${user.id}`;
+          
+          // Atualiza lastSignedIn e garante openId
+          await db.upsertUser({
+            openId: userOpenId,
+            lastSignedIn: new Date(),
+          });
+          
+          // Cria sessão JWT
+          const sessionToken = await sdk.signSession({
+            openId: userOpenId,
+            appId: process.env.VITE_APP_ID || "local-app",
+            name: user.name || "Usuário",
+          });
+          
+          // Define o cookie com flags de segurança
+          const cookieOptions = getSessionCookieOptions(ctx.req);
+          ctx.res.cookie(COOKIE_NAME, sessionToken, { 
+            ...cookieOptions, 
+            maxAge: ONE_YEAR_MS,
+            httpOnly: true, // Previne acesso via JavaScript
+            secure: process.env.NODE_ENV === "production", // HTTPS apenas em produção
+            sameSite: "strict" // Proteção CSRF
+          });
+          
+          // Log de auditoria de login bem-sucedido
+          await logAudit({
+            userId: user.id,
+            action: AuditActions.LOGIN_SUCCESS,
+            resource: "auth",
+            details: { loginMethod: "traditional" },
+            ip,
+            userAgent: ctx.req.headers["user-agent"],
+            timestamp: new Date()
+          });
+          
+          return {
+            success: true,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              empresaId: user.empresaId,
+            },
+          };
+        } catch (error: any) {
+          console.error("[Login] Erro durante login:", error);
+          throw error;
         }
-        
-        if (!user.passwordHash) {
-          throw new Error("Este usuário não possui senha cadastrada. Use outro método de login.");
-        }
-        
-        // Verifica a senha
-        const passwordMatch = await bcrypt.compare(password, user.passwordHash);
-        
-        if (!passwordMatch) {
-          throw new Error("Credenciais inválidas");
-        }
-        
-        // Garante que o usuário tenha um openId
-        const userOpenId = user.openId || `local-${user.id}`;
-        
-        // Atualiza lastSignedIn e garante openId
-        await db.upsertUser({
-          openId: userOpenId,
-          lastSignedIn: new Date(),
-        });
-        
-        // Cria sessão JWT
-        const sessionToken = await sdk.signSession({
-          openId: userOpenId,
-          appId: process.env.VITE_APP_ID || "local-app",
-          name: user.name || "Usuário",
-        });
-        
-        // Define o cookie
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-        
-        return {
-          success: true,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            empresaId: user.empresaId,
-          },
-        };
       }),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      // Log de auditoria
+      if (ctx.user) {
+        await logAudit({
+          userId: ctx.user.id,
+          action: AuditActions.LOGOUT,
+          resource: "auth",
+          details: {},
+          ip: ctx.req.ip || ctx.req.socket.remoteAddress,
+          userAgent: ctx.req.headers["user-agent"],
+          timestamp: new Date()
+        });
+      }
+      
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return {
@@ -149,14 +248,48 @@ export const appRouter = router({
         role: z.enum(["user", "admin", "gestor", "tecnico"]),
         empresaId: z.number().optional(),
       }))
-      .mutation(async ({ input }) => {
-        const { email, cpf, cnpj, ...rest } = input;
-        return db.createUser({
-          ...rest,
-          email: email || undefined,
-          cpf: cpf || undefined,
-          cnpj: cnpj || undefined,
+      .mutation(async ({ input, ctx }) => {
+        // Valida força da senha
+        const passwordValidation = validatePasswordStrength(input.password);
+        if (!passwordValidation.valid) {
+          throw new Error(`Senha fraca: ${passwordValidation.errors.join(", ")}`);
+        }
+        
+        // Sanitiza inputs
+        const sanitizedInput = {
+          name: sanitizeInput(input.name),
+          email: input.email ? sanitizeInput(input.email) : undefined,
+          cpf: input.cpf ? sanitizeInput(input.cpf) : undefined,
+          cnpj: input.cnpj ? sanitizeInput(input.cnpj) : undefined,
+          password: input.password,
+          role: input.role,
+          empresaId: input.empresaId || undefined,
+        };
+        
+        const newUser = await db.createUser({
+          name: sanitizedInput.name,
+          email: sanitizedInput.email,
+          cpf: sanitizedInput.cpf,
+          cnpj: sanitizedInput.cnpj,
+          passwordHash: await bcrypt.hash(sanitizedInput.password, 10),
+          role: sanitizedInput.role,
+          empresaId: sanitizedInput.empresaId || null,
+          openId: `local-${Date.now()}`,
         });
+        
+        // Log de auditoria
+        await logAudit({
+          userId: ctx.user.id,
+          action: AuditActions.USER_CREATE,
+          resource: "users",
+          resourceId: newUser.id,
+          details: { createdUserId: newUser.id, role: sanitizedInput.role },
+          ip: ctx.req.ip || ctx.req.socket.remoteAddress,
+          userAgent: ctx.req.headers["user-agent"],
+          timestamp: new Date()
+        });
+        
+        return newUser;
       }),
     update: adminProcedure
       .input(z.object({
@@ -169,18 +302,61 @@ export const appRouter = router({
         role: z.enum(["user", "admin", "gestor", "tecnico"]).optional(),
         empresaId: z.number().nullable().optional(),
       }))
-      .mutation(async ({ input }) => {
-        const { id, email, cpf, cnpj, ...rest } = input;
-        return db.updateUser(id, {
-          ...rest,
-          email: email !== undefined ? (email || undefined) : undefined,
-          cpf: cpf !== undefined ? (cpf || undefined) : undefined,
-          cnpj: cnpj !== undefined ? (cnpj || undefined) : undefined,
+      .mutation(async ({ input, ctx }) => {
+        const { id, ...rest } = input;
+        
+        // Se está alterando senha, valida força
+        if (input.password) {
+          const passwordValidation = validatePasswordStrength(input.password);
+          if (!passwordValidation.valid) {
+            throw new Error(`Senha fraca: ${passwordValidation.errors.join(", ")}`);
+          }
+        }
+        
+        // Sanitiza inputs
+        const sanitizedData: any = {};
+        if (rest.name) sanitizedData.name = sanitizeInput(rest.name);
+        if (rest.email !== undefined) sanitizedData.email = rest.email ? sanitizeInput(rest.email) : undefined;
+        if (rest.cpf !== undefined) sanitizedData.cpf = rest.cpf ? sanitizeInput(rest.cpf) : undefined;
+        if (rest.cnpj !== undefined) sanitizedData.cnpj = rest.cnpj ? sanitizeInput(rest.cnpj) : undefined;
+        if (rest.role) sanitizedData.role = rest.role;
+        if (rest.empresaId !== undefined) sanitizedData.empresaId = rest.empresaId;
+        
+        if (input.password) {
+          sanitizedData.passwordHash = await bcrypt.hash(input.password, 10);
+        }
+        
+        const updatedUser = await db.updateUser(id, sanitizedData);
+        
+        // Log de auditoria
+        await logAudit({
+          userId: ctx.user.id,
+          action: input.password ? AuditActions.PASSWORD_CHANGE : AuditActions.USER_UPDATE,
+          resource: "users",
+          resourceId: id,
+          details: { updatedFields: Object.keys(sanitizedData) },
+          ip: ctx.req.ip || ctx.req.socket.remoteAddress,
+          userAgent: ctx.req.headers["user-agent"],
+          timestamp: new Date()
         });
+        
+        return updatedUser;
       }),
     delete: adminProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // Log de auditoria antes de deletar
+        await logAudit({
+          userId: ctx.user.id,
+          action: AuditActions.USER_DELETE,
+          resource: "users",
+          resourceId: input.id,
+          details: { deletedUserId: input.id },
+          ip: ctx.req.ip || ctx.req.socket.remoteAddress,
+          userAgent: ctx.req.headers["user-agent"],
+          timestamp: new Date()
+        });
+        
         return db.deleteUser(input.id);
       }),
   }),
@@ -1351,9 +1527,24 @@ export const appRouter = router({
         certificadosEdit: z.boolean().default(false),
         certificadosDelete: z.boolean().default(false),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { usuarioId, ...permissoesData } = input;
-        return db.upsertPermissoesUsuario(usuarioId, permissoesData);
+        
+        const result = await db.upsertPermissoesUsuario(usuarioId, permissoesData);
+        
+        // Log de auditoria para mudanças de permissões
+        await logAudit({
+          userId: ctx.user.id,
+          action: AuditActions.PERMISSION_CHANGE,
+          resource: "permissions",
+          resourceId: usuarioId,
+          details: { permissoes: permissoesData },
+          ip: ctx.req.ip || ctx.req.socket.remoteAddress,
+          userAgent: ctx.req.headers["user-agent"],
+          timestamp: new Date()
+        });
+        
+        return result;
       }),
   }),
 })

@@ -7,6 +7,8 @@ import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
 
 export async function setupVite(app: Express, server: Server) {
+  console.log("[Vite] Inicializando servidor Vite...");
+  
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -20,8 +22,18 @@ export async function setupVite(app: Express, server: Server) {
     appType: "custom",
   });
 
+  console.log("[Vite] Servidor Vite criado com sucesso");
+  
+  // Middleware do Vite PRIMEIRO para processar todos os arquivos estáticos
   app.use(vite.middlewares);
+  
+  // Rota catch-all para servir index.html - deve ser use, não get
   app.use("*", async (req, res, next) => {
+    // Ignorar requisições de API - passar para próximo middleware
+    if (req.originalUrl.startsWith("/api/")) {
+      return next();
+    }
+
     const url = req.originalUrl;
 
     try {
@@ -32,6 +44,11 @@ export async function setupVite(app: Express, server: Server) {
         "index.html"
       );
 
+      if (!fs.existsSync(clientTemplate)) {
+        console.error(`[Vite] Template não encontrado: ${clientTemplate}`);
+        return res.status(404).send("Template não encontrado");
+      }
+
       // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
@@ -40,7 +57,9 @@ export async function setupVite(app: Express, server: Server) {
       );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
-    } catch (e) {
+    } catch (e: any) {
+      console.error("[Vite] Erro ao transformar HTML:", e.message);
+      console.error("[Vite] Stack:", e.stack);
       vite.ssrFixStacktrace(e as Error);
       next(e);
     }

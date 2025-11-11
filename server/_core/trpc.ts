@@ -2,9 +2,23 @@ import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
+import { sanitizeError } from "../utils/security";
+import { addWatermark, detectCloneAttempt } from "../utils/watermark";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    // Sanitiza erros para não revelar informações do banco
+    const sanitized = sanitizeError(error);
+    
+    return {
+      ...shape,
+      message: sanitized.message,
+      code: sanitized.code || shape.code,
+      // Remove stack trace em produção
+      ...(process.env.NODE_ENV === "production" ? {} : { stack: error.stack }),
+    };
+  },
 });
 
 export const router = t.router;
@@ -13,16 +27,32 @@ export const publicProcedure = t.procedure;
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
 
+  // Detecta tentativas de clonagem
+  if (detectCloneAttempt(ctx.req)) {
+    console.error(`[SECURITY] Tentativa de clonagem detectada de IP: ${ctx.req.ip || ctx.req.socket.remoteAddress}`);
+    throw new TRPCError({ 
+      code: "FORBIDDEN", 
+      message: "Acesso negado" 
+    });
+  }
+
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 
-  return next({
+  const result = await next({
     ctx: {
       ...ctx,
       user: ctx.user,
     },
   });
+
+  // Adiciona watermark nas respostas
+  if (result && typeof result === "object" && "data" in result) {
+    result.data = addWatermark(result.data, ctx.user.id);
+  }
+
+  return result;
 });
 
 export const protectedProcedure = t.procedure.use(requireUser);
