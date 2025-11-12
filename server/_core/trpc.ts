@@ -6,8 +6,7 @@ import { sanitizeError } from "../utils/security";
 import { addWatermark, detectCloneAttempt } from "../utils/watermark";
 
 const t = initTRPC.context<TrpcContext>().create({
-  // Temporariamente desabilitando superjson para debug
-  // transformer: superjson,
+  // SEM transformer - usando JSON puro para evitar problemas de serialização
   errorFormatter({ shape, error }) {
     // Sanitiza erros para não revelar informações do banco
     const sanitized = sanitizeError(error);

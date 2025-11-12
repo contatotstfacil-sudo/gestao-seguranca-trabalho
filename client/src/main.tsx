@@ -41,8 +41,7 @@ const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: "/api/trpc",
-      // Temporariamente desabilitando superjson para debug
-      // transformer: superjson,
+      // SEM transformer - usando JSON puro para evitar problemas de serialização
       fetch(input, init) {
         return globalThis.fetch(input, {
           ...(init ?? {}),

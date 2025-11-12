@@ -15,14 +15,20 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
 
   const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("[Login] Sucesso:", data);
       toast.success("Login realizado com sucesso!");
-      setLocation("/");
-      // Recarrega a página para atualizar o estado de autenticação
-      window.location.reload();
+      // Pequeno delay para garantir que o cookie foi setado
+      setTimeout(() => {
+        setLocation("/");
+        window.location.reload();
+      }, 100);
     },
     onError: (error) => {
-      toast.error(error.message || "Erro ao fazer login");
+      console.error("[Login] Erro:", error);
+      console.error("[Login] Erro completo:", JSON.stringify(error, null, 2));
+      const errorMessage = error.message || error.data?.message || "Erro ao fazer login";
+      toast.error(errorMessage);
     },
   });
 
