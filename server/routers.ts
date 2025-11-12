@@ -163,24 +163,29 @@ export const appRouter = router({
         }
       }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
-      // Log de auditoria
+      // Log de auditoria (não bloqueia se falhar)
       if (ctx.user) {
-        await logAudit({
-          userId: ctx.user.id,
-          action: AuditActions.LOGOUT,
-          resource: "auth",
-          details: {},
-          ip: ctx.req.ip || ctx.req.socket.remoteAddress,
-          userAgent: ctx.req.headers["user-agent"],
-          timestamp: new Date()
-        });
+        try {
+          await logAudit({
+            userId: ctx.user.id,
+            action: AuditActions.LOGOUT,
+            resource: "auth",
+            details: {},
+            ip: ctx.req.ip || ctx.req.socket.remoteAddress,
+            userAgent: ctx.req.headers["user-agent"],
+            timestamp: new Date()
+          });
+        } catch (auditError) {
+          console.warn("[Logout] Erro ao registrar auditoria (não crítico):", auditError);
+          // Não bloqueia logout se falhar
+        }
       }
       
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return {
         success: true,
-      } as const;
+      };
     }),
   }),
 
