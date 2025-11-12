@@ -54,7 +54,18 @@ O script mostrará uma lista numerada e você escolhe qual restaurar.
 
 ## 🔄 Criar um Novo Ponto de Restauração
 
-Para criar um novo ponto de restauração manualmente:
+**Opção 1: Usar o Script Automático (Recomendado)**
+
+```powershell
+.\criar-ponto-restauracao.ps1
+```
+
+Ou com descrição personalizada:
+```powershell
+.\criar-ponto-restauracao.ps1 -descricao "Descrição do que foi feito"
+```
+
+**Opção 2: Criar Manualmente**
 
 ```powershell
 # Adicionar todas as mudanças
@@ -71,6 +82,7 @@ git tag -a $tagName -m "Ponto de restauração criado em $data"
 
 ## 📝 Pontos Criados
 
+- **restore-point-2025-11-12_11-56-34**: Otimizações SEO completas - Meta tags, Schema.org, Open Graph, robots.txt, sitemap.xml, performance (12/11/2025 11:56:34)
 - **restore-point-2025-11-10_23-55-21**: Sistema funcional antes de mudanças futuras (10/11/2025 23:55:21)
 
 ## 💡 Dicas

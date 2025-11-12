@@ -17,6 +17,12 @@ export default function Login() {
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: (data) => {
       console.log("[Login] Sucesso:", data);
+      // Validar estrutura da resposta
+      if (!data || !data.success || !data.user) {
+        console.error("[Login] Resposta inválida:", data);
+        toast.error("Resposta inválida do servidor. Tente novamente.");
+        return;
+      }
       toast.success("Login realizado com sucesso!");
       // Pequeno delay para garantir que o cookie foi setado
       setTimeout(() => {
@@ -26,8 +32,27 @@ export default function Login() {
     },
     onError: (error) => {
       console.error("[Login] Erro:", error);
-      console.error("[Login] Erro completo:", JSON.stringify(error, null, 2));
-      const errorMessage = error.message || error.data?.message || "Erro ao fazer login";
+      console.error("[Login] Erro completo:", error);
+      console.error("[Login] Erro data:", error.data);
+      console.error("[Login] Erro shape:", error.shape);
+      
+      // Tentar extrair mensagem de erro de várias formas
+      let errorMessage = "Erro ao fazer login";
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.data?.message) {
+        errorMessage = error.data.message;
+      } else if (error.shape?.message) {
+        errorMessage = error.shape.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      // Se for erro de transformação, mensagem mais específica
+      if (errorMessage.includes("transform") || errorMessage.includes("serialize")) {
+        errorMessage = "Erro ao processar resposta do servidor. Tente novamente.";
+      }
+      
       toast.error(errorMessage);
     },
   });

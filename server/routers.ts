@@ -11,6 +11,7 @@ import { checkLoginRateLimit, recordFailedLogin, clearLoginAttempts, sanitizeInp
 import { logAudit, AuditActions } from "./utils/audit";
 import bcrypt from "bcryptjs";
 import { encryptSensitiveData, decryptSensitiveData } from "./utils/encryption";
+import type { InsertAso } from "../drizzle/schema";
 
 export const appRouter = router({
   system: systemRouter,
@@ -1525,6 +1526,150 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return db.deleteModeloOrdemServico(input.id);
+      }),
+  }),
+
+  // ASOs - Gestão de Atestados de Saúde Ocupacional
+  asos: router({
+    dashboard: protectedProcedure
+      .query(async ({ ctx }) => {
+        const tenantId = (ctx.user as any)?.tenantId;
+        if (!tenantId) {
+          throw new Error("Usuário não associado a um tenant");
+        }
+
+        return db.getAsoDashboard(tenantId);
+      }),
+
+    list: protectedProcedure
+      .input(z.object({
+        colaboradorId: z.number().optional(),
+        empresaId: z.number().optional(),
+        tipoAso: z.enum(["admissional", "periodico", "retorno_trabalho", "mudanca_funcao", "demissional"]).optional(),
+        status: z.enum(["ativo", "vencido"]).optional(),
+        vencidos: z.boolean().optional(),
+        aVencerEmDias: z.number().optional(),
+      }).optional())
+      .query(async ({ input, ctx }) => {
+        const tenantId = (ctx.user as any)?.tenantId;
+        if (!tenantId) {
+          throw new Error("Usuário não associado a um tenant");
+        }
+
+        return db.getAllAsos({ tenantId, ...input });
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        colaboradorId: z.number(),
+        empresaId: z.number(),
+        numeroAso: z.string().optional().nullable(),
+        tipoAso: z.enum(["admissional", "periodico", "retorno_trabalho", "mudanca_funcao", "demissional"]),
+        dataEmissao: z.string(),
+        dataValidade: z.string(),
+        medicoResponsavel: z.string().optional().nullable(),
+        clinicaMedica: z.string().optional().nullable(),
+        crmMedico: z.string().optional().nullable(),
+        apto: z.enum(["sim", "nao", "apto_com_restricoes"]),
+        restricoes: z.string().optional().nullable(),
+        observacoes: z.string().optional().nullable(),
+        anexoUrl: z.string().optional().nullable(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const tenantId = (ctx.user as any)?.tenantId;
+        if (!tenantId) {
+          throw new Error("Usuário não associado a um tenant");
+        }
+
+        return db.createAso({
+          tenantId,
+          colaboradorId: input.colaboradorId,
+          empresaId: input.empresaId,
+          numeroAso: input.numeroAso || null,
+          tipoAso: input.tipoAso,
+          dataEmissao: new Date(input.dataEmissao),
+          dataValidade: new Date(input.dataValidade),
+          medicoResponsavel: input.medicoResponsavel || null,
+          clinicaMedica: input.clinicaMedica || null,
+          crmMedico: input.crmMedico || null,
+          apto: input.apto,
+          restricoes: input.restricoes || null,
+          observacoes: input.observacoes || null,
+          anexoUrl: input.anexoUrl || null,
+          status: "ativo",
+        } as InsertAso);
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        colaboradorId: z.number().optional(),
+        empresaId: z.number().optional(),
+        numeroAso: z.string().optional().nullable(),
+        tipoAso: z.enum(["admissional", "periodico", "retorno_trabalho", "mudanca_funcao", "demissional"]).optional(),
+        dataEmissao: z.string().optional(),
+        dataValidade: z.string().optional(),
+        medicoResponsavel: z.string().optional().nullable(),
+        clinicaMedica: z.string().optional().nullable(),
+        crmMedico: z.string().optional().nullable(),
+        apto: z.enum(["sim", "nao", "apto_com_restricoes"]).optional(),
+        restricoes: z.string().optional().nullable(),
+        observacoes: z.string().optional().nullable(),
+        anexoUrl: z.string().optional().nullable(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const tenantId = (ctx.user as any)?.tenantId;
+        if (!tenantId) {
+          throw new Error("Usuário não associado a um tenant");
+        }
+
+        const updateData: any = {};
+        if (input.empresaId !== undefined) updateData.empresaId = input.empresaId;
+        if (input.colaboradorId !== undefined) updateData.colaboradorId = input.colaboradorId;
+        if (input.numeroAso !== undefined) updateData.numeroAso = input.numeroAso;
+        if (input.tipoAso !== undefined) updateData.tipoAso = input.tipoAso;
+        if (input.dataEmissao !== undefined) updateData.dataEmissao = new Date(input.dataEmissao);
+        if (input.dataValidade !== undefined) updateData.dataValidade = new Date(input.dataValidade);
+        if (input.medicoResponsavel !== undefined) updateData.medicoResponsavel = input.medicoResponsavel;
+        if (input.clinicaMedica !== undefined) updateData.clinicaMedica = input.clinicaMedica;
+        if (input.crmMedico !== undefined) updateData.crmMedico = input.crmMedico;
+        if (input.apto !== undefined) updateData.apto = input.apto;
+        if (input.restricoes !== undefined) updateData.restricoes = input.restricoes;
+        if (input.observacoes !== undefined) updateData.observacoes = input.observacoes;
+        if (input.anexoUrl !== undefined) updateData.anexoUrl = input.anexoUrl;
+
+        const aso = await db.getAsoById(input.id);
+        if (!aso || aso.tenantId !== tenantId) {
+          throw new Error("ASO não encontrado");
+        }
+
+        return db.updateAso(input.id, updateData);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const tenantId = (ctx.user as any)?.tenantId;
+        if (!tenantId) {
+          throw new Error("Usuário não associado a um tenant");
+        }
+
+        const aso = await db.getAsoById(input.id);
+        if (!aso || aso.tenantId !== tenantId) {
+          throw new Error("ASO não encontrado");
+        }
+
+        return db.deleteAso(input.id);
+      }),
+
+    atualizarStatusVencidos: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        const tenantId = (ctx.user as any)?.tenantId;
+        if (!tenantId) {
+          throw new Error("Usuário não associado a um tenant");
+        }
+
+        return db.atualizarStatusAsosVencidos(tenantId);
       }),
   }),
 

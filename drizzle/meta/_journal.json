@@ -162,6 +162,13 @@
       "when": 1762726402362,
       "tag": "0022_fancy_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1762965793623,
+      "tag": "0023_tricky_vanisher",
+      "breakpoints": true
     }
   ]
 }

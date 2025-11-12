@@ -5,6 +5,7 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
+import Home from "./pages/Home";
 import Empresas from "./pages/Empresas";
 import Colaboradores from "./pages/Colaboradores";
 import Obras from "./pages/Obras";
@@ -19,45 +20,123 @@ import Certificados from "./pages/Certificados";
 import OrdemServico from "./pages/OrdemServico";
 import Configuracoes from "./pages/Configuracoes";
 import Login from "./pages/Login";
+import GestaoAsos from "./pages/GestaoAsos";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/login"} component={Login} />
-      <Route path={"/"} component={Dashboard} />
-      <Route path={"/empresas"} component={Empresas} />
-      <Route path={"/colaboradores"} component={Colaboradores} />
-      <Route path={"/obras"} component={Obras} />
-      <Route path={"/cargos"} component={Cargos} />
-      <Route path={"/setores"} component={Setores} />
-      <Route path={"/treinamentos/tipos"} component={TreinamentosPainel} />
-      <Route path={"/treinamentos/modelos-certificados"} component={TreinamentosPainel} />
-      <Route path={"/treinamentos/emitir-certificado"} component={TreinamentosPainel} />
-      <Route path={"/treinamentos/lista"} component={TreinamentosPainel} />
-      <Route path={"/treinamentos"} component={TreinamentosPainel} />
-      <Route path={"/tipos-treinamentos"} component={TiposTreinamentos} />
-      <Route path={"/epis/lista"} component={Epis} />
-      <Route path={"/epis/tipos-epis"} component={Epis} />
-      <Route path={"/epis/emitir-ficha"} component={Epis} />
-      <Route path={"/epis"} component={Epis} />
-      <Route path={"/certificados/modelos"} component={Certificados} />
-      <Route path={"/certificados"} component={Certificados} />
-      <Route path={"/emissao-certificados"} component={EmissaoCertificados} />
-      <Route path={"/ordem-servico/modelos"} component={OrdemServico} />
-      <Route path={"/ordem-servico/emitir"} component={OrdemServico} />
-      <Route path={"/ordem-servico/lista"} component={OrdemServico} />
-      <Route path={"/ordem-servico"} component={OrdemServico} />
-      <Route path={"/dashboard-colaboradores"} component={DashboardColaboradores} />
-      <Route path={"/configuracoes/modelos-certificados"} component={Configuracoes} />
-      <Route path={"/configuracoes/riscos-ocupacionais"} component={Configuracoes} />
-      <Route path={"/configuracoes/responsaveis"} component={Configuracoes} />
-      <Route path={"/configuracoes/usuarios"} component={Configuracoes} />
-      <Route path={"/configuracoes/permissoes"} component={Configuracoes} />
-      <Route path={"/configuracoes"} component={Configuracoes} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
+      <Route path="/login">
+        <Login />
+      </Route>
+      <Route path="/dashboard">
+        <Dashboard />
+      </Route>
+      <Route path="/">
+        <Home />
+      </Route>
+      <Route path="/empresas">
+        <Empresas />
+      </Route>
+      <Route path="/colaboradores">
+        <Colaboradores />
+      </Route>
+      <Route path="/obras">
+        <Obras />
+      </Route>
+      <Route path="/cargos">
+        <Cargos />
+      </Route>
+      <Route path="/setores">
+        <Setores />
+      </Route>
+      <Route path="/treinamentos/tipos">
+        <TreinamentosPainel />
+      </Route>
+      <Route path="/treinamentos/modelos-certificados">
+        <TreinamentosPainel />
+      </Route>
+      <Route path="/treinamentos/emitir-certificado">
+        <TreinamentosPainel />
+      </Route>
+      <Route path="/treinamentos/lista">
+        <TreinamentosPainel />
+      </Route>
+      <Route path="/treinamentos">
+        <TreinamentosPainel />
+      </Route>
+      <Route path="/tipos-treinamentos">
+        <TiposTreinamentos />
+      </Route>
+      <Route path="/epis/lista">
+        <Epis />
+      </Route>
+      <Route path="/epis/tipos-epis">
+        <Epis />
+      </Route>
+      <Route path="/epis/emitir-ficha">
+        <Epis />
+      </Route>
+      <Route path="/epis">
+        <Epis />
+      </Route>
+      <Route path="/certificados/modelos">
+        <Certificados />
+      </Route>
+      <Route path="/certificados">
+        <Certificados />
+      </Route>
+      <Route path="/emissao-certificados">
+        <EmissaoCertificados />
+      </Route>
+      <Route path="/ordem-servico/modelos">
+        <OrdemServico />
+      </Route>
+      <Route path="/ordem-servico/emitir">
+        <OrdemServico />
+      </Route>
+      <Route path="/ordem-servico/lista">
+        <OrdemServico />
+      </Route>
+      <Route path="/ordem-servico">
+        <OrdemServico />
+      </Route>
+      <Route path="/gestao-asos/lista">
+        <GestaoAsos />
+      </Route>
+      <Route path="/gestao-asos/relatorios">
+        <GestaoAsos />
+      </Route>
+      <Route path="/gestao-asos">
+        <GestaoAsos />
+      </Route>
+      <Route path="/dashboard-colaboradores">
+        <DashboardColaboradores />
+      </Route>
+      <Route path="/configuracoes/modelos-certificados">
+        <Configuracoes />
+      </Route>
+      <Route path="/configuracoes/riscos-ocupacionais">
+        <Configuracoes />
+      </Route>
+      <Route path="/configuracoes/responsaveis">
+        <Configuracoes />
+      </Route>
+      <Route path="/configuracoes/usuarios">
+        <Configuracoes />
+      </Route>
+      <Route path="/configuracoes/permissoes">
+        <Configuracoes />
+      </Route>
+      <Route path="/configuracoes">
+        <Configuracoes />
+      </Route>
+      <Route path="/404">
+        <NotFound />
+      </Route>
+      <Route>
+        <NotFound />
+      </Route>
     </Switch>
   );
 }

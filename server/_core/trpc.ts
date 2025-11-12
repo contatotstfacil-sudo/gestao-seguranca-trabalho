@@ -49,7 +49,9 @@ const requireUser = t.middleware(async opts => {
 
   // Adiciona watermark nas respostas (apenas se não for login)
   // Login não deve ter watermark para evitar problemas de serialização
-  if (result && typeof result === "object" && "data" in result && !("success" in result)) {
+  // Verificar se é resposta de login (tem "success" e "user")
+  const isLoginResponse = result && typeof result === "object" && "success" in result && "user" in result;
+  if (result && typeof result === "object" && "data" in result && !isLoginResponse) {
     try {
       result.data = addWatermark(result.data, ctx.user.id);
     } catch (watermarkError) {

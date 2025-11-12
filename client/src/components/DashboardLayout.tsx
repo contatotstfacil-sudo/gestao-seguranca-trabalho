@@ -21,14 +21,15 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, HardHat, Briefcase, GraduationCap, ShieldCheck, FolderTree, FileText, FileCheck, Settings, ClipboardList } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, HardHat, Briefcase, GraduationCap, ShieldCheck, FolderTree, FileText, FileCheck, Settings, ClipboardList, Stethoscope, Home as HomeIcon } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+  { icon: HomeIcon, label: "Home", path: "/" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Building2, label: "Empresas", path: "/empresas" },
   { icon: Users, label: "Colaboradores", path: "/colaboradores" },
   { icon: Users, label: "Dashboard Colaboradores", path: "/dashboard-colaboradores" },
@@ -38,6 +39,7 @@ const menuItems = [
   { icon: ClipboardList, label: "Ordem de Serviço - SST", path: "/ordem-servico" },
   { icon: ShieldCheck, label: "EPIs", path: "/epis" },
   { icon: GraduationCap, label: "Treinamentos", path: "/treinamentos" },
+  { icon: Stethoscope, label: "Gestão de ASOs", path: "/gestao-asos" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 
@@ -130,7 +132,9 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const activeMenuItem =
+    menuItems.find(item => item.path === location) ??
+    menuItems.find(item => location.startsWith(`${item.path}/`));
   const isMobile = useIsMobile();
   useEffect(() => {
     if (isCollapsed) {

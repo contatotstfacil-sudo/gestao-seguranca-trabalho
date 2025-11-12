@@ -1,18 +1,38 @@
 import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, date } from "drizzle-orm/mysql-core";
 
 /**
+ * Tenants (Workspaces) - Isolamento de dados por cliente
+ * Cada cliente que compra o sistema recebe um tenant único
+ */
+export const tenants = mysqlTable("tenants", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  plano: mysqlEnum("plano", ["basico", "profissional"]).notNull(),
+  status: mysqlEnum("status", ["ativo", "suspenso", "cancelado"]).default("ativo").notNull(),
+  dataInicio: date("dataInicio").notNull(),
+  dataFim: date("dataFim"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Tenant = typeof tenants.$inferSelect;
+export type InsertTenant = typeof tenants.$inferInsert;
+
+/**
  * Core user table backing auth flow.
+ * Agora vinculado a um tenant para isolamento completo
  */
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId"), // NULL apenas para super_admin
   openId: varchar("openId", { length: 64 }).unique(),
   name: text("name"),
-  email: varchar("email", { length: 320 }).unique(),
-  cpf: varchar("cpf", { length: 14 }).unique(),
-  cnpj: varchar("cnpj", { length: 18 }).unique(),
+  email: varchar("email", { length: 320 }),
+  cpf: varchar("cpf", { length: 14 }),
+  cnpj: varchar("cnpj", { length: 18 }),
   passwordHash: varchar("passwordHash", { length: 255 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin", "gestor", "tecnico"]).default("user").notNull(),
+  role: mysqlEnum("role", ["super_admin", "tenant_admin", "user", "admin", "gestor", "tecnico"]).default("user").notNull(),
   empresaId: int("empresaId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -27,8 +47,9 @@ export type InsertUser = typeof users.$inferInsert;
  */
 export const empresas = mysqlTable("empresas", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   razaoSocial: varchar("razaoSocial", { length: 255 }).notNull(),
-  cnpj: varchar("cnpj", { length: 18 }).notNull().unique(),
+  cnpj: varchar("cnpj", { length: 18 }).notNull(), // Removido unique global, agora único por tenant
   grauRisco: varchar("grauRisco", { length: 50 }),
   cnae: varchar("cnae", { length: 20 }),
   responsavelTecnico: varchar("responsavelTecnico", { length: 255 }),
@@ -54,6 +75,7 @@ export type InsertEmpresa = typeof empresas.$inferInsert;
  */
 export const colaboradores = mysqlTable("colaboradores", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeCompleto: varchar("nomeCompleto", { length: 255 }).notNull(),
   funcao: varchar("funcao", { length: 255 }),
   cargoId: int("cargoId"),
@@ -93,10 +115,38 @@ export type Colaborador = typeof colaboradores.$inferSelect;
 export type InsertColaborador = typeof colaboradores.$inferInsert;
 
 /**
+ * ASOs - Gestão de Atestados de Saúde Ocupacional
+ */
+export const asos = mysqlTable("asos", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
+  colaboradorId: int("colaboradorId").notNull(),
+  empresaId: int("empresaId").notNull(),
+  numeroAso: varchar("numeroAso", { length: 100 }),
+  tipoAso: mysqlEnum("tipoAso", ["admissional", "periodico", "retorno_trabalho", "mudanca_funcao", "demissional"]).notNull(),
+  dataEmissao: date("dataEmissao").notNull(),
+  dataValidade: date("dataValidade").notNull(),
+  medicoResponsavel: varchar("medicoResponsavel", { length: 255 }),
+  clinicaMedica: varchar("clinicaMedica", { length: 255 }),
+  crmMedico: varchar("crmMedico", { length: 50 }),
+  apto: mysqlEnum("apto", ["sim", "nao", "apto_com_restricoes"]).notNull(),
+  restricoes: text("restricoes"),
+  observacoes: text("observacoes"),
+  anexoUrl: varchar("anexoUrl", { length: 500 }),
+  status: mysqlEnum("status", ["ativo", "vencido"]).default("ativo").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Aso = typeof asos.$inferSelect;
+export type InsertAso = typeof asos.$inferInsert;
+
+/**
  * Obras - Cadastro de obras por empresa
  */
 export const obras = mysqlTable("obras", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeObra: varchar("nomeObra", { length: 255 }).notNull(),
   cnpj: varchar("cnpj", { length: 18 }),
   cno: varchar("cno", { length: 20 }),
@@ -129,6 +179,7 @@ export type InsertObra = typeof obras.$inferInsert;
  */
 export const treinamentos = mysqlTable("treinamentos", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeTreinamento: varchar("nomeTreinamento", { length: 255 }).notNull(),
   tipoNr: varchar("tipoNr", { length: 50 }),
   colaboradorId: int("colaboradorId").notNull(),
@@ -163,6 +214,7 @@ export type InsertTipoEpi = typeof tiposEpis.$inferInsert;
  */
 export const epis = mysqlTable("epis", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeEquipamento: varchar("nomeEquipamento", { length: 255 }).notNull(),
   tipoEpiId: int("tipoEpiId"),
   colaboradorId: int("colaboradorId").notNull(),
@@ -184,6 +236,7 @@ export type InsertEpi = typeof epis.$inferInsert;
  */
 export const fichasEpiEmitidas = mysqlTable("fichasEpiEmitidas", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   empresaId: int("empresaId").notNull(),
   colaboradorId: int("colaboradorId").notNull(),
   nomeArquivo: varchar("nomeArquivo", { length: 255 }).notNull(),
@@ -202,6 +255,7 @@ export type InsertFichaEpiEmitida = typeof fichasEpiEmitidas.$inferInsert;
  */
 export const cargos = mysqlTable("cargos", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeCargo: varchar("nomeCargo", { length: 255 }).notNull(),
   descricao: text("descricao"),
   empresaId: int("empresaId"),
@@ -217,6 +271,7 @@ export type InsertCargo = typeof cargos.$inferInsert;
  */
 export const setores = mysqlTable("setores", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeSetor: varchar("nomeSetor", { length: 255 }).notNull(),
   descricao: text("descricao"),
   empresaId: int("empresaId"),
@@ -232,6 +287,7 @@ export type InsertSetor = typeof setores.$inferInsert;
  */
 export const tiposTreinamentos = mysqlTable("tiposTreinamentos", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeTreinamento: varchar("nomeTreinamento", { length: 255 }).notNull(),
   descricao: text("descricao"),
   tipoNr: varchar("tipoNr", { length: 50 }),
@@ -250,6 +306,7 @@ export type InsertTipoTreinamento = typeof tiposTreinamentos.$inferInsert;
  */
 export const cargoTreinamentos = mysqlTable("cargoTreinamentos", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   cargoId: int("cargoId").notNull(),
   tipoTreinamentoId: int("tipoTreinamentoId").notNull(),
   empresaId: int("empresaId"),
@@ -265,6 +322,7 @@ export type InsertCargoTreinamento = typeof cargoTreinamentos.$inferInsert;
  */
 export const cargoSetores = mysqlTable("cargoSetores", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   cargoId: int("cargoId").notNull(),
   setorId: int("setorId").notNull(),
   empresaId: int("empresaId"),
@@ -280,6 +338,7 @@ export type InsertCargoSetor = typeof cargoSetores.$inferInsert;
  */
 export const riscosOcupacionais = mysqlTable("riscosOcupacionais", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeRisco: varchar("nomeRisco", { length: 255 }).notNull(),
   descricao: text("descricao"),
   tipoRisco: mysqlEnum("tipoRisco", ["fisico", "quimico", "biologico", "ergonomico", "mecanico"]).notNull(),
@@ -298,6 +357,7 @@ export type InsertRiscoOcupacional = typeof riscosOcupacionais.$inferInsert;
  */
 export const cargoRiscos = mysqlTable("cargoRiscos", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   cargoId: int("cargoId").notNull(),
   riscoOcupacionalId: int("riscoOcupacionalId").notNull(),
   tipoAgente: varchar("tipoAgente", { length: 255 }),
@@ -315,6 +375,7 @@ export type InsertCargoRisco = typeof cargoRiscos.$inferInsert;
  */
 export const modelosCertificados = mysqlTable("modelosCertificados", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nome: varchar("nome", { length: 255 }).notNull(),
   descricao: text("descricao"),
   // Layout do certificado em HTML (agora opcional, será gerado automaticamente)
@@ -351,6 +412,7 @@ export type InsertModeloCertificado = typeof modelosCertificados.$inferInsert;
  */
 export const responsaveis = mysqlTable("responsaveis", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeCompleto: varchar("nomeCompleto", { length: 255 }).notNull(),
   funcao: varchar("funcao", { length: 255 }),
   registroProfissional: varchar("registroProfissional", { length: 100 }),
@@ -368,6 +430,7 @@ export type InsertResponsavel = typeof responsaveis.$inferInsert;
  */
 export const certificadosEmitidos = mysqlTable("certificadosEmitidos", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   modeloCertificadoId: int("modeloCertificadoId").notNull(),
   colaboradorId: int("colaboradorId").notNull(),
   responsavelId: int("responsavelId"),
@@ -391,7 +454,8 @@ export type InsertCertificadoEmitido = typeof certificadosEmitidos.$inferInsert;
  */
 export const ordensServico = mysqlTable("ordensServico", {
   id: int("id").autoincrement().primaryKey(),
-  numeroOrdem: varchar("numeroOrdem", { length: 50 }).notNull().unique(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
+  numeroOrdem: varchar("numeroOrdem", { length: 50 }).notNull(), // Removido unique global, agora único por tenant
   empresaId: int("empresaId").notNull(),
   colaboradorId: int("colaboradorId"),
   obraId: int("obraId"),
@@ -424,6 +488,7 @@ export type InsertOrdemServico = typeof ordensServico.$inferInsert;
  */
 export const modelosOrdemServico = mysqlTable("modelosOrdemServico", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nome: varchar("nome", { length: 255 }).notNull(),
   descricao: text("descricao"),
   htmlTemplate: text("htmlTemplate"),

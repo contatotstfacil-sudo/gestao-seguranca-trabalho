@@ -25,7 +25,8 @@ import {
   modelosOrdemServico, InsertModeloOrdemServico,
   permissoes, InsertPermissao,
   userPermissoes, InsertUserPermissao,
-  permissoesUsuarios, InsertPermissoesUsuario
+  permissoesUsuarios, InsertPermissoesUsuario,
+  asos, InsertAso
 } from "../drizzle/schema";
 
 import { ENV } from './_core/env';
@@ -1873,6 +1874,469 @@ export async function upsertPermissoesUsuario(usuarioId: number, permissoesData:
   } catch (error) {
     console.error("[Database] Erro ao salvar permissões do usuário:", error);
     throw error;
+  }
+}
+
+// === ASOS ===
+
+export async function createAso(data: InsertAso) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dataValidade = new Date(data.dataValidade);
+    dataValidade.setHours(0, 0, 0, 0);
+
+    const asoData = {
+      ...data,
+      status: dataValidade < hoje ? ("vencido" as const) : ("ativo" as const),
+    };
+
+    const result: any = await db.insert(asos).values(asoData);
+    const insertId = result?.insertId ?? (Array.isArray(result) ? result[0]?.insertId : undefined);
+    if (insertId) {
+      await refreshColaboradorAsoSnapshot(data.tenantId, data.colaboradorId);
+      return await getAsoById(insertId);
+    }
+    return null;
+  } catch (error) {
+    console.error("[Database] Erro ao criar ASO:", error);
+    throw error;
+  }
+}
+
+export async function getAsoById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const result = await db.select().from(asos).where(eq(asos.id, id)).limit(1);
+    return result[0] || null;
+  } catch (error) {
+    console.error("[Database] Erro ao buscar ASO:", error);
+    throw error;
+  }
+}
+
+export async function getAsoByColaborador(
+  tenantId: number,
+  colaboradorId: number,
+  tipoAso?: "admissional" | "periodico" | "retorno_trabalho" | "mudanca_funcao" | "demissional"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    let whereClause: any = and(eq(asos.tenantId, tenantId), eq(asos.colaboradorId, colaboradorId));
+    if (tipoAso) {
+      whereClause = and(whereClause, eq(asos.tipoAso, tipoAso));
+    }
+
+    const result = await db
+      .select()
+      .from(asos)
+      .where(whereClause)
+      .orderBy(desc(asos.dataEmissao))
+      .limit(1);
+    return result[0] || null;
+  } catch (error) {
+    console.error("[Database] Erro ao buscar ASO por colaborador:", error);
+    throw error;
+  }
+}
+
+export async function getAllAsos(filters?: {
+  tenantId?: number;
+  colaboradorId?: number;
+  empresaId?: number;
+  tipoAso?: string;
+  status?: string;
+  vencidos?: boolean;
+  aVencerEmDias?: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    let query = db.select().from(asos);
+    const conditions: any[] = [];
+
+    if (filters?.tenantId) {
+      conditions.push(eq(asos.tenantId, filters.tenantId));
+    }
+
+    if (filters?.colaboradorId) {
+      conditions.push(eq(asos.colaboradorId, filters.colaboradorId));
+    }
+
+    if (filters?.empresaId) {
+      conditions.push(eq(asos.empresaId, filters.empresaId));
+    }
+
+    if (filters?.tipoAso) {
+      conditions.push(eq(asos.tipoAso, filters.tipoAso as any));
+    }
+
+    if (filters?.status) {
+      conditions.push(eq(asos.status, filters.status as any));
+    }
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    if (filters?.vencidos) {
+      conditions.push(lte(asos.dataValidade, hoje));
+    }
+
+    if (filters?.aVencerEmDias) {
+      const dataLimite = new Date(hoje);
+      dataLimite.setDate(dataLimite.getDate() + filters.aVencerEmDias);
+      conditions.push(gte(asos.dataValidade, hoje));
+      conditions.push(lte(asos.dataValidade, dataLimite));
+    }
+
+    if (conditions.length > 0) {
+      const whereClause = conditions.reduce((acc: any, condition: any) => (acc ? and(acc, condition) : condition));
+      query = query.where(whereClause);
+    }
+
+    return await query.orderBy(desc(asos.updatedAt), desc(asos.dataValidade));
+  } catch (error) {
+    console.error("[Database] Erro ao listar ASOs:", error);
+    throw error;
+  }
+}
+
+export async function updateAso(id: number, data: Partial<InsertAso>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const updateData: any = { ...data };
+    if (data.dataValidade) {
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const dataValidade = new Date(data.dataValidade);
+      dataValidade.setHours(0, 0, 0, 0);
+      updateData.status = dataValidade < hoje ? ("vencido" as const) : ("ativo" as const);
+    }
+
+    await db.update(asos).set(updateData).where(eq(asos.id, id));
+    const aso = await getAsoById(id);
+    if (aso) {
+      await refreshColaboradorAsoSnapshot(aso.tenantId, aso.colaboradorId);
+    }
+    return aso;
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar ASO:", error);
+    throw error;
+  }
+}
+
+export async function deleteAso(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const aso = await getAsoById(id);
+    await db.delete(asos).where(eq(asos.id, id));
+    if (aso) {
+      await refreshColaboradorAsoSnapshot(aso.tenantId, aso.colaboradorId);
+    }
+    return true;
+  } catch (error) {
+    console.error("[Database] Erro ao deletar ASO:", error);
+    throw error;
+  }
+}
+
+export async function atualizarStatusAsosVencidos(tenantId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    await db
+      .update(asos)
+      .set({ status: "vencido", updatedAt: new Date() })
+      .where(and(eq(asos.tenantId, tenantId), lte(asos.dataValidade, hoje), eq(asos.status, "ativo")));
+
+    return true;
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar status de ASOs vencidos:", error);
+    throw error;
+  }
+}
+
+export async function upsertAsoForColaborador(options: {
+  tenantId: number;
+  colaboradorId: number;
+  empresaId: number;
+  dataEmissao?: Date | null;
+  dataValidade?: Date | null;
+  tipoAso?: "admissional" | "periodico" | "retorno_trabalho" | "mudanca_funcao" | "demissional";
+  apto?: "sim" | "nao" | "apto_com_restricoes";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const {
+    tenantId,
+    colaboradorId,
+    empresaId,
+    dataEmissao,
+    dataValidade,
+    tipoAso = "admissional",
+    apto = "sim",
+  } = options;
+
+  if (!dataEmissao || !dataValidade) {
+    return null;
+  }
+
+  try {
+    const existente = await getAsoByColaborador(tenantId, colaboradorId, tipoAso);
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const validadeNormalizada = new Date(dataValidade);
+    validadeNormalizada.setHours(0, 0, 0, 0);
+    const status = validadeNormalizada < hoje ? ("vencido" as const) : ("ativo" as const);
+
+    if (existente) {
+      await db
+        .update(asos)
+        .set({
+          empresaId,
+          dataEmissao,
+          dataValidade,
+          status,
+          apto,
+          updatedAt: new Date(),
+        })
+        .where(eq(asos.id, existente.id));
+      await refreshColaboradorAsoSnapshot(tenantId, colaboradorId);
+      return await getAsoById(existente.id);
+    }
+
+    const asoCriado = await createAso({
+      tenantId,
+      colaboradorId,
+      empresaId,
+      numeroAso: null,
+      tipoAso,
+      dataEmissao,
+      dataValidade,
+      medicoResponsavel: null,
+      clinicaMedica: null,
+      crmMedico: null,
+      apto,
+      restricoes: null,
+      observacoes: "ASO gerado automaticamente a partir do cadastro do colaborador.",
+      anexoUrl: null,
+      status,
+    });
+
+    await refreshColaboradorAsoSnapshot(tenantId, colaboradorId);
+    return asoCriado;
+  } catch (error) {
+    console.error("[Database] Erro ao sincronizar ASO do colaborador:", error);
+    throw error;
+  }
+}
+
+export async function getAsoDashboard(tenantId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const registros = await db.select().from(asos).where(eq(asos.tenantId, tenantId));
+    const colaboradoresRows = await db
+      .select({ id: colaboradores.id })
+      .from(colaboradores)
+      .where(eq(colaboradores.tenantId, tenantId));
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dayMs = 1000 * 60 * 60 * 24;
+    type RegistroAso = typeof registros[number];
+
+    const total = registros.length;
+    const totalAtivos = registros.filter((item: RegistroAso) => item.status === "ativo").length;
+    const totalVencidos = registros.filter((item: RegistroAso) => item.status === "vencido").length;
+
+    const setCobertos = new Set<number>();
+    registros.forEach((item: RegistroAso) => {
+      if (item.dataValidade) {
+        const validade = new Date(item.dataValidade);
+        validade.setHours(0, 0, 0, 0);
+        if (validade >= hoje) {
+          setCobertos.add(item.colaboradorId);
+        }
+      }
+    });
+
+    const totalColaboradores = colaboradoresRows.length;
+    const colaboradoresCobertos = setCobertos.size;
+    const colaboradoresSemAso = Math.max(totalColaboradores - colaboradoresCobertos, 0);
+    const coberturaPercentual = totalColaboradores
+      ? Number(((colaboradoresCobertos / totalColaboradores) * 100).toFixed(1))
+      : 0;
+
+    const porTipoMap = new Map<string, number>();
+    registros.forEach((item: RegistroAso) => {
+      const chave = item.tipoAso || "outros";
+      porTipoMap.set(chave, (porTipoMap.get(chave) || 0) + 1);
+    });
+
+    const porTipo = Array.from(porTipoMap.entries()).map(([tipo, total]) => ({ tipo, total }));
+
+    const vencimentosPorMesMap = new Map<string, number>();
+    registros.forEach((item: RegistroAso) => {
+      if (!item.dataValidade) return;
+      const validade = new Date(item.dataValidade);
+      validade.setHours(0, 0, 0, 0);
+      if (validade < hoje) return;
+      const chave = `${validade.getFullYear()}-${String(validade.getMonth() + 1).padStart(2, "0")}`;
+      vencimentosPorMesMap.set(chave, (vencimentosPorMesMap.get(chave) || 0) + 1);
+    });
+    const vencimentosPorMes = Array.from(vencimentosPorMesMap.entries())
+      .sort(([a], [b]) => (a > b ? 1 : -1))
+      .slice(0, 6)
+      .map(([mes, total]) => ({ mes, total }));
+
+    const topEmpresasVencidosMap = new Map<number, number>();
+    registros.forEach((item: RegistroAso) => {
+      if (!item.dataValidade || !item.empresaId) return;
+      const validade = new Date(item.dataValidade);
+      validade.setHours(0, 0, 0, 0);
+      if (validade >= hoje) return;
+      topEmpresasVencidosMap.set(item.empresaId, (topEmpresasVencidosMap.get(item.empresaId) || 0) + 1);
+    });
+    const topEmpresasVencidos = Array.from(topEmpresasVencidosMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([empresaId, total]) => ({
+        empresaId,
+        empresaNome: null as string | null,
+        total,
+      }));
+
+    const proximosVencimentos = registros
+      .filter((item: RegistroAso) => {
+        if (!item.dataValidade) return false;
+        const validade = new Date(item.dataValidade);
+        validade.setHours(0, 0, 0, 0);
+        return validade >= hoje;
+      })
+      .sort((a: RegistroAso, b: RegistroAso) => {
+        const av = new Date(a.dataValidade || 0).getTime();
+        const bv = new Date(b.dataValidade || 0).getTime();
+        return av - bv;
+      })
+      .slice(0, 5)
+      .map((item) => ({
+        id: item.id,
+        numeroAso: item.numeroAso || null,
+        dataValidade: item.dataValidade ? new Date(item.dataValidade).toISOString() : null,
+        tipoAso: item.tipoAso,
+        colaboradorId: item.colaboradorId,
+        colaboradorNome: null as string | null,
+        empresaId: item.empresaId,
+        empresaNome: null as string | null,
+      }));
+
+    const asosVencidosRecentes = registros
+      .filter((item: RegistroAso) => {
+        if (!item.dataValidade) return false;
+        const validade = new Date(item.dataValidade);
+        validade.setHours(0, 0, 0, 0);
+        return validade < hoje;
+      })
+      .sort((a: RegistroAso, b: RegistroAso) => {
+        const av = new Date(a.dataValidade || 0).getTime();
+        const bv = new Date(b.dataValidade || 0).getTime();
+        return bv - av;
+      })
+      .slice(0, 5)
+      .map((item) => ({
+        id: item.id,
+        numeroAso: item.numeroAso || null,
+        dataValidade: item.dataValidade ? new Date(item.dataValidade).toISOString() : null,
+        tipoAso: item.tipoAso,
+        colaboradorId: item.colaboradorId,
+        colaboradorNome: null as string | null,
+        empresaId: item.empresaId,
+        empresaNome: null as string | null,
+      }));
+
+    const totalAVencer30 = registros.filter((item: RegistroAso) => {
+      if (!item.dataValidade) return false;
+      const validade = new Date(item.dataValidade);
+      validade.setHours(0, 0, 0, 0);
+      const diff = Math.round((validade.getTime() - hoje.getTime()) / dayMs);
+      return diff >= 0 && diff <= 30;
+    }).length;
+
+    const totalAVencer5 = registros.filter((item: RegistroAso) => {
+      if (!item.dataValidade) return false;
+      const validade = new Date(item.dataValidade);
+      validade.setHours(0, 0, 0, 0);
+      const diff = Math.round((validade.getTime() - hoje.getTime()) / dayMs);
+      return diff >= 0 && diff <= 5;
+    }).length;
+
+    return {
+      totalAsos: total,
+      totalAtivos,
+      totalVencidos,
+      totalAVencer30,
+      totalAVencer5,
+      cobertura: {
+        totalColaboradores,
+        colaboradoresCobertos,
+        colaboradoresSemAso,
+        percentual: coberturaPercentual,
+      },
+      porTipo,
+      vencimentosPorMes,
+      topEmpresasVencidos,
+      proximosVencimentos,
+      asosVencidosRecentes,
+      ultimaAtualizacao: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("[Database] Erro ao carregar dashboard de ASOs:", error);
+    throw error;
+  }
+}
+
+export async function refreshColaboradorAsoSnapshot(tenantId: number, colaboradorId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const [stats] = await db
+      .select({
+        primeiroAso: sql<Date | null>`MIN(${asos.dataEmissao})` as any,
+        validadeMaisRecente: sql<Date | null>`MAX(${asos.dataValidade})` as any,
+      })
+      .from(asos)
+      .where(and(eq(asos.tenantId, tenantId), eq(asos.colaboradorId, colaboradorId)));
+
+    await db
+      .update(colaboradores)
+      .set({
+        dataPrimeiroAso: stats?.primeiroAso ?? null,
+        validadeAso: stats?.validadeMaisRecente ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(colaboradores.id, colaboradorId));
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar snapshot de ASO do colaborador:", error);
   }
 }
 
