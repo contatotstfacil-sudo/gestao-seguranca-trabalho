@@ -130,43 +130,61 @@ export const appRouter = router({
             sameSite: "lax" // Mudado de "strict" para "lax" para melhor compatibilidade
           });
           
-          // Retorna resposta ULTRA-SIMPLES e completamente serializável
-          // Apenas valores primitivos, SEM objetos Date, BigInt, ou outros tipos não serializáveis
-          const responseData = {
+          // FORÇA resposta ABSOLUTAMENTE SIMPLES - apenas primitivos JSON
+          const userId = typeof user.id === 'number' ? user.id : parseInt(String(user.id || '0'), 10);
+          const userName = user.name ? String(user.name).substring(0, 255) : "";
+          const userEmail = user.email ? String(user.email).substring(0, 320) : "";
+          const userRole = user.role ? String(user.role) : "user";
+          const userEmpresaId = (user.empresaId !== null && user.empresaId !== undefined) 
+            ? (typeof user.empresaId === 'number' ? user.empresaId : parseInt(String(user.empresaId), 10))
+            : null;
+          
+          // Cria objeto literal simples
+          const responseData: {
+            success: boolean;
+            user: {
+              id: number;
+              name: string;
+              email: string;
+              role: string;
+              empresaId: number | null;
+            };
+          } = {
             success: true,
             user: {
-              id: Number(user.id),
-              name: user.name ? String(user.name) : "",
-              email: user.email ? String(user.email) : "",
-              role: user.role ? String(user.role) : "user",
-              empresaId: user.empresaId !== null && user.empresaId !== undefined ? Number(user.empresaId) : null,
+              id: userId,
+              name: userName,
+              email: userEmail,
+              role: userRole,
+              empresaId: userEmpresaId,
             },
           };
           
-          // Validação rigorosa de serialização
-          let serialized: string;
+          // Validação EXTREMA de serialização
           try {
-            serialized = JSON.stringify(responseData);
-            // Testa deserialização também
-            JSON.parse(serialized);
-            console.log(`[Login] ✅ Resposta validada e serializável`);
+            const testJson = JSON.stringify(responseData);
+            const parsed = JSON.parse(testJson);
+            if (!parsed.success || !parsed.user || typeof parsed.user.id !== 'number') {
+              throw new Error("Resposta inválida após serialização");
+            }
+            console.log(`[Login] ✅ Resposta validada:`, testJson.substring(0, 200));
           } catch (serializeError: any) {
             console.error(`[Login] ❌ ERRO FATAL ao serializar:`, serializeError);
-            console.error(`[Login] Resposta que falhou:`, responseData);
-            // Retorna resposta mínima em caso de erro
-            return {
+            // Retorna resposta mínima absoluta
+            return JSON.parse(JSON.stringify({
               success: true,
               user: {
-                id: Number(user.id),
+                id: userId,
                 name: "",
                 email: "",
                 role: "user",
                 empresaId: null,
               },
-            };
+            }));
           }
           
-          return responseData;
+          // Retorna usando JSON.parse/stringify para garantir serialização
+          return JSON.parse(JSON.stringify(responseData));
         } catch (error: any) {
           console.error("[Login] Erro completo:", error);
           console.error("[Login] Stack:", error?.stack);
