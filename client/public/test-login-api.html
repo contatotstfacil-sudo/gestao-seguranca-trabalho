@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Login API</title>
+</head>
+<body>
+    <h1>Teste Login API</h1>
+    <button onclick="testLogin()">Testar Login</button>
+    <pre id="result"></pre>
+    
+    <script>
+        async function testLogin() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Testando...';
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/trpc/auth.login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        "0": {
+                            json: {
+                                identifier: "38099529820",
+                                password: "G476589496i@"
+                            }
+                        }
+                    })
+                });
+                
+                const text = await response.text();
+                resultEl.textContent = `Status: ${response.status}\n\nResposta:\n${text}`;
+                
+                try {
+                    const json = JSON.parse(text);
+                    console.log('Resposta JSON:', json);
+                } catch (e) {
+                    console.error('Erro ao parsear JSON:', e);
+                }
+            } catch (error) {
+                resultEl.textContent = `Erro: ${error.message}`;
+                console.error('Erro completo:', error);
+            }
+        }
+    </script>
+</body>
+</html>
+
