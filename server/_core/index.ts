@@ -95,6 +95,7 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      // SEM transformer - usar JSON puro
     })
   );
 
