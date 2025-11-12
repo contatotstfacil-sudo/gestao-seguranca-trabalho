@@ -130,32 +130,43 @@ export const appRouter = router({
             sameSite: "lax" // Mudado de "strict" para "lax" para melhor compatibilidade
           });
           
-          // Retorna resposta simples e completamente serializável
-          // SEM usar objetos Date, BigInt, ou outros tipos não serializáveis
-          const response = {
+          // Retorna resposta ULTRA-SIMPLES e completamente serializável
+          // Apenas valores primitivos, SEM objetos Date, BigInt, ou outros tipos não serializáveis
+          const responseData = {
             success: true,
             user: {
-              id: Number(user.id) || 0,
-              name: String(user.name || ""),
-              email: String(user.email || ""),
-              role: String(user.role || "user"),
-              empresaId: user.empresaId ? Number(user.empresaId) : null,
+              id: Number(user.id),
+              name: user.name ? String(user.name) : "",
+              email: user.email ? String(user.email) : "",
+              role: user.role ? String(user.role) : "user",
+              empresaId: user.empresaId !== null && user.empresaId !== undefined ? Number(user.empresaId) : null,
             },
           };
           
-          // Validação final: garante que pode ser serializado com JSON puro
+          // Validação rigorosa de serialização
+          let serialized: string;
           try {
-            const testSerialization = JSON.stringify(response);
-            const testDeserialization = JSON.parse(testSerialization);
-            console.log(`[Login] Resposta validada e serializável`);
-            console.log(`[Login] Resposta:`, testSerialization);
+            serialized = JSON.stringify(responseData);
+            // Testa deserialização também
+            JSON.parse(serialized);
+            console.log(`[Login] ✅ Resposta validada e serializável`);
           } catch (serializeError: any) {
-            console.error(`[Login] ERRO ao serializar resposta:`, serializeError);
-            console.error(`[Login] Tipo do erro:`, typeof serializeError);
-            throw new Error("Erro ao preparar resposta do login: " + String(serializeError?.message || serializeError));
+            console.error(`[Login] ❌ ERRO FATAL ao serializar:`, serializeError);
+            console.error(`[Login] Resposta que falhou:`, responseData);
+            // Retorna resposta mínima em caso de erro
+            return {
+              success: true,
+              user: {
+                id: Number(user.id),
+                name: "",
+                email: "",
+                role: "user",
+                empresaId: null,
+              },
+            };
           }
           
-          return response;
+          return responseData;
         } catch (error: any) {
           console.error("[Login] Erro completo:", error);
           console.error("[Login] Stack:", error?.stack);
