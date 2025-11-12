@@ -131,8 +131,7 @@ export const appRouter = router({
           });
           
           // Retorna resposta simples e completamente serializável
-          // Garante que todos os valores são primitivos serializáveis
-          // Remove qualquer propriedade que possa causar problemas de serialização
+          // SEM usar objetos Date, BigInt, ou outros tipos não serializáveis
           const response = {
             success: true,
             user: {
@@ -144,13 +143,16 @@ export const appRouter = router({
             },
           };
           
-          // Validação final: garante que pode ser serializado
+          // Validação final: garante que pode ser serializado com JSON puro
           try {
-            JSON.stringify(response);
-            console.log(`[Login] Retornando resposta válida:`, JSON.stringify(response));
-          } catch (serializeError) {
-            console.error(`[Login] Erro ao serializar resposta:`, serializeError);
-            throw new Error("Erro ao preparar resposta do login");
+            const testSerialization = JSON.stringify(response);
+            const testDeserialization = JSON.parse(testSerialization);
+            console.log(`[Login] Resposta validada e serializável`);
+            console.log(`[Login] Resposta:`, testSerialization);
+          } catch (serializeError: any) {
+            console.error(`[Login] ERRO ao serializar resposta:`, serializeError);
+            console.error(`[Login] Tipo do erro:`, typeof serializeError);
+            throw new Error("Erro ao preparar resposta do login: " + String(serializeError?.message || serializeError));
           }
           
           return response;
