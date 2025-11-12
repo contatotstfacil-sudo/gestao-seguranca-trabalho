@@ -1,0 +1,27 @@
+﻿// Teste direto do login
+fetch("http://localhost:3000/api/trpc/auth.login", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  credentials: "include",
+  body: JSON.stringify({
+    "0": {
+      json: {
+        identifier: "38099529820",
+        password: "G476589496i@"
+      }
+    }
+  })
+})
+.then(r => r.text())
+.then(text => {
+  console.log("RESPOSTA RAW:", text);
+  try {
+    const json = JSON.parse(text);
+    console.log("RESPOSTA JSON:", JSON.stringify(json, null, 2));
+  } catch (e) {
+    console.error("ERRO ao parsear:", e);
+  }
+})
+.catch(e => console.error("ERRO:", e));

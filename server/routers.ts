@@ -184,7 +184,19 @@ export const appRouter = router({
           }
           
           // Retorna objeto simples - tRPC serializa naturalmente
-          return responseData;
+          // Garantir que é um objeto plano sem métodos ou propriedades não enumeráveis
+          const finalResponse = {
+            success: true,
+            user: {
+              id: responseData.user.id,
+              name: responseData.user.name,
+              email: responseData.user.email,
+              role: responseData.user.role,
+              empresaId: responseData.user.empresaId,
+            },
+          };
+          
+          return finalResponse;
         } catch (error: any) {
           console.error("[Login] Erro completo:", error);
           console.error("[Login] Stack:", error?.stack);
