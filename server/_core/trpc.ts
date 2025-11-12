@@ -1,6 +1,6 @@
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
-import superjson from "superjson";
+// Removido superjson completamente para evitar problemas de serialização
 import type { TrpcContext } from "./context";
 import { sanitizeError } from "../utils/security";
 import { addWatermark, detectCloneAttempt } from "../utils/watermark";
