@@ -47,9 +47,15 @@ const requireUser = t.middleware(async opts => {
     },
   });
 
-  // Adiciona watermark nas respostas
-  if (result && typeof result === "object" && "data" in result) {
-    result.data = addWatermark(result.data, ctx.user.id);
+  // Adiciona watermark nas respostas (apenas se não for login)
+  // Login não deve ter watermark para evitar problemas de serialização
+  if (result && typeof result === "object" && "data" in result && !("success" in result)) {
+    try {
+      result.data = addWatermark(result.data, ctx.user.id);
+    } catch (watermarkError) {
+      console.warn("[TRPC] Erro ao adicionar watermark (não crítico):", watermarkError);
+      // Não bloqueia a resposta se falhar
+    }
   }
 
   return result;

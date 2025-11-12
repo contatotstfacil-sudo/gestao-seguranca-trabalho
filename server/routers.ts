@@ -132,20 +132,27 @@ export const appRouter = router({
           
           // Retorna resposta simples e completamente serializável
           // Garante que todos os valores são primitivos serializáveis
+          // Remove qualquer propriedade que possa causar problemas de serialização
           const response = {
-            success: true as const,
+            success: true,
             user: {
-              id: typeof user.id === 'number' ? user.id : parseInt(String(user.id), 10),
+              id: Number(user.id) || 0,
               name: String(user.name || ""),
               email: String(user.email || ""),
               role: String(user.role || "user"),
-              empresaId: user.empresaId !== null && user.empresaId !== undefined 
-                ? (typeof user.empresaId === 'number' ? user.empresaId : parseInt(String(user.empresaId), 10))
-                : null,
+              empresaId: user.empresaId ? Number(user.empresaId) : null,
             },
           };
           
-          console.log(`[Login] Retornando resposta:`, JSON.stringify(response));
+          // Validação final: garante que pode ser serializado
+          try {
+            JSON.stringify(response);
+            console.log(`[Login] Retornando resposta válida:`, JSON.stringify(response));
+          } catch (serializeError) {
+            console.error(`[Login] Erro ao serializar resposta:`, serializeError);
+            throw new Error("Erro ao preparar resposta do login");
+          }
+          
           return response;
         } catch (error: any) {
           console.error("[Login] Erro completo:", error);
