@@ -183,8 +183,8 @@ export const appRouter = router({
             }));
           }
           
-          // Retorna usando JSON.parse/stringify para garantir serialização
-          return JSON.parse(JSON.stringify(responseData));
+          // Retorna objeto simples - tRPC serializa naturalmente
+          return responseData;
         } catch (error: any) {
           console.error("[Login] Erro completo:", error);
           console.error("[Login] Stack:", error?.stack);
