@@ -117,3 +117,4 @@ O erro de permissões do Windows ao criar o instalador **NÃO afeta** o funciona
 Para testar sem criar instalador, use `pnpm electron:dev`.
 
 
+

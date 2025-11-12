@@ -178,3 +178,4 @@ Antes de dizer que não funciona, verifique:
 - ✅ Funciona? → Ótimo! Teste outras páginas
 - ❌ Não funciona? → Envie os erros do console (F12)
 
+

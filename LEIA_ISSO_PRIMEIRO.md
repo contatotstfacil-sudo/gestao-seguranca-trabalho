@@ -122,3 +122,4 @@ Envie estas informações:
 3. ✅ O que aparece quando acessa `/teste-simples.html`?
 4. ✅ O que aparece no console do navegador (F12)?
 
+

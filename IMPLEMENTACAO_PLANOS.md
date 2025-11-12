@@ -151,3 +151,4 @@ const plano = await trpc.assinaturas.getMinha.query();
 - Para plano Básico/Profissional: limite é total
 
 
+

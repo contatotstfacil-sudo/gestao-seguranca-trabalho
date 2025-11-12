@@ -1,0 +1,19 @@
+# robots.txt para TST Fácil
+# Permite que todos os bots indexem o site
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://tstfacil.com.br/sitemap.xml
+
+# Desabilitar indexação de arquivos de desenvolvimento
+Disallow: /teste-simples.html
+Disallow: /test-login-api.html
+
+# Permitir indexação da landing page
+Allow: /landing-vendas.html
+
+# Crawl-delay (opcional - ajuda a não sobrecarregar o servidor)
+Crawl-delay: 1
+

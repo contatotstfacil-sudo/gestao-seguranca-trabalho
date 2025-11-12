@@ -226,3 +226,4 @@ O que falta é principalmente:
 **Recomendação:** Podemos vender o sistema AGORA, mas precisamos implementar o sistema de planos e pagamento antes de ativar clientes pagantes.
 
 
+
