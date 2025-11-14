@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, desc, sql, asc, or, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql, asc, or, inArray, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 
@@ -196,12 +196,27 @@ export async function getAllEmpresas(filters?: { searchTerm?: string; dataInicio
     let query = db.select().from(empresas);
     
     if (filters?.searchTerm) {
-      query = query.where(
-        or(
-          sql`${empresas.razaoSocial} LIKE ${`%${filters.searchTerm}%`}`,
-          sql`${empresas.cnpj} LIKE ${`%${filters.searchTerm}%`}`
-        )
-      ) as any;
+      const searchTerm = filters.searchTerm.trim();
+      // Remove formatação do CNPJ para busca mais flexível
+      const searchTermSemFormatacao = searchTerm.replace(/[^\d]/g, '');
+      
+      // Busca em múltiplos campos: razaoSocial, nomeFantasia, CNPJ
+      const conditions = [
+        sql`LOWER(${empresas.razaoSocial}) LIKE ${`%${searchTerm.toLowerCase()}%`}`,
+        sql`LOWER(${empresas.cnpj}) LIKE ${`%${searchTerm.toLowerCase()}%`}`
+      ];
+      
+      // Busca também no CNPJ sem formatação (remove pontos, barras, hífens)
+      // Isso permite buscar "12345678000190" mesmo que o CNPJ esteja como "12.345.678/0001-90"
+      
+      // Se o termo de busca for apenas números, busca também no CNPJ sem formatação
+      if (searchTermSemFormatacao && searchTermSemFormatacao.length >= 4) {
+        conditions.push(
+          sql`REPLACE(REPLACE(REPLACE(REPLACE(${empresas.cnpj}, '.', ''), '/', ''), '-', ''), ' ', '') LIKE ${`%${searchTermSemFormatacao}%`}`
+        );
+      }
+      
+      query = query.where(or(...conditions)) as any;
     }
     
     return await query.orderBy(desc(empresas.createdAt));
@@ -308,6 +323,46 @@ export async function getColaboradorById(id: number) {
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar colaborador:", error);
+    throw error;
+  }
+}
+
+export async function getColaboradorComCargoESetor(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    // Buscar colaborador
+    const colaborador = await getColaboradorById(id);
+    if (!colaborador || !colaborador.cargoId) {
+      return {
+        colaborador,
+        cargo: null,
+        setor: null,
+      };
+    }
+
+    // Buscar cargo
+    const cargo = await getCargoById(colaborador.cargoId);
+    
+    // Buscar setor vinculado ao cargo (pegar o primeiro setor vinculado)
+    let setor = null;
+    if (cargo) {
+      const setoresDoCargo = await getSetoresByCargo(cargo.id);
+      if (setoresDoCargo.length > 0) {
+        const setorId = setoresDoCargo[0].setorId;
+        const setoresList = await db.select().from(setores).where(eq(setores.id, setorId)).limit(1);
+        setor = setoresList[0] || null;
+      }
+    }
+
+    return {
+      colaborador,
+      cargo,
+      setor,
+    };
+  } catch (error) {
+    console.error("[Database] Erro ao buscar colaborador com cargo e setor:", error);
     throw error;
   }
 }
@@ -902,6 +957,90 @@ export async function getAllCargos(empresaId: number | null) {
   }
 }
 
+// === RELATÓRIOS DE CARGOS ===
+
+export async function getRelatorioCargosPorEmpresa(empresaId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    let query = db
+      .select({
+        empresaId: empresas.id,
+        razaoSocial: empresas.razaoSocial,
+        nomeFantasia: empresas.nomeFantasia,
+        quantidade: sql<number>`COUNT(${cargos.id})`.as('quantidade'),
+      })
+      .from(cargos)
+      .leftJoin(empresas, eq(cargos.empresaId, empresas.id))
+      .groupBy(empresas.id, empresas.razaoSocial, empresas.nomeFantasia);
+    
+    if (empresaId) {
+      query = query.where(eq(cargos.empresaId, empresaId)) as any;
+    }
+    
+    return await query;
+  } catch (error) {
+    console.error("[Database] Erro ao buscar relatório de cargos por empresa:", error);
+    throw error;
+  }
+}
+
+export async function getRelatorioCargosPorSetor(empresaId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    let baseQuery = db
+      .select({
+        setorId: setores.id,
+        nomeSetor: setores.nomeSetor,
+        quantidade: sql<number>`COUNT(DISTINCT ${cargoSetores.cargoId})`.as('quantidade'),
+      })
+      .from(cargoSetores)
+      .leftJoin(setores, eq(cargoSetores.setorId, setores.id))
+      .leftJoin(cargos, eq(cargoSetores.cargoId, cargos.id))
+      .groupBy(setores.id, setores.nomeSetor);
+    
+    if (empresaId) {
+      baseQuery = baseQuery.where(eq(cargos.empresaId, empresaId)) as any;
+    }
+    
+    return await baseQuery;
+  } catch (error) {
+    console.error("[Database] Erro ao buscar relatório de cargos por setor:", error);
+    throw error;
+  }
+}
+
+export async function getRelatorioCargosPorEmpresaESetor(empresaId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    let baseQuery = db
+      .select({
+        empresaId: empresas.id,
+        razaoSocial: empresas.razaoSocial,
+        nomeFantasia: empresas.nomeFantasia,
+        setorId: setores.id,
+        nomeSetor: setores.nomeSetor,
+        quantidade: sql<number>`COUNT(DISTINCT ${cargoSetores.cargoId})`.as('quantidade'),
+      })
+      .from(cargoSetores)
+      .leftJoin(cargos, eq(cargoSetores.cargoId, cargos.id))
+      .leftJoin(empresas, eq(cargos.empresaId, empresas.id))
+      .leftJoin(setores, eq(cargoSetores.setorId, setores.id))
+      .groupBy(empresas.id, empresas.razaoSocial, empresas.nomeFantasia, setores.id, setores.nomeSetor);
+    
+    if (empresaId) {
+      baseQuery = baseQuery.where(eq(cargos.empresaId, empresaId)) as any;
+    }
+    
+    return await baseQuery;
+  } catch (error) {
+    console.error("[Database] Erro ao buscar relatório de cargos por empresa e setor:", error);
+    throw error;
+  }
+}
+
 export async function getCargoById(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -959,9 +1098,27 @@ export async function getAllSetores(filters?: any, empresaId?: number | null) {
   if (!db) throw new Error("Database not available");
   try {
     let query = db.select().from(setores);
+
+    const conditions: any[] = [];
+
     if (empresaId) {
-      query = query.where(eq(setores.empresaId, empresaId)) as any;
+      conditions.push(eq(setores.empresaId, empresaId));
     }
+
+    if (filters?.searchTerm && typeof filters.searchTerm === "string" && filters.searchTerm.trim()) {
+      const termo = `%${filters.searchTerm.trim()}%`;
+      conditions.push(
+        or(
+          like(setores.nomeSetor, termo),
+          like(setores.descricao, termo)
+        )
+      );
+    }
+
+    if (conditions.length) {
+      query = query.where(and(...conditions)) as any;
+    }
+
     return await query.orderBy(desc(setores.createdAt));
   } catch (error) {
     console.error("[Database] Erro ao buscar setores:", error);
@@ -1138,10 +1295,36 @@ export async function createRiscoOcupacional(data: InsertRiscoOcupacional) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    console.log("[Database] Criando risco ocupacional:", JSON.stringify(data, null, 2));
     const result = await db.insert(riscosOcupacionais).values(data);
-    const insertId = (result as any)[0]?.insertId;
-    if (insertId) return await getRiscoOcupacionalById(insertId);
-    return null;
+    console.log("[Database] Resultado do insert:", JSON.stringify(result, null, 2));
+    
+    // Tentar diferentes formatos de resposta do MySQL
+    let insertId: number | undefined;
+    
+    // Formato 1: result[0].insertId
+    if ((result as any)[0]?.insertId) {
+      insertId = (result as any)[0].insertId;
+    }
+    // Formato 2: result.insertId
+    else if ((result as any).insertId) {
+      insertId = (result as any).insertId;
+    }
+    // Formato 3: result[0][0]?.insertId (alguns drivers)
+    else if ((result as any)[0]?.[0]?.insertId) {
+      insertId = (result as any)[0][0].insertId;
+    }
+    
+    console.log("[Database] InsertId encontrado:", insertId);
+    
+    if (insertId) {
+      const riscoCriado = await getRiscoOcupacionalById(insertId);
+      console.log("[Database] Risco criado retornado:", riscoCriado);
+      return riscoCriado;
+    }
+    
+    console.error("[Database] Não foi possível obter o insertId do resultado:", result);
+    throw new Error("Não foi possível obter o ID do risco criado");
   } catch (error) {
     console.error("[Database] Erro ao criar risco ocupacional:", error);
     throw error;
@@ -1176,7 +1359,33 @@ export async function getRiscosByCargo(cargoId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    return await db.select().from(cargoRiscos).where(eq(cargoRiscos.cargoId, cargoId));
+    const resultados = await db
+      .select({
+        id: cargoRiscos.id,
+        cargoId: cargoRiscos.cargoId,
+        riscoOcupacionalId: cargoRiscos.riscoOcupacionalId,
+        tipoAgente: cargoRiscos.tipoAgente,
+        descricaoRiscos: cargoRiscos.descricaoRiscos,
+        fonteGeradora: cargoRiscos.fonteGeradora,
+        tipo: cargoRiscos.tipo,
+        meioPropagacao: cargoRiscos.meioPropagacao,
+        meioContato: cargoRiscos.meioContato,
+        possiveisDanosSaude: cargoRiscos.possiveisDanosSaude,
+        tipoAnalise: cargoRiscos.tipoAnalise,
+        valorAnaliseQuantitativa: cargoRiscos.valorAnaliseQuantitativa,
+        gradacaoEfeitos: cargoRiscos.gradacaoEfeitos,
+        gradacaoExposicao: cargoRiscos.gradacaoExposicao,
+        empresaId: cargoRiscos.empresaId,
+        nomeRisco: riscosOcupacionais.nomeRisco,
+        tipoRisco: riscosOcupacionais.tipoRisco,
+        createdAt: cargoRiscos.createdAt,
+        updatedAt: cargoRiscos.updatedAt,
+      })
+      .from(cargoRiscos)
+      .leftJoin(riscosOcupacionais, eq(cargoRiscos.riscoOcupacionalId, riscosOcupacionais.id))
+      .where(eq(cargoRiscos.cargoId, cargoId));
+    
+    return resultados;
   } catch (error) {
     console.error("[Database] Erro ao buscar riscos do cargo:", error);
     throw error;
@@ -1187,10 +1396,31 @@ export async function createCargoRisco(data: InsertCargoRisco) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    console.log("[Database] Criando cargo risco com dados:", JSON.stringify(data, null, 2));
+    
+    // Validar campos obrigatórios
+    if (!data.cargoId || data.cargoId <= 0) {
+      throw new Error("cargoId é obrigatório e deve ser maior que zero");
+    }
+    if (!data.riscoOcupacionalId || data.riscoOcupacionalId <= 0) {
+      throw new Error("riscoOcupacionalId é obrigatório e deve ser maior que zero");
+    }
+    if (!data.tenantId || data.tenantId <= 0) {
+      throw new Error("tenantId é obrigatório e deve ser maior que zero");
+    }
+
     const result = await db.insert(cargoRiscos).values(data);
+    console.log("[Database] Cargo risco criado com sucesso:", result);
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Database] Erro ao criar cargo risco:", error);
+    console.error("[Database] Dados recebidos:", JSON.stringify(data, null, 2));
+    console.error("[Database] Stack trace:", error.stack);
+    
+    // Melhorar mensagem de erro
+    if (error.message) {
+      throw new Error(`Erro ao salvar risco: ${error.message}`);
+    }
     throw error;
   }
 }

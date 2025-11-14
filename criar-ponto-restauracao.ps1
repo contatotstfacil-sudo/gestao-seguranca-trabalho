@@ -76,3 +76,7 @@ Write-Host "Para listar todos os pontos:" -ForegroundColor Yellow
 Write-Host "   .\listar-pontos-restauracao.ps1" -ForegroundColor Gray
 Write-Host ""
 
+
+
+
+

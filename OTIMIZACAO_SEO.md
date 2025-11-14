@@ -279,3 +279,7 @@ A landing page está **100% otimizada para SEO** com:
 
 **Próximo passo:** Adicione seu domínio real e configure Google Search Console!
 
+
+
+
+

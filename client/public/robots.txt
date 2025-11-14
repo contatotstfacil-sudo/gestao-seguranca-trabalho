@@ -17,3 +17,7 @@ Allow: /landing-vendas.html
 # Crawl-delay (opcional - ajuda a não sobrecarregar o servidor)
 Crawl-delay: 1
 
+
+
+
+

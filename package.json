@@ -30,7 +30,9 @@
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "seed:construcao": "tsx seed-colaboradores-construcao.ts",
-    "criar:modelos-padrao": "tsx criar-modelos-padrao.ts"
+    "criar:modelos-padrao": "tsx criar-modelos-padrao.ts",
+    "migrate:riscos": "tsx scripts/aplicar-migracao-riscos.ts",
+    "migrate:valor-analise": "tsx scripts/aplicar-migracao-valor-analise.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

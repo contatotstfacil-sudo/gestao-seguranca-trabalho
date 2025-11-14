@@ -51,3 +51,7 @@ sincronizarAsos().catch((error) => {
   console.error("❌ Erro na sincronização de ASOs:", error);
   process.exit(1);
 });
+
+
+
+

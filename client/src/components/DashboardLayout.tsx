@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, HardHat, Briefcase, GraduationCap, ShieldCheck, FolderTree, FileText, FileCheck, Settings, ClipboardList, Stethoscope, Home as HomeIcon } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, HardHat, Briefcase, GraduationCap, ShieldCheck, FolderTree, FileText, FileCheck, Settings, ClipboardList, Stethoscope, Home as HomeIcon, BarChart3 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -34,12 +34,13 @@ const menuItems = [
   { icon: Users, label: "Colaboradores", path: "/colaboradores" },
   { icon: Users, label: "Dashboard Colaboradores", path: "/dashboard-colaboradores" },
   { icon: HardHat, label: "Obras", path: "/obras" },
-  { icon: Briefcase, label: "Cargos", path: "/cargos" },
+  { icon: Briefcase, label: "Cargos e Funções", path: "/cargos-e-funcoes" },
   { icon: FolderTree, label: "Setores", path: "/setores" },
   { icon: ClipboardList, label: "Ordem de Serviço - SST", path: "/ordem-servico" },
   { icon: ShieldCheck, label: "EPIs", path: "/epis" },
   { icon: GraduationCap, label: "Treinamentos", path: "/treinamentos" },
   { icon: Stethoscope, label: "Gestão de ASOs", path: "/gestao-asos" },
+  { icon: FileText, label: "Laudos Ocupacionais", path: "/laudos-ocupacionais" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 

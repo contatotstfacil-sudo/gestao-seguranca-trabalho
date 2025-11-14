@@ -469,6 +469,11 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return db.getColaboradorById(input.id);
       }),
+    getComCargoESetor: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return db.getColaboradorComCargoESetor(input.id);
+      }),
     create: protectedProcedure
       .input(z.object({
         nomeCompleto: z.string(),
@@ -855,10 +860,19 @@ export const appRouter = router({
   }),
 
   cargos: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
-      const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-      return db.getAllCargos(empresaId);
-    }),
+    list: protectedProcedure
+      .input(z.object({ empresaId: z.number().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        let empresaId: number | undefined;
+
+        if (ctx.user.role === "admin") {
+          empresaId = input?.empresaId ?? undefined;
+        } else {
+          empresaId = ctx.user.empresaId || undefined;
+        }
+
+        return db.getAllCargos(empresaId ?? null);
+      }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
@@ -868,6 +882,7 @@ export const appRouter = router({
       .input(z.object({
         nomeCargo: z.string(),
         descricao: z.string().optional(),
+        codigoCbo: z.string().max(20).optional(),
         empresaId: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -879,6 +894,8 @@ export const appRouter = router({
         id: z.number(),
         nomeCargo: z.string().optional(),
         descricao: z.string().optional(),
+        codigoCbo: z.string().max(20).optional().nullable(),
+        empresaId: z.number().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
@@ -889,15 +906,56 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         return db.deleteCargo(input.id);
       }),
+    relatorioPorEmpresa: protectedProcedure
+      .input(z.object({ empresaId: z.number().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        let empresaId: number | null = null;
+        if (ctx.user.role === "admin") {
+          empresaId = input?.empresaId ?? null;
+        } else {
+          empresaId = ctx.user.empresaId || null;
+        }
+        return db.getRelatorioCargosPorEmpresa(empresaId);
+      }),
+    relatorioPorSetor: protectedProcedure
+      .input(z.object({ empresaId: z.number().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        let empresaId: number | null = null;
+        if (ctx.user.role === "admin") {
+          empresaId = input?.empresaId ?? null;
+        } else {
+          empresaId = ctx.user.empresaId || null;
+        }
+        return db.getRelatorioCargosPorSetor(empresaId);
+      }),
+    relatorioPorEmpresaESetor: protectedProcedure
+      .input(z.object({ empresaId: z.number().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        let empresaId: number | null = null;
+        if (ctx.user.role === "admin") {
+          empresaId = input?.empresaId ?? null;
+        } else {
+          empresaId = ctx.user.empresaId || null;
+        }
+        return db.getRelatorioCargosPorEmpresaESetor(empresaId);
+      }),
   }),
 
   setores: router({
     list: protectedProcedure
       .input(z.object({
         searchTerm: z.string().optional(),
+        empresaId: z.number().optional(),
       }).optional())
       .query(async ({ input, ctx }) => {
-        const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
+        let empresaId: number | undefined;
+
+        if (ctx.user.role === "admin") {
+          empresaId = input?.empresaId ?? undefined;
+        } else {
+          empresaId = ctx.user.empresaId || undefined;
+        }
+
         return db.getAllSetores(input, empresaId);
       }),
     getById: protectedProcedure
@@ -1054,32 +1112,100 @@ export const appRouter = router({
         riscoOcupacionalId: z.number(),
         tipoAgente: z.string().optional(),
         descricaoRiscos: z.string().optional(),
+        fonteGeradora: z.string().optional(),
+        tipo: z.string().optional(),
+        meioPropagacao: z.string().optional(),
+        meioContato: z.string().optional(),
+        possiveisDanosSaude: z.string().optional(),
+        tipoAnalise: z.string().optional(),
+        valorAnaliseQuantitativa: z.string().optional(),
+        gradacaoEfeitos: z.string().optional(),
+        gradacaoExposicao: z.string().optional(),
         empresaId: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const empresaId = input.empresaId || ctx.user.empresaId;
-        const dataToInsert: any = {
-          cargoId: input.cargoId,
-          riscoOcupacionalId: input.riscoOcupacionalId,
-        };
-        if (input.tipoAgente && input.tipoAgente.trim()) {
-          dataToInsert.tipoAgente = input.tipoAgente.trim();
+        try {
+          // Validações
+          if (!input.cargoId || input.cargoId <= 0) {
+            throw new Error("CargoId é obrigatório e deve ser maior que zero");
+          }
+          if (!input.riscoOcupacionalId || input.riscoOcupacionalId <= 0) {
+            throw new Error("RiscoOcupacionalId é obrigatório e deve ser maior que zero");
+          }
+
+          const empresaId = input.empresaId || ctx.user.empresaId;
+          const tenantId = (ctx.user as any)?.tenantId || 1; // Default tenantId se não existir
+          
+          const dataToInsert: any = {
+            cargoId: input.cargoId,
+            riscoOcupacionalId: input.riscoOcupacionalId,
+            tenantId: tenantId,
+          };
+          
+          if (input.tipoAgente && input.tipoAgente.trim()) {
+            dataToInsert.tipoAgente = input.tipoAgente.trim();
+          }
+          if (input.descricaoRiscos && input.descricaoRiscos.trim()) {
+            dataToInsert.descricaoRiscos = input.descricaoRiscos.trim();
+          }
+          if (input.fonteGeradora && input.fonteGeradora.trim()) {
+            dataToInsert.fonteGeradora = input.fonteGeradora.trim();
+          }
+          if (input.tipo && input.tipo.trim()) {
+            dataToInsert.tipo = input.tipo.trim();
+          }
+          if (input.meioPropagacao && input.meioPropagacao.trim()) {
+            dataToInsert.meioPropagacao = input.meioPropagacao.trim();
+          }
+          if (input.meioContato && input.meioContato.trim()) {
+            dataToInsert.meioContato = input.meioContato.trim();
+          }
+          if (input.possiveisDanosSaude && input.possiveisDanosSaude.trim()) {
+            dataToInsert.possiveisDanosSaude = input.possiveisDanosSaude.trim();
+          }
+          if (input.tipoAnalise && input.tipoAnalise.trim()) {
+            dataToInsert.tipoAnalise = input.tipoAnalise.trim();
+          }
+          if (input.valorAnaliseQuantitativa && input.valorAnaliseQuantitativa.trim()) {
+            dataToInsert.valorAnaliseQuantitativa = input.valorAnaliseQuantitativa.trim();
+          }
+          if (input.gradacaoEfeitos && input.gradacaoEfeitos.trim()) {
+            dataToInsert.gradacaoEfeitos = input.gradacaoEfeitos.trim();
+          }
+          if (input.gradacaoExposicao && input.gradacaoExposicao.trim()) {
+            dataToInsert.gradacaoExposicao = input.gradacaoExposicao.trim();
+          }
+          if (empresaId) {
+            dataToInsert.empresaId = empresaId;
+          }
+
+          console.log("[CargoRiscos.create] Dados para inserir:", JSON.stringify(dataToInsert, null, 2));
+          
+          const result = await db.createCargoRisco(dataToInsert);
+          console.log("[CargoRiscos.create] Risco salvo com sucesso");
+          return result;
+        } catch (error: any) {
+          console.error("[CargoRiscos.create] Erro ao salvar risco:", error);
+          console.error("[CargoRiscos.create] Input recebido:", JSON.stringify(input, null, 2));
+          throw new Error(error.message || "Erro ao salvar risco ocupacional");
         }
-        if (input.descricaoRiscos && input.descricaoRiscos.trim()) {
-          dataToInsert.descricaoRiscos = input.descricaoRiscos.trim();
-        }
-        if (empresaId) {
-          dataToInsert.empresaId = empresaId;
-        }
-        return db.createCargoRisco(dataToInsert);
       }),
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        cargoId: z.number(),
+        cargoId: z.number().optional(),
         tipoAgente: z.string().optional(),
         descricaoRiscos: z.string().optional(),
         riscoOcupacionalId: z.number().optional(),
+        fonteGeradora: z.string().optional(),
+        tipo: z.string().optional(),
+        meioPropagacao: z.string().optional(),
+        meioContato: z.string().optional(),
+        possiveisDanosSaude: z.string().optional(),
+        tipoAnalise: z.string().optional(),
+        valorAnaliseQuantitativa: z.string().optional(),
+        gradacaoEfeitos: z.string().optional(),
+        gradacaoExposicao: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...rest } = input;

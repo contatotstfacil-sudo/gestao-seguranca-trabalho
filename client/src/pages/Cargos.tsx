@@ -5,19 +5,47 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, Check, X } from "lucide-react";
-import { useState } from "react";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, Check, X, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 
 
-export default function Cargos() {
+type CargoFormData = {
+  nomeCargo: string;
+  descricao: string;
+  codigoCbo: string;
+  empresaId: string;
+};
+
+export default function Cargos({ showLayout = true }: { showLayout?: boolean }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedCargo, setExpandedCargo] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ nomeCargo: "", descricao: "" });
+  const [formData, setFormData] = useState<CargoFormData>({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
   const [treinamentoForm, setTreinamentoForm] = useState({
     cargoId: 0,
     tipoTreinamentoId: 0,
@@ -33,11 +61,29 @@ export default function Cargos() {
     riscoOcupacionalId: 0,
     tipoAgente: "",
     descricaoRiscos: "",
+    fonteGeradora: "",
+    tipo: "",
+    meioPropagacao: "",
+    meioContato: "",
+    possiveisDanosSaude: "",
+    tipoAnalise: "",
+    valorAnaliseQuantitativa: "",
+    gradacaoEfeitos: "",
+    gradacaoExposicao: "",
   });
   const [riscosTemporarios, setRiscosTemporarios] = useState<Array<{
     riscoOcupacionalId: number;
     tipoAgente: string;
     descricaoRiscos: string;
+    fonteGeradora: string;
+    tipo: string;
+    meioPropagacao: string;
+    meioContato: string;
+    possiveisDanosSaude: string;
+    tipoAnalise: string;
+    valorAnaliseQuantitativa: string;
+    gradacaoEfeitos: string;
+    gradacaoExposicao: string;
     nomeRisco?: string;
     tipoRisco?: string;
   }>>([]);
@@ -46,9 +92,23 @@ export default function Cargos() {
   const [editRiscoForm, setEditRiscoForm] = useState({
     tipoAgente: "",
     descricaoRiscos: "",
+    fonteGeradora: "",
+    tipo: "",
+    meioPropagacao: "",
+    meioContato: "",
+    possiveisDanosSaude: "",
+    tipoAnalise: "",
+    valorAnaliseQuantitativa: "",
+    gradacaoEfeitos: "",
+    gradacaoExposicao: "",
   });
 
   const { data: cargos = [], isLoading, refetch } = trpc.cargos.list.useQuery();
+  const { data: empresas = [], isLoading: isLoadingEmpresas } = trpc.empresas.list.useQuery();
+  const [empresaPopoverOpen, setEmpresaPopoverOpen] = useState(false);
+  const [empresaSearch, setEmpresaSearch] = useState("");
+  const [buscaCargo, setBuscaCargo] = useState("");
+  const [empresaFiltroId, setEmpresaFiltroId] = useState<string>("");
   const { data: treinamentosByCargo = [], refetch: refetchTreinamentos } = trpc.cargoTreinamentos.getByCargo.useQuery(
     { cargoId: expandedCargo || 0 },
     { enabled: expandedCargo !== null }
@@ -72,7 +132,9 @@ export default function Cargos() {
   const createMutation = trpc.cargos.create.useMutation({
     onSuccess: () => {
       toast.success("Cargo criado com sucesso!");
-      setFormData({ nomeCargo: "", descricao: "" });
+      setFormData({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
+      setEmpresaSearch("");
+      setEmpresaPopoverOpen(false);
       setDialogOpen(false);
       refetch();
       refetchTreinamentos();
@@ -85,7 +147,9 @@ export default function Cargos() {
   const updateMutation = trpc.cargos.update.useMutation({
     onSuccess: () => {
       toast.success("Cargo atualizado com sucesso!");
-      setFormData({ nomeCargo: "", descricao: "" });
+      setFormData({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
+      setEmpresaSearch("");
+      setEmpresaPopoverOpen(false);
       setEditingId(null);
       setDialogOpen(false);
       refetch();
@@ -134,16 +198,39 @@ export default function Cargos() {
       return;
     }
 
+    const descricao = formData.descricao?.trim() ?? "";
+    const codigoCbo = formData.codigoCbo.trim();
+    const empresaIdNumber = Number(formData.empresaId);
+
+    if (!empresaIdNumber || Number.isNaN(empresaIdNumber)) {
+      toast.error("Selecione a empresa vinculada ao cargo");
+      return;
+    }
+ 
+    const payload = {
+      nomeCargo: formData.nomeCargo.trim(),
+      descricao: descricao.length ? descricao : undefined,
+      codigoCbo: codigoCbo.length ? codigoCbo : undefined,
+      empresaId: empresaIdNumber,
+    };
+
     if (editingId) {
-      updateMutation.mutate({ id: editingId, ...formData });
+      updateMutation.mutate({ id: editingId, ...payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
   const handleEdit = (cargo: any) => {
     setEditingId(cargo.id);
-    setFormData({ nomeCargo: cargo.nomeCargo, descricao: cargo.descricao || "" });
+    setFormData({
+      nomeCargo: cargo.nomeCargo,
+      descricao: cargo.descricao || "",
+      codigoCbo: cargo.codigoCbo || cargo.cbo || "",
+      empresaId: cargo.empresaId ? cargo.empresaId.toString() : "",
+    });
+    setEmpresaSearch("");
+    setEmpresaPopoverOpen(false);
     setDialogOpen(true);
   };
 
@@ -255,7 +342,19 @@ export default function Cargos() {
       toast.success("Risco ocupacional atualizado com sucesso!");
       refetchRiscos();
       setEditingRiscoId(null);
-      setEditRiscoForm({ tipoAgente: "", descricaoRiscos: "" });
+      setEditRiscoForm({ 
+        tipoAgente: "", 
+        descricaoRiscos: "",
+        fonteGeradora: "",
+        tipo: "",
+        meioPropagacao: "",
+        meioContato: "",
+        possiveisDanosSaude: "",
+        tipoAnalise: "",
+        valorAnaliseQuantitativa: "",
+        gradacaoEfeitos: "",
+        gradacaoExposicao: "",
+      });
     },
     onError: (error: any) => {
       toast.error(error.message || "Erro ao atualizar risco ocupacional");
@@ -273,7 +372,21 @@ export default function Cargos() {
   });
 
   const handleAddRisco = (cargoId: number) => {
-    setRiscoForm({ cargoId, riscoOcupacionalId: 0, tipoAgente: "", descricaoRiscos: "" });
+    setRiscoForm({ 
+      cargoId, 
+      riscoOcupacionalId: 0, 
+      tipoAgente: "", 
+      descricaoRiscos: "",
+      fonteGeradora: "",
+      tipo: "",
+      meioPropagacao: "",
+      meioContato: "",
+      possiveisDanosSaude: "",
+      tipoAnalise: "",
+      valorAnaliseQuantitativa: "",
+      gradacaoEfeitos: "",
+      gradacaoExposicao: "",
+    });
     setRiscosTemporarios([]);
     setShowRiscoDialog(true);
   };
@@ -290,6 +403,15 @@ export default function Cargos() {
         riscoOcupacionalId: 0,
         tipoAgente: riscoForm.tipoAgente,
         descricaoRiscos: riscoForm.descricaoRiscos,
+        fonteGeradora: riscoForm.fonteGeradora,
+        tipo: riscoForm.tipo,
+        meioPropagacao: riscoForm.meioPropagacao,
+        meioContato: riscoForm.meioContato,
+        possiveisDanosSaude: riscoForm.possiveisDanosSaude,
+        tipoAnalise: riscoForm.tipoAnalise,
+        valorAnaliseQuantitativa: riscoForm.valorAnaliseQuantitativa,
+        gradacaoEfeitos: riscoForm.gradacaoEfeitos,
+        gradacaoExposicao: riscoForm.gradacaoExposicao,
         nomeRisco: riscoForm.tipoAgente,
         tipoRisco: "",
       },
@@ -300,6 +422,15 @@ export default function Cargos() {
       ...prev,
       tipoAgente: "",
       descricaoRiscos: "",
+      fonteGeradora: "",
+      tipo: "",
+      meioPropagacao: "",
+      meioContato: "",
+      possiveisDanosSaude: "",
+      tipoAnalise: "",
+      valorAnaliseQuantitativa: "",
+      gradacaoEfeitos: "",
+      gradacaoExposicao: "",
     }));
   };
 
@@ -315,6 +446,7 @@ export default function Cargos() {
 
     const totalRiscos = riscosTemporarios.length;
     let salvos = 0;
+    let erros = 0;
 
     // Buscar ou criar risco ocupacional genérico baseado no tipo de agente
     const criarOuBuscarRisco = async (tipoAgente: string): Promise<number> => {
@@ -332,6 +464,7 @@ export default function Cargos() {
         };
         
         return new Promise((resolve, reject) => {
+          console.log(`[CriarRisco] Criando novo risco ocupacional: ${tipoAgente}`);
           createRiscoOcupacionalMutation.mutate(
             {
               nomeRisco: tipoAgente,
@@ -340,18 +473,40 @@ export default function Cargos() {
             },
             {
               onSuccess: async (novoRisco: any) => {
-                // Aguardar atualização da lista antes de continuar
-                await refetchRiscosList();
-                resolve(novoRisco.id);
+                console.log(`[CriarRisco] Risco criado com sucesso:`, novoRisco);
+                
+                // O novoRisco deve conter o ID diretamente
+                let riscoId = novoRisco?.id;
+                
+                // Se não tiver ID, tentar buscar na lista atualizada
+                if (!riscoId || riscoId <= 0) {
+                  // Invalidar cache e buscar novamente
+                  await utilsRiscos.riscosOcupacionais.list.invalidate();
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                  
+                  // Buscar novamente após criar
+                  const riscosAtualizados = await utilsRiscos.riscosOcupacionais.list.fetch();
+                  const novoRiscoEncontrado = riscosAtualizados.find((r: any) => r.nomeRisco === tipoAgente);
+                  riscoId = novoRiscoEncontrado?.id;
+                }
+                
+                console.log(`[CriarRisco] ID do risco encontrado: ${riscoId}`);
+                if (!riscoId || riscoId <= 0) {
+                  reject(new Error(`Não foi possível obter o ID do risco criado para "${tipoAgente}". Resposta: ${JSON.stringify(novoRisco)}`));
+                  return;
+                }
+                resolve(riscoId);
               },
               onError: (error: any) => {
-                reject(error);
+                console.error("[CriarRisco] Erro ao criar risco ocupacional:", error);
+                reject(new Error(error.message || `Erro ao criar risco ocupacional "${tipoAgente}"`));
               },
             }
           );
         });
       }
       
+      console.log(`[CriarRisco] Risco existente encontrado: ${riscoExistente.id} para "${tipoAgente}"`);
       return riscoExistente.id;
     };
 
@@ -374,32 +529,88 @@ export default function Cargos() {
           if (risco.descricaoRiscos && risco.descricaoRiscos.trim()) {
             dataToSave.descricaoRiscos = risco.descricaoRiscos.trim();
           }
+          if (risco.fonteGeradora && risco.fonteGeradora.trim()) {
+            dataToSave.fonteGeradora = risco.fonteGeradora.trim();
+          }
+          if (risco.tipo && risco.tipo.trim()) {
+            dataToSave.tipo = risco.tipo.trim();
+          }
+          if (risco.meioPropagacao && risco.meioPropagacao.trim()) {
+            dataToSave.meioPropagacao = risco.meioPropagacao.trim();
+          }
+          if (risco.meioContato && risco.meioContato.trim()) {
+            dataToSave.meioContato = risco.meioContato.trim();
+          }
+          if (risco.possiveisDanosSaude && risco.possiveisDanosSaude.trim()) {
+            dataToSave.possiveisDanosSaude = risco.possiveisDanosSaude.trim();
+          }
+          if (risco.tipoAnalise && risco.tipoAnalise.trim()) {
+            dataToSave.tipoAnalise = risco.tipoAnalise.trim();
+          }
+          if (risco.valorAnaliseQuantitativa && risco.valorAnaliseQuantitativa.trim()) {
+            dataToSave.valorAnaliseQuantitativa = risco.valorAnaliseQuantitativa.trim();
+          }
+          if (risco.gradacaoEfeitos && risco.gradacaoEfeitos.trim()) {
+            dataToSave.gradacaoEfeitos = risco.gradacaoEfeitos.trim();
+          }
+          if (risco.gradacaoExposicao && risco.gradacaoExposicao.trim()) {
+            dataToSave.gradacaoExposicao = risco.gradacaoExposicao.trim();
+          }
+          
+          console.log("Salvando risco:", dataToSave);
           
           createRiscoMutation.mutate(
             dataToSave,
             {
               onSuccess: () => {
                 salvos++;
+                console.log(`Risco ${salvos}/${totalRiscos} salvo com sucesso`);
                 resolve();
               },
               onError: (error: any) => {
+                console.error("Erro ao salvar risco:", error);
+                erros++;
                 reject(new Error(error.message || `Erro ao salvar risco "${risco.tipoAgente}"`));
               },
             }
           );
         });
       } catch (error: any) {
+        console.error(`Erro ao processar risco "${risco.tipoAgente}":`, error);
+        erros++;
         toast.error(`Erro ao salvar risco "${risco.tipoAgente}": ${error.message || error}`);
-        return;
+        // Continuar salvando os outros riscos mesmo se um falhar
       }
     }
 
-    // Todos salvos com sucesso
-    setRiscoForm({ cargoId: 0, riscoOcupacionalId: 0, tipoAgente: "", descricaoRiscos: "" });
-    setRiscosTemporarios([]);
-    setShowRiscoDialog(false);
-    toast.success(`${totalRiscos} risco(s) ocupacional(is) adicionado(s) com sucesso`);
-    refetchRiscos();
+    // Verificar se todos foram salvos
+    if (erros > 0) {
+      toast.warning(`${salvos} risco(s) salvos, ${erros} erro(s) ao salvar`);
+    } else {
+      toast.success(`${salvos} risco(s) ocupacional(is) adicionado(s) com sucesso`);
+    }
+
+    // Limpar formulário e fechar dialog apenas se pelo menos um foi salvo
+    if (salvos > 0) {
+      setRiscoForm({ 
+        cargoId: 0, 
+        riscoOcupacionalId: 0, 
+        tipoAgente: "", 
+        descricaoRiscos: "",
+        fonteGeradora: "",
+        tipo: "",
+        meioPropagacao: "",
+        meioContato: "",
+        possiveisDanosSaude: "",
+        tipoAnalise: "",
+        valorAnaliseQuantitativa: "",
+        gradacaoEfeitos: "",
+        gradacaoExposicao: "",
+      });
+      setRiscosTemporarios([]);
+      setShowRiscoDialog(false);
+      refetchRiscos();
+    }
   };
 
   const handleEditRisco = (risco: any) => {
@@ -407,6 +618,15 @@ export default function Cargos() {
     setEditRiscoForm({
       tipoAgente: risco.tipoAgente || "",
       descricaoRiscos: risco.descricaoRiscos || "",
+      fonteGeradora: risco.fonteGeradora || "",
+      tipo: risco.tipo || "",
+      meioPropagacao: risco.meioPropagacao || "",
+      meioContato: risco.meioContato || "",
+      possiveisDanosSaude: risco.possiveisDanosSaude || "",
+      tipoAnalise: risco.tipoAnalise || "",
+      valorAnaliseQuantitativa: risco.valorAnaliseQuantitativa || "",
+      gradacaoEfeitos: risco.gradacaoEfeitos || "",
+      gradacaoExposicao: risco.gradacaoExposicao || "",
     });
   };
 
@@ -423,12 +643,33 @@ export default function Cargos() {
       cargoId,
       tipoAgente: editRiscoForm.tipoAgente.trim(),
       descricaoRiscos: editRiscoForm.descricaoRiscos.trim() || undefined,
+      fonteGeradora: editRiscoForm.fonteGeradora.trim() || undefined,
+      tipo: editRiscoForm.tipo.trim() || undefined,
+      meioPropagacao: editRiscoForm.meioPropagacao.trim() || undefined,
+      meioContato: editRiscoForm.meioContato.trim() || undefined,
+      possiveisDanosSaude: editRiscoForm.possiveisDanosSaude.trim() || undefined,
+      tipoAnalise: editRiscoForm.tipoAnalise.trim() || undefined,
+      valorAnaliseQuantitativa: editRiscoForm.valorAnaliseQuantitativa.trim() || undefined,
+      gradacaoEfeitos: editRiscoForm.gradacaoEfeitos.trim() || undefined,
+      gradacaoExposicao: editRiscoForm.gradacaoExposicao.trim() || undefined,
     });
   };
 
   const handleCancelEditRisco = () => {
     setEditingRiscoId(null);
-    setEditRiscoForm({ tipoAgente: "", descricaoRiscos: "" });
+    setEditRiscoForm({ 
+      tipoAgente: "", 
+      descricaoRiscos: "",
+      fonteGeradora: "",
+      tipo: "",
+      meioPropagacao: "",
+      meioContato: "",
+      possiveisDanosSaude: "",
+      tipoAnalise: "",
+      valorAnaliseQuantitativa: "",
+      gradacaoEfeitos: "",
+      gradacaoExposicao: "",
+    });
   };
 
   const handleDeleteRisco = (id: number) => {
@@ -448,16 +689,138 @@ export default function Cargos() {
     return labels[tipo] || tipo;
   };
 
+  const empresasMap = useMemo(() => {
+    const map: Map<string, string> = new Map();
+    empresas.forEach((empresa: any) => {
+      map.set(empresa.id.toString(), empresa.nomeFantasia || empresa.razaoSocial || `Empresa #${empresa.id}`);
+    });
+    return map;
+  }, [empresas]);
+
+  const firstEmpresaId = useMemo(() => {
+    const primeira = empresas[0];
+    return primeira?.id ? primeira.id.toString() : "";
+  }, [empresas]);
+
+  const empresaSelecionadaNome = useMemo(() => {
+    if (!formData.empresaId) return "";
+    return empresasMap.get(formData.empresaId) ?? "";
+  }, [formData.empresaId, empresasMap]);
+
+  const normalizarTexto = (valor: string) =>
+    valor
+      ?.toString()
+      .normalize("NFD")
+      .replace(/[^\w\s-]/g, "")
+      .toLowerCase() ?? "";
+
+  const removerEspacos = (valor: string) => valor.replace(/\s+/g, "");
+
+  const correspondeSubsequencia = (alvo: string, consulta: string) => {
+    if (!consulta) return true;
+    let indiceConsulta = 0;
+    for (let i = 0; i < alvo.length && indiceConsulta < consulta.length; i++) {
+      if (alvo[i] === consulta[indiceConsulta]) {
+        indiceConsulta++;
+      }
+    }
+    return indiceConsulta === consulta.length;
+  };
+
+  const empresasOptions = useMemo(() => {
+    return empresas.map((empresa: any) => {
+      const id = empresa.id?.toString?.();
+      if (!id) return null;
+      const rawCnpj = empresa.cnpj ?? "";
+      const cnpj = typeof rawCnpj === "string" ? rawCnpj : rawCnpj ? String(rawCnpj) : "";
+      return {
+        id,
+        nome:
+          empresa.nomeFantasia?.trim() ||
+          empresa.razaoSocial?.trim() ||
+          `Empresa #${id}`,
+        cnpj,
+      };
+    }).filter(Boolean) as Array<{ id: string; nome: string; cnpj: string }>;
+  }, [empresas]);
+
+  const empresasFiltradas = useMemo(() => {
+    const termoNormalizado = removerEspacos(normalizarTexto(empresaSearch).trim());
+    if (!termoNormalizado) return empresasOptions;
+
+    return empresasOptions.filter((empresa) => {
+      const nomeNormalizado = removerEspacos(normalizarTexto(empresa.nome));
+      return nomeNormalizado.includes(termoNormalizado) ||
+        correspondeSubsequencia(nomeNormalizado, termoNormalizado);
+    });
+  }, [empresaSearch, empresasOptions]);
+
+  const cargosFiltrados = useMemo(() => {
+    const termo = removerEspacos(normalizarTexto(buscaCargo));
+    const filtroEmpresaNormalizado = empresaFiltroId && empresaFiltroId !== "__all__" ? empresaFiltroId : "";
+    return cargos.filter((cargo: any) => {
+      const empresaIdMatch = !filtroEmpresaNormalizado || cargo.empresaId?.toString?.() === filtroEmpresaNormalizado;
+
+      if (!empresaIdMatch) return false;
+
+      if (!termo) return true;
+
+      const nomeCargoNormalizado = removerEspacos(normalizarTexto(cargo.nomeCargo || ""));
+      const descricaoNormalizada = removerEspacos(normalizarTexto(cargo.descricao || ""));
+      const cbo = (cargo.codigoCbo || cargo.cbo || "").toString().toLowerCase();
+
+      return (
+        nomeCargoNormalizado.includes(termo) ||
+        descricaoNormalizada.includes(termo) ||
+        cbo.includes(termo)
+      );
+    });
+  }, [buscaCargo, cargos, empresaFiltroId]);
+
+  const totalCargosFiltrados = cargosFiltrados.length;
+  const totalCargos = cargos.length;
+  const totalEmpresas = useMemo(() => {
+    const set = new Set<string>();
+    cargos.forEach((cargo: any) => {
+      if (cargo.empresaId) {
+        set.add(cargo.empresaId.toString());
+      }
+    });
+    return set.size;
+  }, [cargos]);
+
+  const totalSemSetor = useMemo(() => {
+    return cargosFiltrados.filter((cargo: any) => {
+      if (Array.isArray(cargo.setores) && cargo.setores.length > 0) return false;
+      if (typeof cargo.setoresQuantidade === "number" && cargo.setoresQuantidade > 0) return false;
+      return true;
+    }).length;
+  }, [cargosFiltrados]);
+
+  useEffect(() => {
+    if (!editingId && firstEmpresaId && empresas.length > 0 && empresasMap.size > 0) {
+      if (formData.empresaId && !empresasMap.has(formData.empresaId)) {
+        setFormData((prev) => ({ ...prev, empresaId: "" }));
+      }
+    }
+  }, [editingId, firstEmpresaId, formData.empresaId, empresas, empresasMap]);
+
   if (isLoading) return <div>Carregando...</div>;
 
-  return (
-    <DashboardLayout>
-      <div className="space-y-6">
+  const content = (
+    <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">Cargos</h1>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => { setEditingId(null); setFormData({ nomeCargo: "", descricao: "" }); }}>
+              <Button
+                onClick={() => {
+                  setEditingId(null);
+                  setFormData({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
+                  setEmpresaSearch("");
+                  setEmpresaPopoverOpen(false);
+                }}
+              >
                 <Plus className="mr-2 h-4 w-4" /> Novo Cargo
               </Button>
             </DialogTrigger>
@@ -476,6 +839,16 @@ export default function Cargos() {
                   />
                 </div>
                 <div>
+                  <Label htmlFor="codigoCbo">Código CBO</Label>
+                  <Input
+                    id="codigoCbo"
+                    value={formData.codigoCbo}
+                    onChange={(e) => setFormData({ ...formData, codigoCbo: e.target.value })}
+                    placeholder="Ex: 7156-10"
+                    maxLength={20}
+                  />
+                </div>
+                <div>
                   <Label htmlFor="descricao">Descrição</Label>
                   <Textarea
                     id="descricao"
@@ -483,6 +856,76 @@ export default function Cargos() {
                     onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                     placeholder="Descrição do cargo"
                   />
+                </div>
+                <div>
+                  <Label htmlFor="empresaId">Empresa</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="empresaId"
+                      readOnly
+                      value={empresaSelecionadaNome}
+                      placeholder={isLoadingEmpresas ? "Carregando empresas..." : "Selecione a empresa"}
+                      className="bg-muted/40"
+                    />
+                    <Popover open={empresaPopoverOpen} onOpenChange={setEmpresaPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0"
+                          disabled={isLoadingEmpresas || empresasOptions.length === 0}
+                        >
+                          <Search className="h-4 w-4" />
+                          <span className="sr-only">Pesquisar empresa</span>
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="p-0 w-[24rem]" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por nome ou CNPJ"
+                            value={empresaSearch}
+                            onValueChange={setEmpresaSearch}
+                            autoFocus
+                          />
+                          <CommandList>
+                            <CommandEmpty>
+                              {isLoadingEmpresas
+                                ? "Carregando empresas..."
+                                : "Nenhuma empresa encontrada."}
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {empresasFiltradas.map((empresa) => (
+                                <CommandItem
+                                  key={empresa.id}
+                                  value={empresa.nome}
+                                  onSelect={() => {
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      empresaId: empresa.id,
+                                    }));
+                                    setEmpresaPopoverOpen(false);
+                                    setEmpresaSearch("");
+                                  }}
+                                >
+                                  <div>
+                                    <p className="font-medium leading-tight">{empresa.nome}</p>
+                                    {empresa.cnpj && (
+                                      <p className="text-xs text-muted-foreground">CNPJ: {empresa.cnpj}</p>
+                                    )}
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  {empresasOptions.length === 0 && !isLoadingEmpresas && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Cadastre uma empresa para vincular cargos.
+                    </p>
+                  )}
                 </div>
                 <Button type="submit" className="w-full">
                   {editingId ? "Atualizar" : "Criar"}
@@ -492,19 +935,118 @@ export default function Cargos() {
           </Dialog>
         </div>
 
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total de cargos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-semibold">{totalCargos}</p>
+              <p className="text-xs text-muted-foreground">{totalCargosFiltrados !== totalCargos ? `${totalCargosFiltrados} exibidos com filtros` : "Todos os cargos cadastrados"}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Empresas atendidas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-semibold">{totalEmpresas}</p>
+              <p className="text-xs text-muted-foreground">Distribuição de cargos por empresa</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Cargos sem setor vinculado</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-semibold">{totalSemSetor}</p>
+              <p className="text-xs text-muted-foreground">Acompanhe para garantir o vínculo correto</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Busca ativa</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1">
+              <p className="text-sm text-muted-foreground">Resultados atualizados conforme filtros abaixo.</p>
+              <Button variant="outline" size="sm" className="self-start" onClick={() => {
+                setBuscaCargo("");
+                setEmpresaFiltroId("");
+              }}>Limpar filtros</Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Filtros rápidos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-1">
+                <Label htmlFor="busca-cargo">Buscar cargo ou CBO</Label>
+                <Input
+                  id="busca-cargo"
+                  value={buscaCargo}
+                  onChange={(event) => setBuscaCargo(event.target.value)}
+                  placeholder="Ex: segurança, 7156, supervisor..."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Empresa</Label>
+                <Select value={empresaFiltroId || "__all__"} onValueChange={(valor) => setEmpresaFiltroId(valor === "__all__" ? "" : valor)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as empresas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Todas</SelectItem>
+                    {empresasOptions.map((empresa) => (
+                      <SelectItem key={empresa.id} value={empresa.id || "__none__"}>
+                        {empresa.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Status dos filtros</Label>
+                <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                  {empresaFiltroId && empresaFiltroId !== "__all__"
+                    ? `Filtrando cargos da empresa ${(empresasMap.get(empresaFiltroId) ?? "")}`
+                    : "Mostrando cargos de todas as empresas"}
+                  <br />
+                  {buscaCargo ? `Busca ativa: “${buscaCargo}”` : "Sem busca textual"}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+ 
         <Card>
           <CardHeader>
             <CardTitle>Lista de Cargos</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {cargos.map((cargo: any) => (
-                <div key={cargo.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{cargo.nomeCargo}</h3>
-                      {cargo.descricao && <p className="text-sm text-gray-600">{cargo.descricao}</p>}
-                    </div>
+              {cargosFiltrados.map((cargo: any) => {
+                const empresaNome = cargo.empresaId ? empresasMap.get(cargo.empresaId.toString()) : undefined;
+                return (
+                  <div key={cargo.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-lg">{cargo.nomeCargo}</h3>
+                          {(cargo.codigoCbo || cargo.cbo) && (
+                            <Badge variant="secondary">CBO {cargo.codigoCbo || cargo.cbo}</Badge>
+                          )}
+                          {empresaNome && (
+                            <Badge>{empresaNome}</Badge>
+                          )}
+                        </div>
+                        {cargo.descricao && (
+                          <p className="text-sm text-muted-foreground mt-2">{cargo.descricao}</p>
+                        )}
+                      </div>
                     <div className="flex gap-2">
                       <Button
                         variant="ghost"
@@ -711,16 +1253,122 @@ export default function Cargos() {
                                         </select>
                                       </div>
                                       <div className="space-y-2">
-                                        <Label htmlFor="descricaoRiscos">Descrição dos Riscos</Label>
-                                        <Textarea
-                                          id="descricaoRiscos"
-                                          value={riscoForm.descricaoRiscos}
-                                          onChange={(e) => setRiscoForm({ ...riscoForm, descricaoRiscos: e.target.value })}
-                                          placeholder="Descreva os riscos específicos deste cargo..."
-                                          rows={3}
-                                          className="w-full"
+                                        <Label htmlFor="tipo">Tipo</Label>
+                                        <Input
+                                          id="tipo"
+                                          value={riscoForm.tipo}
+                                          onChange={(e) => setRiscoForm({ ...riscoForm, tipo: e.target.value })}
+                                          placeholder="Tipo do risco"
                                         />
                                       </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="fonteGeradora">Fonte Geradora</Label>
+                                        <Input
+                                          id="fonteGeradora"
+                                          value={riscoForm.fonteGeradora}
+                                          onChange={(e) => setRiscoForm({ ...riscoForm, fonteGeradora: e.target.value })}
+                                          placeholder="Ex: Lixadeiras, marteletes, etc."
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="meioPropagacao">Meio de Propagação</Label>
+                                        <Input
+                                          id="meioPropagacao"
+                                          value={riscoForm.meioPropagacao}
+                                          onChange={(e) => setRiscoForm({ ...riscoForm, meioPropagacao: e.target.value })}
+                                          placeholder="Como o risco se propaga"
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="meioContato">Meio de Contato</Label>
+                                        <Input
+                                          id="meioContato"
+                                          value={riscoForm.meioContato}
+                                          onChange={(e) => setRiscoForm({ ...riscoForm, meioContato: e.target.value })}
+                                          placeholder="Como o trabalhador entra em contato"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="tipoAnalise">Tipo de Análise</Label>
+                                        <select
+                                          id="tipoAnalise"
+                                          value={riscoForm.tipoAnalise}
+                                          onChange={(e) => {
+                                            setRiscoForm({ 
+                                              ...riscoForm, 
+                                              tipoAnalise: e.target.value,
+                                              // Limpa o valor se mudar para Qualitativa
+                                              valorAnaliseQuantitativa: e.target.value === "Quantitativa" ? riscoForm.valorAnaliseQuantitativa : ""
+                                            });
+                                          }}
+                                          className="w-full border rounded-md px-3 py-2 h-10"
+                                        >
+                                          <option value="">Selecione</option>
+                                          <option value="Qualitativa">Qualitativa</option>
+                                          <option value="Quantitativa">Quantitativa</option>
+                                        </select>
+                                      </div>
+                                    </div>
+                                    {riscoForm.tipoAnalise === "Quantitativa" && (
+                                      <div className="space-y-2">
+                                        <Label htmlFor="valorAnaliseQuantitativa">Valor da Análise Quantitativa *</Label>
+                                        <Input
+                                          id="valorAnaliseQuantitativa"
+                                          value={riscoForm.valorAnaliseQuantitativa}
+                                          onChange={(e) => setRiscoForm({ ...riscoForm, valorAnaliseQuantitativa: e.target.value })}
+                                          placeholder="Ex: 88 (dB) Trabalhos esporádicos"
+                                          className="w-full"
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                          Informe o valor da medição e descrição (ex: "90 (dB) Trabalhos esporádicos")
+                                        </p>
+                                      </div>
+                                    )}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="gradacaoEfeitos">Gradação - Efeitos</Label>
+                                        <Input
+                                          id="gradacaoEfeitos"
+                                          value={riscoForm.gradacaoEfeitos}
+                                          onChange={(e) => setRiscoForm({ ...riscoForm, gradacaoEfeitos: e.target.value })}
+                                          placeholder="Ex: Baixo, Médio, Alto"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="gradacaoExposicao">Gradação - Exposição</Label>
+                                        <Input
+                                          id="gradacaoExposicao"
+                                          value={riscoForm.gradacaoExposicao}
+                                          onChange={(e) => setRiscoForm({ ...riscoForm, gradacaoExposicao: e.target.value })}
+                                          placeholder="Ex: Baixo, Médio, Alto"
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="possiveisDanosSaude">Possíveis Danos à Saúde</Label>
+                                      <Textarea
+                                        id="possiveisDanosSaude"
+                                        value={riscoForm.possiveisDanosSaude}
+                                        onChange={(e) => setRiscoForm({ ...riscoForm, possiveisDanosSaude: e.target.value })}
+                                        placeholder="Descreva os possíveis danos à saúde..."
+                                        rows={3}
+                                        className="w-full"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="descricaoRiscos">Descrição dos Riscos</Label>
+                                      <Textarea
+                                        id="descricaoRiscos"
+                                        value={riscoForm.descricaoRiscos}
+                                        onChange={(e) => setRiscoForm({ ...riscoForm, descricaoRiscos: e.target.value })}
+                                        placeholder="Descreva os riscos específicos deste cargo..."
+                                        rows={3}
+                                        className="w-full"
+                                      />
                                     </div>
                                     <div className="flex justify-end">
                                       <Button
@@ -755,10 +1403,19 @@ export default function Cargos() {
                                                 <span className="text-gray-500">Tipo de Agente:</span>{" "}
                                                 <span className="text-foreground">{risco.tipoAgente}</span>
                                               </div>
+                                              {risco.fonteGeradora && (
+                                                <div className="text-xs text-gray-600">
+                                                  <span className="text-gray-500">Fonte:</span> {risco.fonteGeradora}
+                                                </div>
+                                              )}
+                                              {risco.possiveisDanosSaude && (
+                                                <div className="text-xs text-gray-600">
+                                                  <span className="text-gray-500">Danos:</span> {risco.possiveisDanosSaude.substring(0, 100)}{risco.possiveisDanosSaude.length > 100 ? "..." : ""}
+                                                </div>
+                                              )}
                                               {risco.descricaoRiscos && (
-                                                <div className="text-sm text-gray-600">
-                                                  <span className="text-gray-500">Descrição:</span>{" "}
-                                                  {risco.descricaoRiscos}
+                                                <div className="text-xs text-gray-600">
+                                                  <span className="text-gray-500">Descrição:</span> {risco.descricaoRiscos.substring(0, 100)}{risco.descricaoRiscos.length > 100 ? "..." : ""}
                                                 </div>
                                               )}
                                             </div>
@@ -778,6 +1435,39 @@ export default function Cargos() {
                                   </Card>
                                 )}
 
+                                {/* Legenda de Gradação */}
+                                <Card className="bg-gray-50">
+                                  <CardHeader>
+                                    <CardTitle className="text-sm font-semibold">Legenda de Gradação</CardTitle>
+                                  </CardHeader>
+                                  <CardContent>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                                      {/* Gradação Efeitos à Saúde */}
+                                      <div>
+                                        <h5 className="font-semibold mb-2 text-sm">Gradação Efeitos à Saúde</h5>
+                                        <div className="space-y-1">
+                                          <div><span className="font-medium">00:</span> Efeitos reversíveis e pequenos</div>
+                                          <div><span className="font-medium">01:</span> Efeitos reversíveis à saúde, preocupante</div>
+                                          <div><span className="font-medium">02:</span> Efeitos severos à saúde, preocupante</div>
+                                          <div><span className="font-medium">03:</span> Efeitos irreversíveis à saúde, preocupante</div>
+                                          <div><span className="font-medium">04:</span> Ameaça à vida, lesão incapacitante ocupacional</div>
+                                        </div>
+                                      </div>
+                                      {/* Gradação Qualitativa de Exposição */}
+                                      <div>
+                                        <h5 className="font-semibold mb-2 text-sm">Gradação Qualitativa de Exposição</h5>
+                                        <div className="space-y-1">
+                                          <div><span className="font-medium">00:</span> Nenhum contato com o agente ou desprezível</div>
+                                          <div><span className="font-medium">01:</span> Contatos esporádicos com o agente</div>
+                                          <div><span className="font-medium">02:</span> Contato frequente c/ o agente à baixa concentração</div>
+                                          <div><span className="font-medium">03:</span> Contato frequente c/ o agente a altas concentrações</div>
+                                          <div><span className="font-medium">04:</span> Contato frequente à altíssima concentração</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+
                                 {/* Botões de ação */}
                                 <div className="flex gap-3 justify-end pt-4 border-t">
                                   <Button
@@ -786,7 +1476,21 @@ export default function Cargos() {
                                     onClick={() => {
                                       setShowRiscoDialog(false);
                                       setRiscosTemporarios([]);
-                                      setRiscoForm({ cargoId: 0, riscoOcupacionalId: 0, tipoAgente: "", descricaoRiscos: "" });
+                                      setRiscoForm({ 
+                                        cargoId: 0, 
+                                        riscoOcupacionalId: 0, 
+                                        tipoAgente: "", 
+                                        descricaoRiscos: "",
+                                        fonteGeradora: "",
+                                        tipo: "",
+                                        meioPropagacao: "",
+                                        meioContato: "",
+                                        possiveisDanosSaude: "",
+                                        tipoAnalise: "",
+                                        valorAnaliseQuantitativa: "",
+                                        gradacaoEfeitos: "",
+                                        gradacaoExposicao: "",
+                                      });
                                     }}
                                   >
                                     Cancelar
@@ -807,103 +1511,211 @@ export default function Cargos() {
                                 </div>
                               </div>
                             </DialogContent>
-                            </Dialog>
+                          </Dialog>
                           </>
                         </div>
 
                         {Array.isArray(riscosByCargo) && riscosByCargo.length > 0 ? (
-                          <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Nome do Risco</TableHead>
-                                    <TableHead>Tipo de Agente</TableHead>
-                                    <TableHead>Descrição dos Riscos</TableHead>
-                                <TableHead>Ações</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {riscosByCargo.map((r: any) => (
-                                <TableRow key={r.id}>
-                                  {editingRiscoId === r.id ? (
-                                    <>
-                                      <TableCell className="font-medium">{r.nomeRisco}</TableCell>
-                                      <TableCell>
-                                        <select
-                                          value={editRiscoForm.tipoAgente}
-                                          onChange={(e) => setEditRiscoForm({ ...editRiscoForm, tipoAgente: e.target.value })}
-                                          className="w-full border rounded-md px-2 py-1 h-8 text-sm"
-                                        >
-                                          <option value="">Selecione o tipo de agente</option>
-                                          <option value="Físico">Físico</option>
-                                          <option value="Químico">Químico</option>
-                                          <option value="Biológico">Biológico</option>
-                                          <option value="Ergonômico">Ergonômico</option>
-                                          <option value="Agentes Mecânicos">Agentes Mecânicos</option>
-                                        </select>
-                                      </TableCell>
-                                      <TableCell>
-                                        <Textarea
-                                          value={editRiscoForm.descricaoRiscos}
-                                          onChange={(e) => setEditRiscoForm({ ...editRiscoForm, descricaoRiscos: e.target.value })}
-                                          placeholder="Descreva os riscos específicos..."
-                                          rows={2}
-                                          className="w-full text-sm"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <div className="flex gap-2">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleSaveEditRisco(currentCargoId || r.cargoId)}
-                                            disabled={updateRiscoMutation.isPending}
-                                          >
-                                            <Check className="h-4 w-4 text-green-600" />
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={handleCancelEditRisco}
-                                            disabled={updateRiscoMutation.isPending}
-                                          >
-                                            <X className="h-4 w-4 text-red-600" />
-                                          </Button>
-                                        </div>
-                                      </TableCell>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <TableCell className="font-medium">{r.nomeRisco}</TableCell>
-                                      <TableCell>{r.tipoAgente || "-"}</TableCell>
-                                      <TableCell className="max-w-[300px]">
-                                        <div className="truncate" title={r.descricaoRiscos}>
-                                          {r.descricaoRiscos || "-"}
-                                        </div>
-                                      </TableCell>
-                                      <TableCell>
-                                        <div className="flex gap-2">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleEditRisco(r)}
-                                          >
-                                            <Pencil className="h-4 w-4" />
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleDeleteRisco(r.id)}
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      </TableCell>
-                                    </>
-                                  )}
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="min-w-[120px]">AGENTES</TableHead>
+                                  <TableHead className="min-w-[150px]">FONTE GERADORA</TableHead>
+                                  <TableHead className="min-w-[100px]">TIPO</TableHead>
+                                  <TableHead className="min-w-[150px]">MEIO DE PROPAGAÇÃO</TableHead>
+                                  <TableHead className="min-w-[150px]">MEIO DE CONTATO</TableHead>
+                                  <TableHead className="min-w-[200px]">POSSÍVEIS DANOS À SAÚDE</TableHead>
+                                  <TableHead className="min-w-[120px]">TIPO ANÁLISE</TableHead>
+                                  <TableHead className="min-w-[200px]">VALOR ANÁLISE</TableHead>
+                                  <TableHead className="min-w-[100px]">EFEITOS</TableHead>
+                                  <TableHead className="min-w-[100px]">EXPOSIÇÃO</TableHead>
+                                  <TableHead className="min-w-[80px]">Ações</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {riscosByCargo.map((r: any) => (
+                                  <TableRow key={r.id}>
+                                    {editingRiscoId === r.id ? (
+                                      <>
+                                        <TableCell>
+                                          <select
+                                            value={editRiscoForm.tipoAgente}
+                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, tipoAgente: e.target.value })}
+                                            className="w-full border rounded-md px-2 py-1 h-8 text-sm"
+                                          >
+                                            <option value="">Selecione o tipo de agente</option>
+                                            <option value="Físico">Físico</option>
+                                            <option value="Químico">Químico</option>
+                                            <option value="Biológico">Biológico</option>
+                                            <option value="Ergonômico">Ergonômico</option>
+                                            <option value="Agentes Mecânicos">Agentes Mecânicos</option>
+                                          </select>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            value={editRiscoForm.fonteGeradora}
+                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, fonteGeradora: e.target.value })}
+                                            placeholder="Fonte geradora"
+                                            className="w-full text-sm h-8"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            value={editRiscoForm.tipo}
+                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, tipo: e.target.value })}
+                                            placeholder="Tipo"
+                                            className="w-full text-sm h-8"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            value={editRiscoForm.meioPropagacao}
+                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, meioPropagacao: e.target.value })}
+                                            placeholder="Meio de propagação"
+                                            className="w-full text-sm h-8"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            value={editRiscoForm.meioContato}
+                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, meioContato: e.target.value })}
+                                            placeholder="Meio de contato"
+                                            className="w-full text-sm h-8"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <Textarea
+                                            value={editRiscoForm.possiveisDanosSaude}
+                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, possiveisDanosSaude: e.target.value })}
+                                            placeholder="Danos à saúde"
+                                            rows={2}
+                                            className="w-full text-sm"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <select
+                                            value={editRiscoForm.tipoAnalise}
+                                            onChange={(e) => {
+                                              setEditRiscoForm({ 
+                                                ...editRiscoForm, 
+                                                tipoAnalise: e.target.value,
+                                                valorAnaliseQuantitativa: e.target.value === "Quantitativa" ? editRiscoForm.valorAnaliseQuantitativa : ""
+                                              });
+                                            }}
+                                            className="w-full border rounded-md px-2 py-1 h-8 text-sm"
+                                          >
+                                            <option value="">Selecione</option>
+                                            <option value="Qualitativa">Qualitativa</option>
+                                            <option value="Quantitativa">Quantitativa</option>
+                                          </select>
+                                        </TableCell>
+                                        <TableCell>
+                                          {editRiscoForm.tipoAnalise === "Quantitativa" ? (
+                                            <Input
+                                              value={editRiscoForm.valorAnaliseQuantitativa}
+                                              onChange={(e) => setEditRiscoForm({ ...editRiscoForm, valorAnaliseQuantitativa: e.target.value })}
+                                              placeholder="Ex: 88 (dB) Trabalhos esporádicos"
+                                              className="w-full text-sm h-8"
+                                            />
+                                          ) : (
+                                            <span className="text-sm text-muted-foreground">-</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            value={editRiscoForm.gradacaoEfeitos}
+                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, gradacaoEfeitos: e.target.value })}
+                                            placeholder="Efeitos"
+                                            className="w-full text-sm h-8"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            value={editRiscoForm.gradacaoExposicao}
+                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, gradacaoExposicao: e.target.value })}
+                                            placeholder="Exposição"
+                                            className="w-full text-sm h-8"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <div className="flex gap-2">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => handleSaveEditRisco(currentCargoId || r.cargoId)}
+                                              disabled={updateRiscoMutation.isPending}
+                                            >
+                                              <Check className="h-4 w-4 text-green-600" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={handleCancelEditRisco}
+                                              disabled={updateRiscoMutation.isPending}
+                                            >
+                                              <X className="h-4 w-4 text-red-600" />
+                                            </Button>
+                                          </div>
+                                        </TableCell>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <TableCell className="font-medium">{r.tipoAgente || r.nomeRisco || "-"}</TableCell>
+                                        <TableCell className="max-w-[150px]">
+                                          <div className="truncate" title={r.fonteGeradora}>
+                                            {r.fonteGeradora || "-"}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell>{r.tipo || "-"}</TableCell>
+                                        <TableCell className="max-w-[150px]">
+                                          <div className="truncate" title={r.meioPropagacao}>
+                                            {r.meioPropagacao || "-"}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="max-w-[150px]">
+                                          <div className="truncate" title={r.meioContato}>
+                                            {r.meioContato || "-"}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="max-w-[200px]">
+                                          <div className="truncate" title={r.possiveisDanosSaude}>
+                                            {r.possiveisDanosSaude || "-"}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell>{r.tipoAnalise || "-"}</TableCell>
+                                        <TableCell className="max-w-[200px]">
+                                          <div className="truncate" title={r.valorAnaliseQuantitativa}>
+                                            {r.valorAnaliseQuantitativa || "-"}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell>{r.gradacaoEfeitos || "-"}</TableCell>
+                                        <TableCell>{r.gradacaoExposicao || "-"}</TableCell>
+                                        <TableCell>
+                                          <div className="flex gap-2">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => handleEditRisco(r)}
+                                            >
+                                              <Pencil className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => handleDeleteRisco(r.id)}
+                                            >
+                                              <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </div>
+                                        </TableCell>
+                                      </>
+                                    )}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum risco ocupacional cadastrado</p>
                         )}
@@ -911,11 +1723,21 @@ export default function Cargos() {
                     </div>
                   )}
                 </div>
-              ))}
+              );
+            })}
             </div>
           </CardContent>
         </Card>
       </div>
+  );
+
+  if (!showLayout) {
+    return content;
+  }
+
+  return (
+    <DashboardLayout>
+      {content}
     </DashboardLayout>
   );
 }

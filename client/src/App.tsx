@@ -21,6 +21,9 @@ import OrdemServico from "./pages/OrdemServico";
 import Configuracoes from "./pages/Configuracoes";
 import Login from "./pages/Login";
 import GestaoAsos from "./pages/GestaoAsos";
+import LaudosOcupacionais from "./pages/LaudosOcupacionais";
+import RelatorioCargos from "./pages/RelatorioCargos";
+import CargosEFuncoes from "./pages/CargosEFuncoes";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -46,6 +49,21 @@ function Router() {
       </Route>
       <Route path="/cargos">
         <Cargos />
+      </Route>
+      <Route path="/cargos-e-funcoes/cargos">
+        <CargosEFuncoes />
+      </Route>
+      <Route path="/cargos-e-funcoes/riscos-ocupacionais">
+        <CargosEFuncoes />
+      </Route>
+      <Route path="/cargos-e-funcoes/relatorio">
+        <CargosEFuncoes />
+      </Route>
+      <Route path="/cargos-e-funcoes">
+        <CargosEFuncoes />
+      </Route>
+      <Route path="/relatorio-cargos">
+        <RelatorioCargos />
       </Route>
       <Route path="/setores">
         <Setores />
@@ -109,6 +127,24 @@ function Router() {
       </Route>
       <Route path="/gestao-asos">
         <GestaoAsos />
+      </Route>
+      <Route path="/laudos-ocupacionais/pgro">
+        <LaudosOcupacionais />
+      </Route>
+      <Route path="/laudos-ocupacionais/pgr">
+        <LaudosOcupacionais />
+      </Route>
+      <Route path="/laudos-ocupacionais/ltcat">
+        <LaudosOcupacionais />
+      </Route>
+      <Route path="/laudos-ocupacionais/insalubridade">
+        <LaudosOcupacionais />
+      </Route>
+      <Route path="/laudos-ocupacionais/periculosidade">
+        <LaudosOcupacionais />
+      </Route>
+      <Route path="/laudos-ocupacionais">
+        <LaudosOcupacionais />
       </Route>
       <Route path="/dashboard-colaboradores">
         <DashboardColaboradores />

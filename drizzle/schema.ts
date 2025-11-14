@@ -258,6 +258,7 @@ export const cargos = mysqlTable("cargos", {
   tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeCargo: varchar("nomeCargo", { length: 255 }).notNull(),
   descricao: text("descricao"),
+  codigoCbo: varchar("codigoCbo", { length: 20 }),
   empresaId: int("empresaId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -362,6 +363,16 @@ export const cargoRiscos = mysqlTable("cargoRiscos", {
   riscoOcupacionalId: int("riscoOcupacionalId").notNull(),
   tipoAgente: varchar("tipoAgente", { length: 255 }),
   descricaoRiscos: text("descricaoRiscos"),
+  // Novos campos para tabela completa de riscos
+  fonteGeradora: varchar("fonteGeradora", { length: 500 }),
+  tipo: varchar("tipo", { length: 100 }),
+  meioPropagacao: varchar("meioPropagacao", { length: 500 }),
+  meioContato: varchar("meioContato", { length: 500 }),
+  possiveisDanosSaude: text("possiveisDanosSaude"),
+  tipoAnalise: varchar("tipoAnalise", { length: 100 }), // Qualitativa / Quantitativa
+  valorAnaliseQuantitativa: varchar("valorAnaliseQuantitativa", { length: 200 }), // Ex: "88 (dB) Trabalhos esporádicos"
+  gradacaoEfeitos: varchar("gradacaoEfeitos", { length: 50 }),
+  gradacaoExposicao: varchar("gradacaoExposicao", { length: 50 }),
   empresaId: int("empresaId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

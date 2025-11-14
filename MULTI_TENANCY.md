@@ -265,3 +265,7 @@ async function createEmpresa(data: InsertEmpresa, user: User) {
 6. Criar painel de super admin
 7. Testes completos de isolamento
 
+
+
+
+

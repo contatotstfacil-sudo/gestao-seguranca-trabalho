@@ -45,8 +45,42 @@ export default function RiscosOcupacionais({ showLayout = true }: { showLayout?:
     status: "ativo" as "ativo" | "inativo",
   });
 
+  // Estados para vinculação automática
+  const [empresaSelecionada, setEmpresaSelecionada] = useState<number | null>(null);
+  const [colaboradorSelecionado, setColaboradorSelecionado] = useState<number | null>(null);
+  const [cargoInfo, setCargoInfo] = useState<any>(null);
+  const [setorInfo, setSetorInfo] = useState<any>(null);
+
   const utils = trpc.useUtils();
   const { data: riscosOcupacionais = [], isLoading } = trpc.riscosOcupacionais.list.useQuery();
+  const { data: empresas = [] } = trpc.empresas.list.useQuery();
+  const { data: colaboradores = [] } = trpc.colaboradores.list.useQuery(
+    { empresaId: empresaSelecionada || undefined },
+    { enabled: !!empresaSelecionada }
+  );
+  
+  // Buscar informações do colaborador quando selecionado
+  const { data: colaboradorInfo } = trpc.colaboradores.getComCargoESetor.useQuery(
+    { id: colaboradorSelecionado! },
+    { enabled: !!colaboradorSelecionado }
+  );
+
+  // Buscar riscos do cargo quando cargo for identificado
+  const { data: riscosDoCargo = [] } = trpc.cargoRiscos.getByCargo.useQuery(
+    { cargoId: cargoInfo?.id || 0 },
+    { enabled: !!cargoInfo?.id }
+  );
+
+  // Efeito para atualizar cargo e setor quando colaborador for selecionado
+  useEffect(() => {
+    if (colaboradorInfo) {
+      setCargoInfo(colaboradorInfo.cargo);
+      setSetorInfo(colaboradorInfo.setor);
+    } else {
+      setCargoInfo(null);
+      setSetorInfo(null);
+    }
+  }, [colaboradorInfo]);
 
   const createMutation = trpc.riscosOcupacionais.create.useMutation({
     onSuccess: () => {
@@ -179,6 +213,9 @@ export default function RiscosOcupacionais({ showLayout = true }: { showLayout?:
     return labels[tipo] || tipo;
   };
 
+  const empresaSelecionadaObj = empresas.find((e: any) => e.id === empresaSelecionada);
+  const colaboradorSelecionadoObj = colaboradores.find((c: any) => c.id === colaboradorSelecionado);
+
   const content = (
     <div className="space-y-6">
       {showLayout && (
@@ -297,6 +334,143 @@ export default function RiscosOcupacionais({ showLayout = true }: { showLayout?:
           </Dialog>
         </div>
       )}
+
+      {/* Seção de Vinculação Automática */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Vincular Riscos por Empresa e Colaborador</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="empresa">Empresa *</Label>
+              <Select
+                value={empresaSelecionada?.toString() || ""}
+                onValueChange={(value) => {
+                  setEmpresaSelecionada(value ? Number(value) : null);
+                  setColaboradorSelecionado(null);
+                  setCargoInfo(null);
+                  setSetorInfo(null);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresas.map((empresa: any) => (
+                    <SelectItem key={empresa.id} value={empresa.id.toString()}>
+                      {empresa.razaoSocial || empresa.nomeFantasia}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="cnpj">CNPJ</Label>
+              <Input
+                id="cnpj"
+                value={empresaSelecionadaObj?.cnpj || ""}
+                readOnly
+                className="bg-gray-50"
+                placeholder="CNPJ será preenchido automaticamente"
+              />
+            </div>
+          </div>
+
+          {empresaSelecionada && (
+            <div>
+              <Label htmlFor="colaborador">Colaborador *</Label>
+              <Select
+                value={colaboradorSelecionado?.toString() || ""}
+                onValueChange={(value) => {
+                  setColaboradorSelecionado(value ? Number(value) : null);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um colaborador" />
+                </SelectTrigger>
+                <SelectContent>
+                  {colaboradores.map((colaborador: any) => (
+                    <SelectItem key={colaborador.id} value={colaborador.id.toString()}>
+                      {colaborador.nomeCompleto}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {(cargoInfo || setorInfo) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <Label className="text-sm text-gray-600">Cargo</Label>
+                <p className="font-medium">{cargoInfo?.nomeCargo || "Não informado"}</p>
+                {cargoInfo?.codigoCbo && (
+                  <p className="text-sm text-gray-500">CBO: {cargoInfo.codigoCbo}</p>
+                )}
+              </div>
+              <div>
+                <Label className="text-sm text-gray-600">Setor</Label>
+                <p className="font-medium">{setorInfo?.nomeSetor || "Não vinculado"}</p>
+              </div>
+            </div>
+          )}
+
+          {cargoInfo?.id && riscosDoCargo.length > 0 && (
+            <div className="mt-4">
+              <h3 className="font-semibold mb-3">Riscos Ocupacionais do Cargo</h3>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>AGENTES</TableHead>
+                      <TableHead>FONTE GERADORA</TableHead>
+                      <TableHead>TIPO</TableHead>
+                      <TableHead>MEIO DE PROPAGAÇÃO</TableHead>
+                      <TableHead>MEIO DE CONTATO</TableHead>
+                      <TableHead>POSSÍVEIS DANOS À SAÚDE</TableHead>
+                      <TableHead>TIPO ANÁLISE</TableHead>
+                      <TableHead>VALOR ANÁLISE</TableHead>
+                      <TableHead>EFEITOS</TableHead>
+                      <TableHead>EXPOSIÇÃO</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {riscosDoCargo.map((risco: any) => (
+                      <TableRow key={risco.id}>
+                        <TableCell className="font-medium">{risco.tipoAgente || "-"}</TableCell>
+                        <TableCell>{risco.fonteGeradora || "-"}</TableCell>
+                        <TableCell>{risco.tipo || "-"}</TableCell>
+                        <TableCell>{risco.meioPropagacao || "-"}</TableCell>
+                        <TableCell>{risco.meioContato || "-"}</TableCell>
+                        <TableCell className="max-w-[200px]">
+                          <div className="truncate" title={risco.possiveisDanosSaude}>
+                            {risco.possiveisDanosSaude || "-"}
+                          </div>
+                        </TableCell>
+                        <TableCell>{risco.tipoAnalise || "-"}</TableCell>
+                        <TableCell className="max-w-[200px]">
+                          <div className="truncate" title={risco.valorAnaliseQuantitativa}>
+                            {risco.valorAnaliseQuantitativa || "-"}
+                          </div>
+                        </TableCell>
+                        <TableCell>{risco.gradacaoEfeitos || "-"}</TableCell>
+                        <TableCell>{risco.gradacaoExposicao || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {cargoInfo?.id && riscosDoCargo.length === 0 && (
+            <div className="text-center py-4 text-muted-foreground">
+              Nenhum risco ocupacional cadastrado para este cargo.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
