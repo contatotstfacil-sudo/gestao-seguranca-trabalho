@@ -1,10 +1,9 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Briefcase, AlertTriangle, BarChart3, ChevronRight, Settings } from "lucide-react";
+import { Briefcase, BarChart3, ChevronRight, Settings } from "lucide-react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import Cargos from "./Cargos";
-import RiscosOcupacionais from "./RiscosOcupacionais";
 import RelatorioCargos from "./RelatorioCargos";
 import React from "react";
 
@@ -23,13 +22,6 @@ const cargosEFuncoesSections: CargosEFuncoesSection[] = [
     icon: Briefcase,
     path: "/cargos-e-funcoes/cargos",
     component: Cargos,
-  },
-  {
-    id: "riscos-ocupacionais",
-    label: "Riscos Ocupacionais",
-    icon: AlertTriangle,
-    path: "/cargos-e-funcoes/riscos-ocupacionais",
-    component: RiscosOcupacionais,
   },
   {
     id: "relatorio",
@@ -58,7 +50,7 @@ export default function CargosEFuncoes() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Cargos e Funções</h1>
-          <p className="text-gray-600 mt-1">Gerencie cargos, funções e riscos ocupacionais</p>
+          <p className="text-gray-600 mt-1">Gerencie cargos, funções e relatórios</p>
         </div>
 
         {showMenu ? (

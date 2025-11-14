@@ -733,7 +733,7 @@ export default function LaudoPgro() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-12rem)] pr-2">
       <Card>
         <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
@@ -749,15 +749,15 @@ export default function LaudoPgro() {
                 Emitir PGRO
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-full max-w-[95vw] sm:max-w-[95vw] lg:max-w-[1200px]">
-              <DialogHeader>
+            <DialogContent className="w-full max-w-[95vw] sm:max-w-[95vw] lg:max-w-[1200px] max-h-[90vh] !flex !flex-col !p-0 gap-0">
+              <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0 border-b">
                 <DialogTitle>Emitir PGRO</DialogTitle>
                 <DialogDescription>
                   Preencha os dados abaixo para iniciar um novo PGRO / PPRA. Você poderá complementar informações após o cadastro inicial.
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-6">
+              <div className="space-y-6 px-6 py-4 overflow-y-auto flex-1 min-h-0" style={{ maxHeight: 'calc(90vh - 200px)' }}>
                 <section className="space-y-4">
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                     Dados da empresa
@@ -1208,7 +1208,7 @@ export default function LaudoPgro() {
                 </section>
               </div>
 
-              <DialogFooter className="sm:flex-row sm:justify-between sm:items-center">
+              <DialogFooter className="sm:flex-row sm:justify-between sm:items-center px-6 pb-6 pt-4 flex-shrink-0 border-t bg-background">
                 <div className="text-xs text-muted-foreground">
                   Última preparação: {format(new Date(), "dd/MM/yyyy HH:mm")}
                 </div>

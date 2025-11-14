@@ -53,9 +53,6 @@ function Router() {
       <Route path="/cargos-e-funcoes/cargos">
         <CargosEFuncoes />
       </Route>
-      <Route path="/cargos-e-funcoes/riscos-ocupacionais">
-        <CargosEFuncoes />
-      </Route>
       <Route path="/cargos-e-funcoes/relatorio">
         <CargosEFuncoes />
       </Route>
@@ -150,9 +147,6 @@ function Router() {
         <DashboardColaboradores />
       </Route>
       <Route path="/configuracoes/modelos-certificados">
-        <Configuracoes />
-      </Route>
-      <Route path="/configuracoes/riscos-ocupacionais">
         <Configuracoes />
       </Route>
       <Route path="/configuracoes/responsaveis">

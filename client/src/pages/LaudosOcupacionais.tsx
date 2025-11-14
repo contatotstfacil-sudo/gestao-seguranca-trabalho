@@ -86,9 +86,9 @@ export default function LaudosOcupacionais() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Menu lateral */}
+          {/* Menu lateral - sempre visível */}
           <div className="lg:col-span-1">
-            <Card>
+            <Card className="sticky top-6">
               <CardContent className="p-2">
                 <nav className="space-y-1">
                   <button
@@ -106,7 +106,7 @@ export default function LaudosOcupacionais() {
 
                   {laudoSections.map((section) => {
                     const Icon = section.icon;
-                    const isActive = location === section.path;
+                    const isActive = location === section.path || location.startsWith(section.path + "/");
                     return (
                       <button
                         key={section.id}
@@ -137,7 +137,7 @@ export default function LaudosOcupacionais() {
           </div>
 
           {/* Conteúdo */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 overflow-y-auto max-h-[calc(100vh-8rem)] pr-2">
             {showMenu ? (
               <Card>
                 <CardContent className="p-6 space-y-6">

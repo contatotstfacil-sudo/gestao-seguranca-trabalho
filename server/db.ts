@@ -1194,7 +1194,21 @@ export async function getTreinamentosByCargo(cargoId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    return await db.select().from(cargoTreinamentos).where(eq(cargoTreinamentos.cargoId, cargoId));
+    const result = await db
+      .select({
+        id: cargoTreinamentos.id,
+        cargoId: cargoTreinamentos.cargoId,
+        tipoTreinamentoId: cargoTreinamentos.tipoTreinamentoId,
+        nomeTreinamento: tiposTreinamentos.nomeTreinamento,
+        tipoNr: tiposTreinamentos.tipoNr,
+        createdAt: cargoTreinamentos.createdAt,
+        updatedAt: cargoTreinamentos.updatedAt,
+      })
+      .from(cargoTreinamentos)
+      .leftJoin(tiposTreinamentos, eq(cargoTreinamentos.tipoTreinamentoId, tiposTreinamentos.id))
+      .where(eq(cargoTreinamentos.cargoId, cargoId));
+    console.log(`[Database] Treinamentos encontrados para cargo ${cargoId}:`, result.length);
+    return result;
   } catch (error) {
     console.error("[Database] Erro ao buscar treinamentos do cargo:", error);
     throw error;
@@ -1205,7 +1219,9 @@ export async function createCargoTreinamento(data: InsertCargoTreinamento) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    console.log("[Database] Criando cargo treinamento:", data);
     const result = await db.insert(cargoTreinamentos).values(data);
+    console.log("[Database] Cargo treinamento criado com sucesso");
     return { success: true };
   } catch (error) {
     console.error("[Database] Erro ao criar cargo treinamento:", error);
@@ -1231,7 +1247,21 @@ export async function getSetoresByCargo(cargoId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    return await db.select().from(cargoSetores).where(eq(cargoSetores.cargoId, cargoId));
+    const result = await db
+      .select({
+        id: cargoSetores.id,
+        cargoId: cargoSetores.cargoId,
+        setorId: cargoSetores.setorId,
+        nomeSetor: setores.nomeSetor,
+        empresaId: cargoSetores.empresaId,
+        createdAt: cargoSetores.createdAt,
+        updatedAt: cargoSetores.updatedAt,
+      })
+      .from(cargoSetores)
+      .leftJoin(setores, eq(cargoSetores.setorId, setores.id))
+      .where(eq(cargoSetores.cargoId, cargoId));
+    console.log(`[Database] Setores encontrados para cargo ${cargoId}:`, result.length);
+    return result;
   } catch (error) {
     console.error("[Database] Erro ao buscar setores do cargo:", error);
     throw error;
@@ -1242,7 +1272,9 @@ export async function createCargoSetor(data: InsertCargoSetor) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    console.log("[Database] Criando cargo setor:", JSON.stringify(data, null, 2));
     const result = await db.insert(cargoSetores).values(data);
+    console.log("[Database] Cargo setor criado com sucesso, resultado:", result);
     return { success: true };
   } catch (error) {
     console.error("[Database] Erro ao criar cargo setor:", error);
@@ -1319,7 +1351,30 @@ export async function createRiscoOcupacional(data: InsertRiscoOcupacional) {
     
     if (insertId) {
       const riscoCriado = await getRiscoOcupacionalById(insertId);
-      console.log("[Database] Risco criado retornado:", riscoCriado);
+      console.log("[Database] Risco criado retornado:", JSON.stringify(riscoCriado, null, 2));
+      
+      // Garantir que o retorno seja serializável
+      if (riscoCriado) {
+        const response = {
+          id: Number(riscoCriado.id),
+          nomeRisco: riscoCriado.nomeRisco || "",
+          tipoRisco: riscoCriado.tipoRisco || "fisico",
+          descricao: riscoCriado.descricao || null,
+          codigo: riscoCriado.codigo || null,
+          status: riscoCriado.status || "ativo",
+          empresaId: riscoCriado.empresaId || null,
+        };
+        
+        // Validar serialização
+        try {
+          JSON.stringify(response);
+          return response;
+        } catch (serialError) {
+          console.error("[Database] Erro ao serializar risco criado:", serialError);
+          return riscoCriado;
+        }
+      }
+      
       return riscoCriado;
     }
     
@@ -1409,9 +1464,15 @@ export async function createCargoRisco(data: InsertCargoRisco) {
       throw new Error("tenantId é obrigatório e deve ser maior que zero");
     }
 
-    const result = await db.insert(cargoRiscos).values(data);
-    console.log("[Database] Cargo risco criado com sucesso:", result);
-    return { success: true };
+    await db.insert(cargoRiscos).values(data);
+    console.log("[Database] Cargo risco criado com sucesso");
+    
+    // Retornar objeto simples e garantidamente serializável
+    return { 
+      success: true,
+      cargoId: Number(data.cargoId),
+      riscoOcupacionalId: Number(data.riscoOcupacionalId)
+    };
   } catch (error: any) {
     console.error("[Database] Erro ao criar cargo risco:", error);
     console.error("[Database] Dados recebidos:", JSON.stringify(data, null, 2));

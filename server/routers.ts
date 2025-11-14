@@ -1125,16 +1125,26 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
+          console.log("[CargoRiscos.create] Recebido input:", JSON.stringify(input, null, 2));
+          console.log("[CargoRiscos.create] ctx.user.id:", ctx.user?.id);
+          console.log("[CargoRiscos.create] ctx.user.empresaId:", ctx.user?.empresaId);
+          console.log("[CargoRiscos.create] ctx.user.tenantId:", (ctx.user as any)?.tenantId);
+          
           // Validações
           if (!input.cargoId || input.cargoId <= 0) {
-            throw new Error("CargoId é obrigatório e deve ser maior que zero");
+            const errorMsg = `CargoId é obrigatório e deve ser maior que zero. Recebido: ${input.cargoId}`;
+            console.error(`[CargoRiscos.create] ${errorMsg}`);
+            throw new Error(errorMsg);
           }
           if (!input.riscoOcupacionalId || input.riscoOcupacionalId <= 0) {
-            throw new Error("RiscoOcupacionalId é obrigatório e deve ser maior que zero");
+            const errorMsg = `RiscoOcupacionalId é obrigatório e deve ser maior que zero. Recebido: ${input.riscoOcupacionalId}`;
+            console.error(`[CargoRiscos.create] ${errorMsg}`);
+            throw new Error(errorMsg);
           }
 
           const empresaId = input.empresaId || ctx.user.empresaId;
           const tenantId = (ctx.user as any)?.tenantId || 1; // Default tenantId se não existir
+          console.log("[CargoRiscos.create] empresaId:", empresaId, "tenantId:", tenantId);
           
           const dataToInsert: any = {
             cargoId: input.cargoId,
@@ -1181,9 +1191,15 @@ export const appRouter = router({
 
           console.log("[CargoRiscos.create] Dados para inserir:", JSON.stringify(dataToInsert, null, 2));
           
-          const result = await db.createCargoRisco(dataToInsert);
+          await db.createCargoRisco(dataToInsert);
           console.log("[CargoRiscos.create] Risco salvo com sucesso");
-          return result;
+          
+          // Retornar objeto simples e garantidamente serializável
+          return {
+            success: true,
+            cargoId: Number(input.cargoId),
+            riscoOcupacionalId: Number(input.riscoOcupacionalId)
+          };
         } catch (error: any) {
           console.error("[CargoRiscos.create] Erro ao salvar risco:", error);
           console.error("[CargoRiscos.create] Input recebido:", JSON.stringify(input, null, 2));

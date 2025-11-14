@@ -103,6 +103,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
     gradacaoExposicao: "",
   });
 
+  const utils = trpc.useUtils();
   const { data: cargos = [], isLoading, refetch } = trpc.cargos.list.useQuery();
   const { data: empresas = [], isLoading: isLoadingEmpresas } = trpc.empresas.list.useQuery();
   const [empresaPopoverOpen, setEmpresaPopoverOpen] = useState(false);
@@ -170,13 +171,23 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   });
 
   const createTreinamentoMutation = trpc.cargoTreinamentos.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      console.log("[Cargos] Treinamento adicionado com sucesso, atualizando lista...", data, "cargoId:", variables.cargoId);
       toast.success("Treinamento adicionado com sucesso!");
       setTreinamentoForm({ cargoId: 0, tipoTreinamentoId: 0 });
       setShowTreinamentoDialog(false);
-      refetchTreinamentos();
+      // Garantir que expandedCargo está definido
+      if (variables.cargoId && expandedCargo !== variables.cargoId) {
+        setExpandedCargo(variables.cargoId);
+      }
+      // Invalidar e refetch a query (sem await para evitar problemas de serialização)
+      utils.cargoTreinamentos.getByCargo.invalidate({ cargoId: variables.cargoId }).then(() => {
+        refetchTreinamentos();
+        console.log("[Cargos] Query de treinamentos atualizada");
+      });
     },
     onError: (error: any) => {
+      console.error("[Cargos] Erro ao adicionar treinamento:", error);
       toast.error(error.message || "Erro ao adicionar treinamento");
     },
   });
@@ -253,13 +264,12 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       toast.error("Selecione um tipo de treinamento");
       return;
     }
-    createTreinamentoMutation.mutate(treinamentoForm, {
-      onSuccess: () => {
-        setTreinamentoForm({ cargoId: 0, tipoTreinamentoId: 0 });
-        setShowTreinamentoDialog(false);
-        toast.success("Treinamento adicionado com sucesso");
-      },
-    });
+    if (!treinamentoForm.cargoId || treinamentoForm.cargoId === 0) {
+      toast.error("Cargo não identificado");
+      return;
+    }
+    console.log("[Cargos] Adicionando treinamento:", treinamentoForm);
+    createTreinamentoMutation.mutate(treinamentoForm);
   };
 
   const handleDeleteTreinamento = (id: number) => {
@@ -269,13 +279,23 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   };
 
   const createSetorMutation = trpc.cargoSetores.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      console.log("[Cargos] Setor vinculado com sucesso, atualizando lista...", data, "cargoId:", variables.cargoId);
       toast.success("Setor vinculado com sucesso!");
       setSetorForm({ cargoId: 0, setorId: 0 });
       setShowSetorDialog(false);
-      refetchSetores();
+      // Garantir que expandedCargo está definido
+      if (variables.cargoId && expandedCargo !== variables.cargoId) {
+        setExpandedCargo(variables.cargoId);
+      }
+      // Invalidar e refetch a query (sem await para evitar problemas de serialização)
+      utils.cargoSetores.getByCargo.invalidate({ cargoId: variables.cargoId }).then(() => {
+        refetchSetores();
+        console.log("[Cargos] Query de setores atualizada");
+      });
     },
     onError: (error: any) => {
+      console.error("[Cargos] Erro ao vincular setor:", error);
       toast.error(error.message || "Erro ao vincular setor");
     },
   });
@@ -301,13 +321,12 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       toast.error("Selecione um setor");
       return;
     }
-    createSetorMutation.mutate(setorForm, {
-      onSuccess: () => {
-        setSetorForm({ cargoId: 0, setorId: 0 });
-        setShowSetorDialog(false);
-        toast.success("Setor vinculado com sucesso");
-      },
-    });
+    if (!setorForm.cargoId || setorForm.cargoId === 0) {
+      toast.error("Cargo não identificado");
+      return;
+    }
+    console.log("[Cargos] Adicionando setor:", setorForm);
+    createSetorMutation.mutate(setorForm);
   };
 
   const handleDeleteSetor = (id: number) => {
@@ -317,23 +336,29 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   };
 
   const createRiscoMutation = trpc.cargoRiscos.create.useMutation({
-    onSuccess: () => {
-      toast.success("Risco ocupacional adicionado com sucesso!");
-      setRiscoForm({ cargoId: 0, riscoOcupacionalId: 0, tipoAgente: "", descricaoRiscos: "" });
-      setShowRiscoDialog(false);
-      refetchRiscos();
+    onSuccess: (data, variables) => {
+      console.log("[Cargos] Risco salvo:", data);
+      // Não fazer nada aqui para evitar problemas de serialização
+      // A atualização será feita após salvar todos os riscos
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao adicionar risco ocupacional");
+      console.error("[Cargos] Erro:", error);
+      // Erro será tratado no handleSalvarTodosRiscos
     },
   });
 
   const createRiscoOcupacionalMutation = trpc.riscosOcupacionais.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("[createRiscoOcupacionalMutation] Risco criado com sucesso, dados retornados:", JSON.stringify(data, null, 2));
       utilsRiscos.riscosOcupacionais.list.invalidate();
     },
     onError: (error: any) => {
-      console.error("Erro ao criar risco ocupacional:", error);
+      console.error("[createRiscoOcupacionalMutation] Erro ao criar risco ocupacional:", error);
+      console.error("[createRiscoOcupacionalMutation] Detalhes:", {
+        message: error?.message,
+        data: error?.data,
+        shape: error?.shape
+      });
     },
   });
 
@@ -439,8 +464,19 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   };
 
   const handleSalvarTodosRiscos = async () => {
+    console.log("[handleSalvarTodosRiscos] Iniciando salvamento de riscos...");
+    console.log("[handleSalvarTodosRiscos] riscoForm:", riscoForm);
+    console.log("[handleSalvarTodosRiscos] riscosTemporarios:", riscosTemporarios);
+    
     if (riscosTemporarios.length === 0) {
       toast.error("Adicione pelo menos um risco antes de salvar");
+      return;
+    }
+
+    // Validar cargoId ANTES de começar
+    if (!riscoForm.cargoId || riscoForm.cargoId <= 0) {
+      console.error("[handleSalvarTodosRiscos] ERRO: cargoId inválido:", riscoForm.cargoId);
+      toast.error("Erro: Cargo não identificado. Feche o dialog e tente novamente.");
       return;
     }
 
@@ -450,6 +486,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
 
     // Buscar ou criar risco ocupacional genérico baseado no tipo de agente
     const criarOuBuscarRisco = async (tipoAgente: string): Promise<number> => {
+      console.log(`[CriarRisco] Buscando ou criando risco: ${tipoAgente}`);
+      
       // Buscar risco existente com nome igual ao tipo de agente
       let riscoExistente = riscosOcupacionais.find((r: any) => r.nomeRisco === tipoAgente);
       
@@ -463,47 +501,59 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
           "Agentes Mecânicos": "mecanico",
         };
         
-        return new Promise((resolve, reject) => {
-          console.log(`[CriarRisco] Criando novo risco ocupacional: ${tipoAgente}`);
-          createRiscoOcupacionalMutation.mutate(
-            {
-              nomeRisco: tipoAgente,
-              tipoRisco: tipoRiscoMap[tipoAgente] || "fisico",
-              status: "ativo" as const,
-            },
-            {
-              onSuccess: async (novoRisco: any) => {
-                console.log(`[CriarRisco] Risco criado com sucesso:`, novoRisco);
-                
-                // O novoRisco deve conter o ID diretamente
-                let riscoId = novoRisco?.id;
-                
-                // Se não tiver ID, tentar buscar na lista atualizada
-                if (!riscoId || riscoId <= 0) {
-                  // Invalidar cache e buscar novamente
-                  await utilsRiscos.riscosOcupacionais.list.invalidate();
-                  await new Promise(resolve => setTimeout(resolve, 300));
-                  
-                  // Buscar novamente após criar
-                  const riscosAtualizados = await utilsRiscos.riscosOcupacionais.list.fetch();
-                  const novoRiscoEncontrado = riscosAtualizados.find((r: any) => r.nomeRisco === tipoAgente);
-                  riscoId = novoRiscoEncontrado?.id;
-                }
-                
-                console.log(`[CriarRisco] ID do risco encontrado: ${riscoId}`);
-                if (!riscoId || riscoId <= 0) {
-                  reject(new Error(`Não foi possível obter o ID do risco criado para "${tipoAgente}". Resposta: ${JSON.stringify(novoRisco)}`));
-                  return;
-                }
-                resolve(riscoId);
-              },
-              onError: (error: any) => {
-                console.error("[CriarRisco] Erro ao criar risco ocupacional:", error);
-                reject(new Error(error.message || `Erro ao criar risco ocupacional "${tipoAgente}"`));
-              },
+        console.log(`[CriarRisco] Criando novo risco ocupacional: ${tipoAgente}`);
+        console.log(`[CriarRisco] Tipo mapeado: ${tipoRiscoMap[tipoAgente] || "fisico"}`);
+        
+        try {
+          // Usar mutateAsync diretamente para obter a resposta
+          const novoRisco = await createRiscoOcupacionalMutation.mutateAsync({
+            nomeRisco: tipoAgente,
+            tipoRisco: tipoRiscoMap[tipoAgente] || "fisico",
+            status: "ativo" as const,
+          });
+          
+          console.log(`[CriarRisco] Risco criado com sucesso. Resposta completa:`, JSON.stringify(novoRisco, null, 2));
+          
+          // O novoRisco deve conter o ID diretamente
+          let riscoId = novoRisco?.id;
+          console.log(`[CriarRisco] ID extraído diretamente: ${riscoId}`);
+          
+          // Se não tiver ID, tentar buscar na lista atualizada
+          if (!riscoId || riscoId <= 0) {
+            console.log(`[CriarRisco] ID não encontrado na resposta, buscando na lista atualizada...`);
+            
+            // Invalidar cache e buscar novamente
+            await utilsRiscos.riscosOcupacionais.list.invalidate();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Buscar novamente após criar
+            try {
+              const riscosAtualizados = await utilsRiscos.riscosOcupacionais.list.fetch();
+              console.log(`[CriarRisco] Lista atualizada obtida, total de riscos: ${riscosAtualizados.length}`);
+              const novoRiscoEncontrado = riscosAtualizados.find((r: any) => r.nomeRisco === tipoAgente);
+              console.log(`[CriarRisco] Risco encontrado na lista:`, novoRiscoEncontrado);
+              riscoId = novoRiscoEncontrado?.id;
+            } catch (fetchError) {
+              console.error(`[CriarRisco] Erro ao buscar lista atualizada:`, fetchError);
             }
-          );
-        });
+          }
+          
+          console.log(`[CriarRisco] ID final do risco: ${riscoId}`);
+          if (!riscoId || riscoId <= 0) {
+            throw new Error(`Não foi possível obter o ID do risco criado para "${tipoAgente}". Resposta recebida: ${JSON.stringify(novoRisco)}`);
+          }
+          
+          console.log(`[CriarRisco] Retornando ID: ${riscoId}`);
+          return riscoId;
+        } catch (error: any) {
+          console.error("[CriarRisco] Erro ao criar risco ocupacional:", error);
+          console.error("[CriarRisco] Detalhes do erro:", {
+            message: error?.message,
+            data: error?.data,
+            shape: error?.shape
+          });
+          throw new Error(error?.message || error?.data?.message || `Erro ao criar risco ocupacional "${tipoAgente}"`);
+        }
       }
       
       console.log(`[CriarRisco] Risco existente encontrado: ${riscoExistente.id} para "${tipoAgente}"`);
@@ -516,71 +566,67 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
         // Criar ou buscar risco ocupacional
         const riscoId = await criarOuBuscarRisco(risco.tipoAgente);
         
-        // Salvar vínculo cargo-risco
-        await new Promise<void>((resolve, reject) => {
-          const dataToSave: any = {
-            cargoId: riscoForm.cargoId,
-            riscoOcupacionalId: riscoId,
-          };
-          
-          if (risco.tipoAgente && risco.tipoAgente.trim()) {
-            dataToSave.tipoAgente = risco.tipoAgente.trim();
+        if (!riscoId || riscoId <= 0) {
+          throw new Error(`Não foi possível obter ID do risco para "${risco.tipoAgente}"`);
+        }
+        
+        // Preparar dados de forma simples e direta
+        const dataToSave = {
+          cargoId: Number(riscoForm.cargoId),
+          riscoOcupacionalId: Number(riscoId),
+          tipoAgente: risco.tipoAgente?.trim() || null,
+          descricaoRiscos: risco.descricaoRiscos?.trim() || null,
+          fonteGeradora: risco.fonteGeradora?.trim() || null,
+          tipo: risco.tipo?.trim() || null,
+          meioPropagacao: risco.meioPropagacao?.trim() || null,
+          meioContato: risco.meioContato?.trim() || null,
+          possiveisDanosSaude: risco.possiveisDanosSaude?.trim() || null,
+          tipoAnalise: risco.tipoAnalise?.trim() || null,
+          valorAnaliseQuantitativa: risco.valorAnaliseQuantitativa?.trim() || null,
+          gradacaoEfeitos: risco.gradacaoEfeitos?.trim() || null,
+          gradacaoExposicao: risco.gradacaoExposicao?.trim() || null,
+        };
+        
+        // Remover campos null/undefined
+        Object.keys(dataToSave).forEach(key => {
+          if (dataToSave[key as keyof typeof dataToSave] === null || dataToSave[key as keyof typeof dataToSave] === undefined) {
+            delete dataToSave[key as keyof typeof dataToSave];
           }
-          if (risco.descricaoRiscos && risco.descricaoRiscos.trim()) {
-            dataToSave.descricaoRiscos = risco.descricaoRiscos.trim();
-          }
-          if (risco.fonteGeradora && risco.fonteGeradora.trim()) {
-            dataToSave.fonteGeradora = risco.fonteGeradora.trim();
-          }
-          if (risco.tipo && risco.tipo.trim()) {
-            dataToSave.tipo = risco.tipo.trim();
-          }
-          if (risco.meioPropagacao && risco.meioPropagacao.trim()) {
-            dataToSave.meioPropagacao = risco.meioPropagacao.trim();
-          }
-          if (risco.meioContato && risco.meioContato.trim()) {
-            dataToSave.meioContato = risco.meioContato.trim();
-          }
-          if (risco.possiveisDanosSaude && risco.possiveisDanosSaude.trim()) {
-            dataToSave.possiveisDanosSaude = risco.possiveisDanosSaude.trim();
-          }
-          if (risco.tipoAnalise && risco.tipoAnalise.trim()) {
-            dataToSave.tipoAnalise = risco.tipoAnalise.trim();
-          }
-          if (risco.valorAnaliseQuantitativa && risco.valorAnaliseQuantitativa.trim()) {
-            dataToSave.valorAnaliseQuantitativa = risco.valorAnaliseQuantitativa.trim();
-          }
-          if (risco.gradacaoEfeitos && risco.gradacaoEfeitos.trim()) {
-            dataToSave.gradacaoEfeitos = risco.gradacaoEfeitos.trim();
-          }
-          if (risco.gradacaoExposicao && risco.gradacaoExposicao.trim()) {
-            dataToSave.gradacaoExposicao = risco.gradacaoExposicao.trim();
-          }
-          
-          console.log("Salvando risco:", dataToSave);
-          
-          createRiscoMutation.mutate(
-            dataToSave,
-            {
-              onSuccess: () => {
-                salvos++;
-                console.log(`Risco ${salvos}/${totalRiscos} salvo com sucesso`);
-                resolve();
-              },
-              onError: (error: any) => {
-                console.error("Erro ao salvar risco:", error);
-                erros++;
-                reject(new Error(error.message || `Erro ao salvar risco "${risco.tipoAgente}"`));
-              },
-            }
-          );
         });
+        
+        console.log("[Cargos] Salvando risco:", dataToSave);
+        
+        // Validar dados obrigatórios
+        if (!dataToSave.cargoId || dataToSave.cargoId <= 0) {
+          throw new Error(`CargoId inválido: ${dataToSave.cargoId}`);
+        }
+        if (!dataToSave.riscoOcupacionalId || dataToSave.riscoOcupacionalId <= 0) {
+          throw new Error(`RiscoOcupacionalId inválido: ${dataToSave.riscoOcupacionalId}`);
+        }
+        
+        // Salvar usando mutateAsync
+        await createRiscoMutation.mutateAsync(dataToSave);
+        salvos++;
+        console.log(`[Cargos] Risco ${salvos}/${totalRiscos} salvo: ${risco.tipoAgente}`);
       } catch (error: any) {
-        console.error(`Erro ao processar risco "${risco.tipoAgente}":`, error);
+        console.error(`[Cargos] Erro ao salvar risco "${risco.tipoAgente}":`, error);
         erros++;
-        toast.error(`Erro ao salvar risco "${risco.tipoAgente}": ${error.message || error}`);
-        // Continuar salvando os outros riscos mesmo se um falhar
+        const errorMsg = error?.message || error?.data?.message || String(error);
+        toast.error(`Erro ao salvar "${risco.tipoAgente}": ${errorMsg}`);
       }
+    }
+
+    // Atualizar lista de riscos após salvar todos
+    if (riscoForm.cargoId) {
+      // Garantir que expandedCargo está definido
+      if (expandedCargo !== riscoForm.cargoId) {
+        setExpandedCargo(riscoForm.cargoId);
+      }
+      // Invalidar e refetch sem await para evitar problemas de serialização
+      utils.cargoRiscos.getByCargo.invalidate({ cargoId: riscoForm.cargoId }).then(() => {
+        refetchRiscos();
+        console.log("[Cargos] Query de riscos atualizada após salvar todos");
+      });
     }
 
     // Verificar se todos foram salvos
