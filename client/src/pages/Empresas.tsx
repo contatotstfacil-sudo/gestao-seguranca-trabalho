@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const ESTADOS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
@@ -56,8 +57,15 @@ export default function Empresas() {
     dataFim: "",
   });
 
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
   const utils = trpc.useUtils();
   const { data: empresas, isLoading } = trpc.empresas.list.useQuery(filters);
+
+  // Limpar seleção quando os filtros mudarem
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [filters.searchTerm, filters.dataInicio, filters.dataFim]);
   
   const createMutation = trpc.empresas.create.useMutation({
     onSuccess: () => {
@@ -85,9 +93,21 @@ export default function Empresas() {
     onSuccess: () => {
       utils.empresas.list.invalidate();
       toast.success("Empresa excluída com sucesso!");
+      setSelectedIds([]);
     },
     onError: (error) => {
       toast.error("Erro ao excluir empresa: " + error.message);
+    },
+  });
+
+  const deleteBatchMutation = trpc.empresas.deleteBatch.useMutation({
+    onSuccess: (data) => {
+      utils.empresas.list.invalidate();
+      toast.success(`${data.deletedCount} empresa(s) excluída(s) com sucesso!`);
+      setSelectedIds([]);
+    },
+    onError: (error) => {
+      toast.error("Erro ao excluir empresas: " + error.message);
     },
   });
 
@@ -145,6 +165,30 @@ export default function Empresas() {
   const handleDelete = (id: number): void => {
     if (confirm("Tem certeza que deseja excluir esta empresa?")) {
       deleteMutation.mutate({ id });
+    }
+  };
+
+
+  const handleDeleteBatch = () => {
+    if (selectedIds.length === 0) {
+      toast.error("Selecione pelo menos uma empresa para excluir");
+      return;
+    }
+
+    const empresasSelecionadas = empresas?.filter((empresa: any) =>
+      selectedIds.includes(empresa.id)
+    ) || [];
+
+    const nomesEmpresas = empresasSelecionadas
+      .map((empresa: any) => empresa.razaoSocial)
+      .join(", ");
+
+    if (
+      confirm(
+        `Tem certeza que deseja excluir ${selectedIds.length} empresa(s)?\n\n${nomesEmpresas}`
+      )
+    ) {
+      deleteBatchMutation.mutate({ ids: selectedIds });
     }
   };
 
@@ -407,7 +451,19 @@ export default function Empresas() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Lista de Empresas</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Lista de Empresas</CardTitle>
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteBatch}
+                  disabled={deleteBatchMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir {selectedIds.length} selecionada(s)
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -417,6 +473,22 @@ export default function Empresas() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={
+                            empresas.length > 0 &&
+                            selectedIds.length === empresas.length &&
+                            empresas.length > 0
+                          }
+                          onCheckedChange={(checked) => {
+                            if (checked && empresas) {
+                              setSelectedIds(empresas.map((empresa: any) => empresa.id));
+                            } else {
+                              setSelectedIds([]);
+                            }
+                          }}
+                        />
+                      </TableHead>
                       <TableHead>Razão Social</TableHead>
                       <TableHead>CNPJ</TableHead>
                       <TableHead>Grau de Risco</TableHead>
@@ -428,7 +500,22 @@ export default function Empresas() {
                   </TableHeader>
                   <TableBody>
                     {empresas.map((empresa: any) => (
-                      <TableRow key={empresa.id}>
+                      <TableRow
+                        key={empresa.id}
+                        className={selectedIds.includes(empresa.id) ? "bg-muted/50" : ""}
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.includes(empresa.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedIds(prev => [...prev, empresa.id]);
+                              } else {
+                                setSelectedIds(prev => prev.filter(id => id !== empresa.id));
+                              }
+                            }}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">{empresa.razaoSocial}</TableCell>
                         <TableCell>{empresa.cnpj}</TableCell>
                         <TableCell>{empresa.grauRisco || "-"}</TableCell>

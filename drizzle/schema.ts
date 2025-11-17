@@ -268,6 +268,24 @@ export type Cargo = typeof cargos.$inferSelect;
 export type InsertCargo = typeof cargos.$inferInsert;
 
 /**
+ * Cargos CBO - Banco de dados de cargos conforme Classificação Brasileira de Ocupações
+ * Tabela de referência para preenchimento automático no cadastro de cargos
+ */
+export const cargosCbo = mysqlTable("cargosCbo", {
+  id: int("id").autoincrement().primaryKey(),
+  codigoCbo: varchar("codigoCbo", { length: 20 }).notNull().unique(),
+  nomeCargo: varchar("nomeCargo", { length: 255 }).notNull(),
+  descricao: text("descricao"),
+  familiaOcupacional: varchar("familiaOcupacional", { length: 255 }),
+  sinonimia: text("sinonimia"), // Nomes alternativos/variantes do cargo
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CargoCbo = typeof cargosCbo.$inferSelect;
+export type InsertCargoCbo = typeof cargosCbo.$inferInsert;
+
+/**
  * Setores - Cadastro de setores/departamentos
  */
 export const setores = mysqlTable("setores", {

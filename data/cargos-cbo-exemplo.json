@@ -1,0 +1,150 @@
+[
+  {
+    "codigoCbo": "2251-05",
+    "nomeCargo": "Médico do trabalho",
+    "descricao": "Avaliam a capacidade do candidato ou empregado para o trabalho, realizam exames médicos periódicos e tratam doenças profissionais. Previnem acidentes do trabalho, orientam sobre doenças profissionais e realizam campanhas de higiene e segurança do trabalho.",
+    "familiaOcupacional": "Médicos",
+    "sinonimia": "Médico do trabalho, Médico ocupacional, Médico de medicina do trabalho"
+  },
+  {
+    "codigoCbo": "2251-10",
+    "nomeCargo": "Médico perito",
+    "descricao": "Avaliam a capacidade do candidato ou empregado para o trabalho, realizam exames médicos periódicos e tratam doenças profissionais. Previnem acidentes do trabalho, orientam sobre doenças profissionais e realizam campanhas de higiene e segurança do trabalho.",
+    "familiaOcupacional": "Médicos",
+    "sinonimia": "Médico perito, Perito médico"
+  },
+  {
+    "codigoCbo": "2253-05",
+    "nomeCargo": "Enfermeiro do trabalho",
+    "descricao": "Atuam na área de saúde ocupacional, desenvolvendo ações de promoção, proteção e recuperação da saúde dos trabalhadores. Realizam exames de saúde, investigam acidentes do trabalho e doenças profissionais, orientam sobre prevenção e participam de programas de saúde e segurança do trabalho.",
+    "familiaOcupacional": "Enfermeiros",
+    "sinonimia": "Enfermeiro do trabalho, Enfermeiro ocupacional"
+  },
+  {
+    "codigoCbo": "2515-05",
+    "nomeCargo": "Psicólogo do trabalho",
+    "descricao": "Avaliam o comportamento humano no trabalho, desenvolvem programas de seleção, treinamento e desenvolvimento de pessoal. Realizam pesquisas sobre clima organizacional, motivação e satisfação no trabalho, e atuam na prevenção de acidentes e doenças relacionadas ao trabalho.",
+    "familiaOcupacional": "Psicólogos",
+    "sinonimia": "Psicólogo do trabalho, Psicólogo organizacional"
+  },
+  {
+    "codigoCbo": "2525-05",
+    "nomeCargo": "Assistente social",
+    "descricao": "Elaboram, implementam e avaliam políticas sociais junto a órgãos da administração pública, empresas privadas e organizações da sociedade civil. Atuam na área de saúde, educação, habitação, assistência social, previdência social e trabalho.",
+    "familiaOcupacional": "Assistentes sociais",
+    "sinonimia": "Assistente social, Assistente social do trabalho"
+  },
+  {
+    "codigoCbo": "3142-05",
+    "nomeCargo": "Técnico de segurança do trabalho",
+    "descricao": "Elaboram e implementam programas de prevenção de acidentes do trabalho, inspecionam locais de trabalho, identificam riscos e elaboram laudos técnicos. Orientam trabalhadores sobre uso de equipamentos de proteção individual e coletiva, investigam acidentes e doenças do trabalho.",
+    "familiaOcupacional": "Técnicos de segurança do trabalho",
+    "sinonimia": "Técnico de segurança do trabalho, Técnico em segurança do trabalho, TST"
+  },
+  {
+    "codigoCbo": "3142-10",
+    "nomeCargo": "Técnico em higiene ocupacional",
+    "descricao": "Avaliam e controlam os riscos ambientais nos locais de trabalho, realizam medições de agentes físicos, químicos e biológicos. Elaboram laudos técnicos, programas de prevenção e controle de riscos ocupacionais.",
+    "familiaOcupacional": "Técnicos de segurança do trabalho",
+    "sinonimia": "Técnico em higiene ocupacional, Técnico em higiene do trabalho"
+  },
+  {
+    "codigoCbo": "2141-05",
+    "nomeCargo": "Engenheiro de segurança do trabalho",
+    "descricao": "Elaboram e implementam programas de prevenção de acidentes do trabalho, inspecionam instalações e equipamentos, identificam riscos e elaboram laudos técnicos. Coordenam equipes de segurança do trabalho, investigam acidentes e doenças do trabalho.",
+    "familiaOcupacional": "Engenheiros de segurança do trabalho",
+    "sinonimia": "Engenheiro de segurança do trabalho, Engenheiro em segurança do trabalho, Engenheiro de segurança"
+  },
+  {
+    "codigoCbo": "2141-10",
+    "nomeCargo": "Engenheiro de meio ambiente",
+    "descricao": "Desenvolvem e aplicam tecnologias para proteção do meio ambiente, elaboram estudos de impacto ambiental, projetos de tratamento de resíduos e sistemas de gestão ambiental. Atuam na prevenção e controle da poluição.",
+    "familiaOcupacional": "Engenheiros de meio ambiente",
+    "sinonimia": "Engenheiro de meio ambiente, Engenheiro ambiental"
+  },
+  {
+    "codigoCbo": "3171-10",
+    "nomeCargo": "Técnico em segurança do trabalho",
+    "descricao": "Auxiliam na elaboração e implementação de programas de prevenção de acidentes do trabalho, realizam inspeções, identificam riscos e orientam trabalhadores sobre segurança.",
+    "familiaOcupacional": "Técnicos de segurança do trabalho",
+    "sinonimia": "Técnico de segurança do trabalho, Técnico em segurança do trabalho"
+  },
+  {
+    "codigoCbo": "4110-05",
+    "nomeCargo": "Auxiliar administrativo",
+    "descricao": "Executam atividades administrativas de rotina, como atendimento ao público, organização de documentos, controle de estoque e apoio às atividades gerenciais.",
+    "familiaOcupacional": "Auxiliares administrativos",
+    "sinonimia": "Auxiliar administrativo, Assistente administrativo"
+  },
+  {
+    "codigoCbo": "4121-10",
+    "nomeCargo": "Digitador",
+    "descricao": "Digitam textos, planilhas e documentos diversos, utilizando equipamentos de processamento de dados. Organizam e arquivam documentos digitais.",
+    "familiaOcupacional": "Digitadores",
+    "sinonimia": "Digitador, Operador de digitação"
+  },
+  {
+    "codigoCbo": "5151-10",
+    "nomeCargo": "Auxiliar de enfermagem do trabalho",
+    "descricao": "Auxiliam o enfermeiro do trabalho na execução de atividades de saúde ocupacional, como coleta de material para exames, aplicação de vacinas e orientação sobre saúde e segurança do trabalho.",
+    "familiaOcupacional": "Auxiliares de enfermagem",
+    "sinonimia": "Auxiliar de enfermagem do trabalho, Auxiliar de enfermagem ocupacional"
+  },
+  {
+    "codigoCbo": "6321-20",
+    "nomeCargo": "Operador de máquinas de construção",
+    "descricao": "Operam máquinas e equipamentos de construção civil, como escavadeiras, tratores, guindastes e betoneiras. Realizam manutenção básica dos equipamentos e seguem normas de segurança.",
+    "familiaOcupacional": "Operadores de máquinas de construção",
+    "sinonimia": "Operador de máquinas, Operador de equipamentos de construção"
+  },
+  {
+    "codigoCbo": "6322-05",
+    "nomeCargo": "Pedreiro",
+    "descricao": "Executam serviços de alvenaria, como construção de paredes, muros e estruturas. Aplicam revestimentos, assentam pisos e azulejos, seguindo projetos e normas técnicas.",
+    "familiaOcupacional": "Pedreiros",
+    "sinonimia": "Pedreiro, Alvanel"
+  },
+  {
+    "codigoCbo": "6323-05",
+    "nomeCargo": "Carpinteiro",
+    "descricao": "Executam serviços de carpintaria, como construção de estruturas de madeira, confecção de portas, janelas e móveis. Operam máquinas e ferramentas de carpintaria.",
+    "familiaOcupacional": "Carpinteiros",
+    "sinonimia": "Carpinteiro, Marceneiro"
+  },
+  {
+    "codigoCbo": "6324-05",
+    "nomeCargo": "Eletricista",
+    "descricao": "Executam instalações e manutenção de sistemas elétricos, como fiação, quadros de distribuição e equipamentos elétricos. Realizam testes e seguem normas de segurança.",
+    "familiaOcupacional": "Eletricistas",
+    "sinonimia": "Eletricista, Eletricista instalador"
+  },
+  {
+    "codigoCbo": "6325-05",
+    "nomeCargo": "Soldador",
+    "descricao": "Executam serviços de solda em estruturas metálicas, utilizando diferentes processos de soldagem. Realizam corte e preparação de materiais, seguindo normas de segurança.",
+    "familiaOcupacional": "Soldadores",
+    "sinonimia": "Soldador, Soldador estrutural"
+  },
+  {
+    "codigoCbo": "7111-05",
+    "nomeCargo": "Operador de empilhadeira",
+    "descricao": "Operam empilhadeiras para movimentação e armazenagem de materiais. Realizam manutenção básica dos equipamentos e seguem normas de segurança.",
+    "familiaOcupacional": "Operadores de empilhadeira",
+    "sinonimia": "Operador de empilhadeira, Empilhadeirista"
+  },
+  {
+    "codigoCbo": "7241-05",
+    "nomeCargo": "Eletricista de manutenção",
+    "descricao": "Realizam manutenção preventiva e corretiva em sistemas elétricos, equipamentos e máquinas. Diagnosticam falhas, substituem componentes e testam sistemas.",
+    "familiaOcupacional": "Eletricistas de manutenção",
+    "sinonimia": "Eletricista de manutenção, Eletricista industrial"
+  },
+  {
+    "codigoCbo": "8414-28",
+    "nomeCargo": "Operador de produção",
+    "descricao": "Operam máquinas e equipamentos de produção industrial, controlando processos de fabricação. Realizam manutenção básica e seguem normas de qualidade e segurança.",
+    "familiaOcupacional": "Operadores de produção",
+    "sinonimia": "Operador de produção, Operador de máquinas industriais"
+  }
+]
+

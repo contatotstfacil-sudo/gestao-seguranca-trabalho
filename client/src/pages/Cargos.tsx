@@ -19,6 +19,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -29,7 +30,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, Check, X, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 
@@ -45,6 +46,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedCargo, setExpandedCargo] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [formData, setFormData] = useState<CargoFormData>({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
   const [treinamentoForm, setTreinamentoForm] = useState({
     cargoId: 0,
@@ -71,6 +73,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
     gradacaoEfeitos: "",
     gradacaoExposicao: "",
   });
+  const [conclusaoItems, setConclusaoItems] = useState<string[]>([]);
+  const [novoItemConclusao, setNovoItemConclusao] = useState("");
   const [riscosTemporarios, setRiscosTemporarios] = useState<Array<{
     riscoOcupacionalId: number;
     tipoAgente: string;
@@ -164,9 +168,21 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
     onSuccess: () => {
       toast.success("Cargo deletado com sucesso!");
       refetch();
+      setSelectedIds([]);
     },
     onError: (error: any) => {
       toast.error(error.message || "Erro ao deletar cargo");
+    },
+  });
+
+  const deleteBatchMutation = trpc.cargos.deleteBatch.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.deletedCount} cargo(s) excluído(s) com sucesso!`);
+      setSelectedIds([]);
+      refetch();
+    },
+    onError: (error) => {
+      toast.error("Erro ao excluir cargos: " + error.message);
     },
   });
 
@@ -413,7 +429,21 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       gradacaoExposicao: "",
     });
     setRiscosTemporarios([]);
+    setConclusaoItems([]);
+    setNovoItemConclusao("");
     setShowRiscoDialog(true);
+  };
+
+  const handleAddConclusaoItem = () => {
+    if (novoItemConclusao.trim()) {
+      setConclusaoItems([...conclusaoItems, novoItemConclusao.trim()]);
+      setNovoItemConclusao("");
+    }
+  };
+
+  const handleRemoveConclusaoItem = (index: number) => {
+    const novosItems = conclusaoItems.filter((_, i) => i !== index);
+    setConclusaoItems(novosItems);
   };
 
   const handleAdicionarRiscoNaLista = () => {
@@ -422,12 +452,17 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       return;
     }
     
+    // Converter array de conclusões para JSON string
+    const descricaoRiscosFinal = conclusaoItems.length > 0 
+      ? JSON.stringify(conclusaoItems) 
+      : riscoForm.descricaoRiscos;
+    
     setRiscosTemporarios((prev) => [
       ...prev,
       {
         riscoOcupacionalId: 0,
         tipoAgente: riscoForm.tipoAgente,
-        descricaoRiscos: riscoForm.descricaoRiscos,
+        descricaoRiscos: descricaoRiscosFinal,
         fonteGeradora: riscoForm.fonteGeradora,
         tipo: riscoForm.tipo,
         meioPropagacao: riscoForm.meioPropagacao,
@@ -457,6 +492,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       gradacaoEfeitos: "",
       gradacaoExposicao: "",
     }));
+    setConclusaoItems([]);
+    setNovoItemConclusao("");
   };
 
   const handleRemoverRiscoTemporario = (index: number) => {
@@ -661,6 +698,22 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
 
   const handleEditRisco = (risco: any) => {
     setEditingRiscoId(risco.id);
+    
+    // Tentar parsear descricaoRiscos como JSON (array de conclusões)
+    let conclusoesArray: string[] = [];
+    if (risco.descricaoRiscos) {
+      try {
+        const parsed = JSON.parse(risco.descricaoRiscos);
+        if (Array.isArray(parsed)) {
+          conclusoesArray = parsed;
+        }
+      } catch {
+        // Se não for JSON válido, manter como string vazia (formato antigo)
+        conclusoesArray = [];
+      }
+    }
+    
+    setConclusaoItems(conclusoesArray);
     setEditRiscoForm({
       tipoAgente: risco.tipoAgente || "",
       descricaoRiscos: risco.descricaoRiscos || "",
@@ -684,11 +737,16 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       return;
     }
 
+    // Converter array de conclusões para JSON string
+    const descricaoRiscosFinal = conclusaoItems.length > 0 
+      ? JSON.stringify(conclusaoItems) 
+      : editRiscoForm.descricaoRiscos.trim() || undefined;
+
     updateRiscoMutation.mutate({
       id: editingRiscoId,
       cargoId,
       tipoAgente: editRiscoForm.tipoAgente.trim(),
-      descricaoRiscos: editRiscoForm.descricaoRiscos.trim() || undefined,
+      descricaoRiscos: descricaoRiscosFinal,
       fonteGeradora: editRiscoForm.fonteGeradora.trim() || undefined,
       tipo: editRiscoForm.tipo.trim() || undefined,
       meioPropagacao: editRiscoForm.meioPropagacao.trim() || undefined,
@@ -703,6 +761,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
 
   const handleCancelEditRisco = () => {
     setEditingRiscoId(null);
+    setConclusaoItems([]);
+    setNovoItemConclusao("");
     setEditRiscoForm({ 
       tipoAgente: "", 
       descricaoRiscos: "",
@@ -842,6 +902,43 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       return true;
     }).length;
   }, [cargosFiltrados]);
+
+  // Limpar seleção quando os filtros mudarem
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [buscaCargo, empresaFiltroId]);
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((selectedId) => selectedId !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === cargosFiltrados.length && cargosFiltrados.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(cargosFiltrados.map((cargo: any) => cargo.id));
+    }
+  };
+
+  const handleDeleteBatch = () => {
+    if (selectedIds.length === 0) {
+      toast.error("Selecione pelo menos um cargo para excluir");
+      return;
+    }
+
+    const cargosSelecionados = cargosFiltrados.filter((cargo: any) => selectedIds.includes(cargo.id));
+    const nomesCargos = cargosSelecionados.map((cargo: any) => cargo.nomeCargo || `Cargo #${cargo.id}`).join(", ");
+
+    if (confirm(`Tem certeza que deseja excluir ${selectedIds.length} cargo(s)?\n\nCargos: ${nomesCargos.substring(0, 200)}${nomesCargos.length > 200 ? "..." : ""}`)) {
+      deleteBatchMutation.mutate({ ids: selectedIds });
+    }
+  };
 
   useEffect(() => {
     if (!editingId && firstEmpresaId && empresas.length > 0 && empresasMap.size > 0) {
@@ -1070,52 +1167,83 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
  
         <Card>
           <CardHeader>
-            <CardTitle>Lista de Cargos</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Lista de Cargos</CardTitle>
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteBatch}
+                  disabled={deleteBatchMutation.isPending}
+                >
+                  {deleteBatchMutation.isPending ? "Excluindo..." : `Excluir ${selectedIds.length} selecionado(s)`}
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
+              {cargosFiltrados.length > 0 && (
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Checkbox
+                    checked={selectedIds.length === cargosFiltrados.length && cargosFiltrados.length > 0}
+                    onCheckedChange={handleSelectAll}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    Selecionar todos ({selectedIds.length}/{cargosFiltrados.length})
+                  </span>
+                </div>
+              )}
               {cargosFiltrados.map((cargo: any) => {
                 const empresaNome = cargo.empresaId ? empresasMap.get(cargo.empresaId.toString()) : undefined;
                 return (
-                  <div key={cargo.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-lg">{cargo.nomeCargo}</h3>
-                          {(cargo.codigoCbo || cargo.cbo) && (
-                            <Badge variant="secondary">CBO {cargo.codigoCbo || cargo.cbo}</Badge>
-                          )}
-                          {empresaNome && (
-                            <Badge>{empresaNome}</Badge>
-                          )}
+                  <React.Fragment key={cargo.id}>
+                    <div className="border rounded-lg p-4">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3 flex-1">
+                          <Checkbox
+                            checked={selectedIds.includes(cargo.id)}
+                            onCheckedChange={() => handleToggleSelect(cargo.id)}
+                          />
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold text-lg">{cargo.nomeCargo}</h3>
+                              {(cargo.codigoCbo || cargo.cbo) && (
+                                <Badge variant="secondary">CBO {cargo.codigoCbo || cargo.cbo}</Badge>
+                              )}
+                              {empresaNome && (
+                                <Badge>{empresaNome}</Badge>
+                              )}
+                            </div>
+                            {cargo.descricao && (
+                              <p className="text-sm text-muted-foreground mt-2">{cargo.descricao}</p>
+                            )}
+                          </div>
                         </div>
-                        {cargo.descricao && (
-                          <p className="text-sm text-muted-foreground mt-2">{cargo.descricao}</p>
-                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setExpandedCargo(expandedCargo === cargo.id ? null : cargo.id)}
+                          >
+                            {expandedCargo === cargo.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(cargo)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(cargo.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setExpandedCargo(expandedCargo === cargo.id ? null : cargo.id)}
-                      >
-                        {expandedCargo === cargo.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(cargo)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(cargo.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
                     </div>
-                  </div>
 
-                  {expandedCargo === cargo.id && (
-                    <div className="mt-4 space-y-4 border-t pt-4">
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <h4 className="font-semibold">Treinamentos Obrigatórios</h4>
-                          <>
+                    {expandedCargo === cargo.id && (
+                      <div className="mt-4 space-y-4 border-t pt-4">
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-semibold">Treinamentos Obrigatórios</h4>
+                            <>
                             <Button
                               size="sm"
                               variant="outline"
@@ -1184,12 +1312,12 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum treinamento obrigatório cadastrado</p>
                         )}
-                      </div>
+                        </div>
 
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <h4 className="font-semibold">Setores Vinculados</h4>
-                          <>
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-semibold">Setores Vinculados</h4>
+                            <>
                             <Button
                               size="sm"
                               variant="outline"
@@ -1256,12 +1384,12 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum setor vinculado</p>
                         )}
-                      </div>
+                        </div>
 
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <h4 className="font-semibold">Riscos Ocupacionais</h4>
-                          <>
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-semibold">Riscos Ocupacionais</h4>
+                            <>
                             <Button
                               size="sm"
                               variant="outline"
@@ -1406,15 +1534,54 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                       />
                                     </div>
                                     <div className="space-y-2">
-                                      <Label htmlFor="descricaoRiscos">Descrição dos Riscos</Label>
-                                      <Textarea
-                                        id="descricaoRiscos"
-                                        value={riscoForm.descricaoRiscos}
-                                        onChange={(e) => setRiscoForm({ ...riscoForm, descricaoRiscos: e.target.value })}
-                                        placeholder="Descreva os riscos específicos deste cargo..."
-                                        rows={3}
-                                        className="w-full"
-                                      />
+                                      <Label>Conclusão</Label>
+                                      <div className="border rounded-lg p-4 space-y-3 mt-1.5 bg-gray-50/50">
+                                        <div className="flex gap-2">
+                                          <Input
+                                            value={novoItemConclusao}
+                                            onChange={(e) => setNovoItemConclusao(e.target.value)}
+                                            placeholder="Digite um item da conclusão"
+                                            onKeyPress={(e) => {
+                                              if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                handleAddConclusaoItem();
+                                              }
+                                            }}
+                                            className="flex-1"
+                                          />
+                                          <Button type="button" onClick={handleAddConclusaoItem} size="sm">
+                                            Adicionar
+                                          </Button>
+                                        </div>
+                                        {conclusaoItems.length > 0 && (
+                                          <div className="space-y-2 max-h-40 overflow-y-auto">
+                                            {conclusaoItems.map((item, index) => (
+                                              <div key={index} className="flex items-center justify-between bg-white p-2.5 rounded-md border">
+                                                <span className="text-sm">
+                                                  <span className="font-medium text-muted-foreground mr-2">
+                                                    {String.fromCharCode(97 + index)})
+                                                  </span>
+                                                  {item}
+                                                </span>
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => handleRemoveConclusaoItem(index)}
+                                                  className="h-7 w-7 p-0"
+                                                >
+                                                  <X className="h-4 w-4" />
+                                                </Button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {conclusaoItems.length === 0 && (
+                                          <p className="text-xs text-muted-foreground text-center py-3">
+                                            Nenhum item adicionado. Digite e clique em "Adicionar" para incluir itens.
+                                          </p>
+                                        )}
+                                      </div>
                                     </div>
                                     <div className="flex justify-end">
                                       <Button
@@ -1459,11 +1626,41 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                                   <span className="text-gray-500">Danos:</span> {risco.possiveisDanosSaude.substring(0, 100)}{risco.possiveisDanosSaude.length > 100 ? "..." : ""}
                                                 </div>
                                               )}
-                                              {risco.descricaoRiscos && (
-                                                <div className="text-xs text-gray-600">
-                                                  <span className="text-gray-500">Descrição:</span> {risco.descricaoRiscos.substring(0, 100)}{risco.descricaoRiscos.length > 100 ? "..." : ""}
-                                                </div>
-                                              )}
+                                              {risco.descricaoRiscos && (() => {
+                                                // Tentar parsear como JSON (array de conclusões)
+                                                let conclusoesArray: string[] = [];
+                                                try {
+                                                  const parsed = JSON.parse(risco.descricaoRiscos);
+                                                  if (Array.isArray(parsed)) {
+                                                    conclusoesArray = parsed;
+                                                  }
+                                                } catch {
+                                                  // Se não for JSON, tratar como string simples (formato antigo)
+                                                }
+                                                
+                                                if (conclusoesArray.length > 0) {
+                                                  return (
+                                                    <div className="text-xs text-gray-600 space-y-1">
+                                                      <span className="text-gray-500 font-medium">Conclusão:</span>
+                                                      <ul className="list-disc list-inside ml-2 space-y-0.5">
+                                                        {conclusoesArray.slice(0, 3).map((item, idx) => (
+                                                          <li key={idx}>{item.length > 80 ? item.substring(0, 80) + "..." : item}</li>
+                                                        ))}
+                                                        {conclusoesArray.length > 3 && (
+                                                          <li className="text-gray-400 italic">... e mais {conclusoesArray.length - 3} item(ns)</li>
+                                                        )}
+                                                      </ul>
+                                                    </div>
+                                                  );
+                                                } else {
+                                                  // Formato antigo (string simples)
+                                                  return (
+                                                    <div className="text-xs text-gray-600">
+                                                      <span className="text-gray-500">Conclusão:</span> {risco.descricaoRiscos.substring(0, 100)}{risco.descricaoRiscos.length > 100 ? "..." : ""}
+                                                    </div>
+                                                  );
+                                                }
+                                              })()}
                                             </div>
                                             <Button
                                               type="button"
@@ -1522,6 +1719,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                     onClick={() => {
                                       setShowRiscoDialog(false);
                                       setRiscosTemporarios([]);
+                                      setConclusaoItems([]);
+                                      setNovoItemConclusao("");
                                       setRiscoForm({ 
                                         cargoId: 0, 
                                         riscoOcupacionalId: 0, 
@@ -1765,10 +1964,10 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum risco ocupacional cadastrado</p>
                         )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </React.Fragment>
               );
             })}
             </div>

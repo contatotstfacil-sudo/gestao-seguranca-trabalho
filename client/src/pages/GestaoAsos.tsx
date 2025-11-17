@@ -631,7 +631,11 @@ export default function GestaoAsos() {
   };
 
   const getColaboradorName = (id: number) => {
-    return colaboradores.find((c: any) => c.id === id)?.nomeCompleto || "N/A";
+    const colaborador = colaboradores.find((c: any) => c.id === id);
+    if (!colaborador) {
+      return colaboradores.length === 0 ? "Sem colaboradores cadastrados" : "Colaborador excluído";
+    }
+    return colaborador.nomeCompleto;
   };
 
   const getEmpresaName = (id: number) => {
@@ -950,18 +954,30 @@ export default function GestaoAsos() {
                     }));
                   }
                 }}
+                disabled={colaboradores.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o colaborador" />
+                  <SelectValue placeholder={colaboradores.length === 0 ? "Nenhum colaborador cadastrado" : "Selecione o colaborador"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {colaboradores.map((colaborador: any) => (
-                    <SelectItem key={colaborador.id} value={String(colaborador.id)}>
-                      {colaborador.nomeCompleto}
-                    </SelectItem>
-                  ))}
+                  {colaboradores.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Nenhum colaborador cadastrado. Cadastre colaboradores primeiro.
+                    </div>
+                  ) : (
+                    colaboradores.map((colaborador: any) => (
+                      <SelectItem key={colaborador.id} value={String(colaborador.id)}>
+                        {colaborador.nomeCompleto}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              {colaboradores.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Você precisa cadastrar pelo menos um colaborador antes de criar um ASO.
+                </p>
+              )}
             </div>
 
             <div>
@@ -1121,7 +1137,10 @@ export default function GestaoAsos() {
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+            <Button 
+              type="submit" 
+              disabled={createMutation.isPending || updateMutation.isPending || colaboradores.length === 0}
+            >
               {editingId ? "Atualizar" : "Cadastrar"}
             </Button>
           </div>
@@ -1141,6 +1160,25 @@ export default function GestaoAsos() {
         </div>
         {renderActions()}
       </div>
+
+      {colaboradores.length === 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-900">
+                  Nenhum colaborador cadastrado
+                </p>
+                <p className="text-xs text-amber-800 mt-1">
+                  Não há colaboradores cadastrados no sistema. Os dados de cobertura não podem ser calculados. 
+                  Cadastre colaboradores na página de <strong>Colaboradores</strong> para começar a gerenciar ASOs.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {dashboardLoading ? (
         <Card className={dashboardCardClass}>
@@ -1181,12 +1219,13 @@ export default function GestaoAsos() {
               className={cn(
                 dashboardCardClass,
                 "cursor-pointer",
-                filtroRapidoAtivo === "ativos" && "ring-2 ring-primary"
+                filtroRapidoAtivo === "ativos" && "ring-2 ring-primary",
+                colaboradores.length === 0 && "opacity-60 cursor-not-allowed"
               )}
-              onClick={() => aplicarFiltroRapido("ativos")}
+              onClick={() => colaboradores.length > 0 && aplicarFiltroRapido("ativos")}
               role="button"
               tabIndex={0}
-              onKeyDown={handleCardKeyDown("ativos")}
+              onKeyDown={colaboradores.length > 0 ? handleCardKeyDown("ativos") : undefined}
             >
               <CardHeader className={cardHeaderClass}>
                 <div className="flex items-center justify-between">
@@ -1195,21 +1234,39 @@ export default function GestaoAsos() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{coveragePercent}%</div>
-                <p className="text-xs text-muted-foreground">
-                  Cobertos: {formatNumber(colaboradoresCobertos)} / {formatNumber(totalColaboradores)}
-                </p>
-                <div className="mt-3 h-2 w-full rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-emerald-500 transition-all"
-                    style={{ width: `${Math.min(coveragePercent, 100)}%` }}
-                  />
-                </div>
-                {colaboradoresSemAso > 0 && (
-                  <div className="mt-2 flex items-center gap-2 text-sm text-amber-600">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span>{formatNumber(colaboradoresSemAso)} colaborador(es) sem ASO válido</span>
+                {colaboradores.length === 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-2xl font-bold text-muted-foreground">-</div>
+                    <p className="text-xs text-muted-foreground">
+                      Nenhum colaborador cadastrado
+                    </p>
+                    <div className="mt-3 h-2 w-full rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-muted" style={{ width: "0%" }} />
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-sm text-amber-600">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>Cadastre colaboradores para calcular a cobertura</span>
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{coveragePercent}%</div>
+                    <p className="text-xs text-muted-foreground">
+                      Cobertos: {formatNumber(colaboradoresCobertos)} / {formatNumber(totalColaboradores)}
+                    </p>
+                    <div className="mt-3 h-2 w-full rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${Math.min(coveragePercent, 100)}%` }}
+                      />
+                    </div>
+                    {colaboradoresSemAso > 0 && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-amber-600">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>{formatNumber(colaboradoresSemAso)} colaborador(es) sem ASO válido</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1371,23 +1428,34 @@ export default function GestaoAsos() {
                 {proximosVencimentos.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum ASO próximo de vencer.</p>
                 ) : (
-                  proximosVencimentos.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between gap-4 rounded-lg border border-border p-3"
-                    >
-                      <div>
-                        <p className="font-medium">{item.colaboradorNome || "Colaborador não informado"}</p>
-                        <p className="text-sm text-muted-foreground">{item.empresaNome || "Empresa não informada"}</p>
+                  proximosVencimentos.map((item) => {
+                    const colaboradorExiste = item.colaboradorId ? colaboradores.some((c: any) => c.id === item.colaboradorId) : false;
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "flex items-center justify-between gap-4 rounded-lg border border-border p-3",
+                          !colaboradorExiste && colaboradores.length > 0 && "bg-orange-50 border-orange-200"
+                        )}
+                      >
+                        <div>
+                          <p className={cn(
+                            "font-medium",
+                            !colaboradorExiste && colaboradores.length > 0 && "text-orange-700"
+                          )}>
+                            {item.colaboradorNome || (colaboradores.length === 0 ? "Sem colaboradores cadastrados" : "Colaborador excluído")}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{item.empresaNome || "Empresa não informada"}</p>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant="outline" className="mb-1">
+                            {getTipoAsoLabel(item.tipoAso)}
+                          </Badge>
+                          <div className="text-sm text-muted-foreground">{formatDate(item.dataValidade)}</div>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <Badge variant="outline" className="mb-1">
-                          {getTipoAsoLabel(item.tipoAso)}
-                        </Badge>
-                        <div className="text-sm text-muted-foreground">{formatDate(item.dataValidade)}</div>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </CardContent>
             </Card>
@@ -1403,23 +1471,34 @@ export default function GestaoAsos() {
                 {asosVencidosRecentes.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum ASO vencido recentemente.</p>
                 ) : (
-                  asosVencidosRecentes.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between gap-4 rounded-lg border border-border p-3"
-                    >
-                      <div>
-                        <p className="font-medium">{item.colaboradorNome || "Colaborador não informado"}</p>
-                        <p className="text-sm text-muted-foreground">{item.empresaNome || "Empresa não informada"}</p>
+                  asosVencidosRecentes.map((item) => {
+                    const colaboradorExiste = item.colaboradorId ? colaboradores.some((c: any) => c.id === item.colaboradorId) : false;
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "flex items-center justify-between gap-4 rounded-lg border border-border p-3",
+                          !colaboradorExiste && colaboradores.length > 0 && "bg-orange-50 border-orange-200"
+                        )}
+                      >
+                        <div>
+                          <p className={cn(
+                            "font-medium",
+                            !colaboradorExiste && colaboradores.length > 0 && "text-orange-700"
+                          )}>
+                            {item.colaboradorNome || (colaboradores.length === 0 ? "Sem colaboradores cadastrados" : "Colaborador excluído")}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{item.empresaNome || "Empresa não informada"}</p>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant="destructive" className="mb-1">
+                            {getTipoAsoLabel(item.tipoAso)}
+                          </Badge>
+                          <div className="text-sm text-muted-foreground">{formatDate(item.dataValidade)}</div>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <Badge variant="destructive" className="mb-1">
-                          {getTipoAsoLabel(item.tipoAso)}
-                        </Badge>
-                        <div className="text-sm text-muted-foreground">{formatDate(item.dataValidade)}</div>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </CardContent>
             </Card>
@@ -1590,33 +1669,76 @@ export default function GestaoAsos() {
     </div>
   );
 
-  const renderLista = () => (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Lista de ASOs</h2>
-          <p className="text-sm text-muted-foreground">
-            Consulte rapidamente os ASOs com filtros avançados.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
-            <label htmlFor="toggle-historico" className="font-medium">
-              Mostrar histórico completo
-            </label>
-            <input
-              id="toggle-historico"
-              type="checkbox"
-              checked={mostrarHistorico}
-              onChange={(e) => setMostrarHistorico(e.target.checked)}
-              className="h-4 w-4"
-            />
-          </div>
-          {renderActions()}
-        </div>
-      </div>
+  const renderLista = () => {
+    const asosSemColaborador = asosParaTabela.filter((aso: any) => {
+      const colaborador = colaboradores.find((c: any) => c.id === aso.colaboradorId);
+      return !colaborador;
+    });
 
-      <Card className={dashboardCardClass}>
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Lista de ASOs</h2>
+            <p className="text-sm text-muted-foreground">
+              Consulte rapidamente os ASOs com filtros avançados.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+              <label htmlFor="toggle-historico" className="font-medium">
+                Mostrar histórico completo
+              </label>
+              <input
+                id="toggle-historico"
+                type="checkbox"
+                checked={mostrarHistorico}
+                onChange={(e) => setMostrarHistorico(e.target.checked)}
+                className="h-4 w-4"
+              />
+            </div>
+            {renderActions()}
+          </div>
+        </div>
+
+        {colaboradores.length === 0 && (
+          <Card className="border-amber-200 bg-amber-50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-900">
+                    Nenhum colaborador cadastrado
+                  </p>
+                  <p className="text-xs text-amber-800 mt-1">
+                    Não há colaboradores cadastrados no sistema. Os ASOs existentes podem estar vinculados a colaboradores que foram excluídos. 
+                    Cadastre colaboradores na página de <strong>Colaboradores</strong> para criar novos ASOs.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {colaboradores.length > 0 && asosSemColaborador.length > 0 && (
+          <Card className="border-orange-200 bg-orange-50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-orange-900">
+                    {asosSemColaborador.length} ASO(s) sem colaborador vinculado
+                  </p>
+                  <p className="text-xs text-orange-800 mt-1">
+                    Alguns ASOs estão vinculados a colaboradores que foram excluídos. Estes registros aparecerão com "Colaborador excluído" na lista.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className={dashboardCardClass}>
         <CardHeader>
           <CardTitle className="text-lg font-semibold">Filtros</CardTitle>
         </CardHeader>
@@ -1657,11 +1779,17 @@ export default function GestaoAsos() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  {colaboradores.map((colaborador: any) => (
-                    <SelectItem key={colaborador.id} value={String(colaborador.id)}>
-                      {colaborador.nomeCompleto}
-                    </SelectItem>
-                  ))}
+                  {colaboradores.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Nenhum colaborador cadastrado
+                    </div>
+                  ) : (
+                    colaboradores.map((colaborador: any) => (
+                      <SelectItem key={colaborador.id} value={String(colaborador.id)}>
+                        {colaborador.nomeCompleto}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1811,62 +1939,78 @@ export default function GestaoAsos() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {asosParaTabela.map((aso: any) => (
-                    <TableRow key={aso.id}>
-                      <TableCell className="font-medium">{aso.numeroAso || "N/A"}</TableCell>
-                      <TableCell>{getColaboradorName(aso.colaboradorId)}</TableCell>
-                      <TableCell>{getEmpresaName(aso.empresaId)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{getTipoAsoLabel(aso.tipoAso)}</Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(aso.dataEmissao)}</TableCell>
-                      <TableCell>{formatDate(aso.dataValidade)}</TableCell>
-                      <TableCell>
-                        {aso.medicoResponsavel || "N/A"}
-                        {aso.crmMedico && ` (${aso.crmMedico})`}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            aso.apto === "sim"
-                              ? "default"
-                              : aso.apto === "nao"
-                              ? "destructive"
-                              : "outline"
-                          }
-                        >
-                          {getAptoLabel(aso.apto)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(aso)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(aso)}
+                  {asosParaTabela.map((aso: any) => {
+                    const colaboradorExiste = colaboradores.some((c: any) => c.id === aso.colaboradorId);
+                    const colaboradorNome = getColaboradorName(aso.colaboradorId);
+                    return (
+                      <TableRow 
+                        key={aso.id} 
+                        className={!colaboradorExiste && colaboradores.length > 0 ? "bg-orange-50/50" : ""}
+                      >
+                        <TableCell className="font-medium">{aso.numeroAso || "N/A"}</TableCell>
+                        <TableCell>
+                          {!colaboradorExiste && colaboradores.length > 0 ? (
+                            <span className="text-orange-600 font-medium">{colaboradorNome}</span>
+                          ) : colaboradores.length === 0 ? (
+                            <span className="text-amber-600 font-medium">{colaboradorNome}</span>
+                          ) : (
+                            colaboradorNome
+                          )}
+                        </TableCell>
+                        <TableCell>{getEmpresaName(aso.empresaId)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{getTipoAsoLabel(aso.tipoAso)}</Badge>
+                        </TableCell>
+                        <TableCell>{formatDate(aso.dataEmissao)}</TableCell>
+                        <TableCell>{formatDate(aso.dataValidade)}</TableCell>
+                        <TableCell>
+                          {aso.medicoResponsavel || "N/A"}
+                          {aso.crmMedico && ` (${aso.crmMedico})`}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              aso.apto === "sim"
+                                ? "default"
+                                : aso.apto === "nao"
+                                ? "destructive"
+                                : "outline"
+                            }
                           >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(aso.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            {getAptoLabel(aso.apto)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(aso)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(aso)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(aso.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
       </Card>
-    </div>
-  );
+      </div>
+    );
+  };
 
   const renderRelatorios = () => (
     <div className="space-y-4">
@@ -1894,9 +2038,9 @@ export default function GestaoAsos() {
                 </SelectTrigger>
                 <SelectContent>
                   {colaboradores.length === 0 ? (
-                    <SelectItem value="" disabled>
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
                       Nenhum colaborador cadastrado
-                    </SelectItem>
+                    </div>
                   ) : (
                     colaboradores.map((colaborador: any) => (
                       <SelectItem key={colaborador.id} value={String(colaborador.id)}>
@@ -1911,11 +2055,18 @@ export default function GestaoAsos() {
               <Button
                 className="w-full md:w-auto"
                 onClick={handleGerarRelatorio}
-                disabled={!colaboradorRelatorioId || gerandoRelatorio}
+                disabled={!colaboradorRelatorioId || gerandoRelatorio || colaboradores.length === 0}
               >
                 {gerandoRelatorio ? "Gerando PDF..." : "Gerar PDF"}
               </Button>
             </div>
+            {colaboradores.length === 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm text-amber-800">
+                  <strong>Atenção:</strong> Não há colaboradores cadastrados. Cadastre colaboradores na página de Colaboradores antes de gerar relatórios.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="text-xs text-muted-foreground space-y-1">
@@ -2014,4 +2165,3 @@ export default function GestaoAsos() {
     </DashboardLayout>
   );
 }
-

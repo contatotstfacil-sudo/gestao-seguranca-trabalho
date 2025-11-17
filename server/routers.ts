@@ -446,6 +446,21 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         return db.deleteEmpresa(input.id);
       }),
+    deleteBatch: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        if (input.ids.length === 0) {
+          throw new Error("Nenhuma empresa selecionada para exclusão");
+        }
+        const results = await Promise.all(
+          input.ids.map(id => db.deleteEmpresa(id))
+        );
+        return {
+          success: true,
+          deletedCount: results.filter(r => r.success).length,
+          totalRequested: input.ids.length,
+        };
+      }),
   }),
 
   // Colaboradores
@@ -656,6 +671,21 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return db.deleteObra(input.id);
+      }),
+    deleteBatch: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        if (input.ids.length === 0) {
+          throw new Error("Nenhuma obra selecionada para exclusão");
+        }
+        const results = await Promise.all(
+          input.ids.map(id => db.deleteObra(id))
+        );
+        return {
+          success: true,
+          deletedCount: results.filter(r => r.success).length,
+          totalRequested: input.ids.length,
+        };
       }),
   }),
 
@@ -905,6 +935,21 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return db.deleteCargo(input.id);
+      }),
+    deleteBatch: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        if (input.ids.length === 0) {
+          throw new Error("Nenhum cargo selecionado para exclusão");
+        }
+        const results = await Promise.all(
+          input.ids.map(id => db.deleteCargo(id))
+        );
+        return {
+          success: true,
+          deletedCount: results.filter(r => r.success).length,
+          totalRequested: input.ids.length,
+        };
       }),
     relatorioPorEmpresa: protectedProcedure
       .input(z.object({ empresaId: z.number().optional() }).optional())

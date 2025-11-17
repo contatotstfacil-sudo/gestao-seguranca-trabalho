@@ -219,7 +219,7 @@ export async function getAllEmpresas(filters?: { searchTerm?: string; dataInicio
       query = query.where(or(...conditions)) as any;
     }
     
-    return await query.orderBy(desc(empresas.createdAt));
+    return await query.orderBy(asc(empresas.razaoSocial));
   } catch (error) {
     console.error("[Database] Erro ao buscar empresas:", error);
     throw error;
@@ -307,7 +307,7 @@ export async function getAllColaboradores(empresaId: number | null, filters?: { 
       ) as any) as any;
     }
     
-    return await query.orderBy(desc(colaboradores.createdAt));
+    return await query.orderBy(asc(colaboradores.nomeCompleto));
   } catch (error) {
     console.error("[Database] Erro ao buscar colaboradores:", error);
     throw error;
@@ -521,7 +521,7 @@ export async function getAllObras(empresaId: number | null) {
       query = query.where(eq(obras.empresaId, empresaId)) as any;
     }
     
-    return await query.orderBy(desc(obras.createdAt));
+    return await query.orderBy(asc(obras.nomeObra));
   } catch (error) {
     console.error("[Database] Erro ao buscar obras:", error);
     throw error;
@@ -739,7 +739,7 @@ export async function getAllTreinamentos(empresaId: number | null) {
     if (empresaId) {
       query = query.where(eq(treinamentos.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(treinamentos.createdAt));
+    return await query.orderBy(asc(treinamentos.nomeTreinamento));
   } catch (error) {
     console.error("[Database] Erro ao buscar treinamentos:", error);
     throw error;
@@ -806,7 +806,7 @@ export async function getAllEpis(empresaId: number | null) {
     if (empresaId) {
       query = query.where(eq(epis.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(epis.createdAt));
+    return await query.orderBy(asc(epis.nomeEpi));
   } catch (error) {
     console.error("[Database] Erro ao buscar EPIs:", error);
     throw error;
@@ -904,7 +904,7 @@ export async function getAllFichasEpiEmitidas(empresaId: number | null) {
     if (empresaId) {
       query = query.where(eq(fichasEpiEmitidas.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(fichasEpiEmitidas.createdAt));
+    return await query.orderBy(asc(fichasEpiEmitidas.nomeArquivo));
   } catch (error) {
     console.error("[Database] Erro ao buscar fichas EPI emitidas:", error);
     throw error;
@@ -950,7 +950,7 @@ export async function getAllCargos(empresaId: number | null) {
     if (empresaId) {
       query = query.where(eq(cargos.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(cargos.createdAt));
+    return await query.orderBy(asc(cargos.nomeCargo));
   } catch (error) {
     console.error("[Database] Erro ao buscar cargos:", error);
     throw error;
@@ -1119,7 +1119,7 @@ export async function getAllSetores(filters?: any, empresaId?: number | null) {
       query = query.where(and(...conditions)) as any;
     }
 
-    return await query.orderBy(desc(setores.createdAt));
+    return await query.orderBy(asc(setores.nomeSetor));
   } catch (error) {
     console.error("[Database] Erro ao buscar setores:", error);
     throw error;
@@ -1180,8 +1180,10 @@ export async function deleteSetores(ids: number[]) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    await db.delete(setores).where(inArray(setores.id, ids));
-    return { success: true };
+    const result = await db.delete(setores).where(inArray(setores.id, ids));
+    // Extrair o número de linhas afetadas
+    const deletedCount = (result as any).affectedRows || (result as any)[0]?.affectedRows || ids.length;
+    return { success: true, deleted: deletedCount };
   } catch (error) {
     console.error("[Database] Erro ao excluir setores:", error);
     throw error;
@@ -1206,7 +1208,8 @@ export async function getTreinamentosByCargo(cargoId: number) {
       })
       .from(cargoTreinamentos)
       .leftJoin(tiposTreinamentos, eq(cargoTreinamentos.tipoTreinamentoId, tiposTreinamentos.id))
-      .where(eq(cargoTreinamentos.cargoId, cargoId));
+      .where(eq(cargoTreinamentos.cargoId, cargoId))
+      .orderBy(asc(tiposTreinamentos.nomeTreinamento));
     console.log(`[Database] Treinamentos encontrados para cargo ${cargoId}:`, result.length);
     return result;
   } catch (error) {
@@ -1259,7 +1262,8 @@ export async function getSetoresByCargo(cargoId: number) {
       })
       .from(cargoSetores)
       .leftJoin(setores, eq(cargoSetores.setorId, setores.id))
-      .where(eq(cargoSetores.cargoId, cargoId));
+      .where(eq(cargoSetores.cargoId, cargoId))
+      .orderBy(asc(setores.nomeSetor));
     console.log(`[Database] Setores encontrados para cargo ${cargoId}:`, result.length);
     return result;
   } catch (error) {
@@ -1304,7 +1308,7 @@ export async function getAllRiscosOcupacionais(empresaId: number | null) {
     if (empresaId) {
       query = query.where(eq(riscosOcupacionais.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(riscosOcupacionais.createdAt));
+    return await query.orderBy(asc(riscosOcupacionais.nomeRisco));
   } catch (error) {
     console.error("[Database] Erro ao buscar riscos ocupacionais:", error);
     throw error;
@@ -1438,7 +1442,8 @@ export async function getRiscosByCargo(cargoId: number) {
       })
       .from(cargoRiscos)
       .leftJoin(riscosOcupacionais, eq(cargoRiscos.riscoOcupacionalId, riscosOcupacionais.id))
-      .where(eq(cargoRiscos.cargoId, cargoId));
+      .where(eq(cargoRiscos.cargoId, cargoId))
+      .orderBy(asc(riscosOcupacionais.nomeRisco));
     
     return resultados;
   } catch (error) {
@@ -1520,7 +1525,7 @@ export async function getAllTiposTreinamentos(filters?: any, empresaId?: number 
     if (empresaId) {
       query = query.where(eq(tiposTreinamentos.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(tiposTreinamentos.createdAt));
+    return await query.orderBy(asc(tiposTreinamentos.nomeTreinamento));
   } catch (error) {
     console.error("[Database] Erro ao buscar tipos de treinamentos:", error);
     throw error;
@@ -1599,7 +1604,7 @@ export async function getAllModelosCertificados(empresaId: number | null) {
     if (empresaId) {
       query = query.where(eq(modelosCertificados.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(modelosCertificados.createdAt));
+    return await query.orderBy(asc(modelosCertificados.nome));
   } catch (error) {
     console.error("[Database] Erro ao buscar modelos de certificados:", error);
     throw error;
@@ -1694,7 +1699,7 @@ export async function getAllResponsaveis(empresaId: number | null) {
     if (empresaId) {
       query = query.where(eq(responsaveis.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(responsaveis.createdAt));
+    return await query.orderBy(asc(responsaveis.nomeCompleto));
   } catch (error) {
     console.error("[Database] Erro ao buscar responsáveis:", error);
     throw error;
@@ -1773,7 +1778,7 @@ export async function getAllCertificadosEmitidos(empresaId: number | null, filte
     if (empresaId) {
       query = query.where(eq(certificadosEmitidos.empresaId, empresaId)) as any;
     }
-    return await query.orderBy(desc(certificadosEmitidos.createdAt));
+    return await query.orderBy(asc(certificadosEmitidos.nomeColaborador));
   } catch (error) {
     console.error("[Database] Erro ao buscar certificados emitidos:", error);
     throw error;
@@ -1840,7 +1845,7 @@ export async function getAllTiposEpis(searchTerm?: string) {
     if (searchTerm) {
       query = query.where(sql`${tiposEpis.tipoEpi} LIKE ${`%${searchTerm}%`}` as any) as any;
     }
-    return await query.orderBy(desc(tiposEpis.createdAt));
+    return await query.orderBy(asc(tiposEpis.tipoEpi));
   } catch (error) {
     console.error("[Database] Erro ao buscar tipos de EPIs:", error);
     throw error;
@@ -1934,7 +1939,7 @@ export async function getAllOrdensServico(empresaId: number | null, filters?: an
       query = query.where(eq(ordensServico.empresaId, empresaId)) as any;
     }
     
-    return await query.orderBy(desc(ordensServico.createdAt));
+    return await query.orderBy(asc(ordensServico.numeroOrdem));
   } catch (error) {
     console.error("[Database] Erro ao buscar ordens de serviço:", error);
     throw error;
@@ -2293,7 +2298,7 @@ export async function getAllAsos(filters?: {
       query = query.where(whereClause);
     }
 
-    return await query.orderBy(desc(asos.updatedAt), desc(asos.dataValidade));
+    return await query.orderBy(asc(asos.numeroAso));
   } catch (error) {
     console.error("[Database] Erro ao listar ASOs:", error);
     throw error;
@@ -2444,11 +2449,43 @@ export async function getAsoDashboard(tenantId: number) {
   if (!db) throw new Error("Database not available");
 
   try {
-    const registros = await db.select().from(asos).where(eq(asos.tenantId, tenantId));
+    // Buscar colaboradores primeiro
     const colaboradoresRows = await db
       .select({ id: colaboradores.id })
       .from(colaboradores)
       .where(eq(colaboradores.tenantId, tenantId));
+
+    const totalColaboradores = colaboradoresRows.length;
+    const colaboradoresIds = new Set(colaboradoresRows.map((c) => c.id));
+
+    // Se não há colaboradores, retornar dados vazios
+    if (totalColaboradores === 0) {
+      return {
+        totalAsos: 0,
+        totalAtivos: 0,
+        totalVencidos: 0,
+        totalAVencer30: 0,
+        totalAVencer5: 0,
+        cobertura: {
+          totalColaboradores: 0,
+          colaboradoresCobertos: 0,
+          colaboradoresSemAso: 0,
+          percentual: 0,
+        },
+        porTipo: [],
+        vencimentosPorMes: [],
+        topEmpresasVencidos: [],
+        proximosVencimentos: [],
+        asosVencidosRecentes: [],
+        ultimaAtualizacao: new Date().toISOString(),
+      };
+    }
+
+    // Buscar apenas ASOs de colaboradores que ainda existem
+    const todosRegistros = await db.select().from(asos).where(eq(asos.tenantId, tenantId));
+    const registros = todosRegistros.filter((aso) => 
+      aso.colaboradorId && colaboradoresIds.has(aso.colaboradorId)
+    );
 
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -2461,7 +2498,7 @@ export async function getAsoDashboard(tenantId: number) {
 
     const setCobertos = new Set<number>();
     registros.forEach((item: RegistroAso) => {
-      if (item.dataValidade) {
+      if (item.dataValidade && item.colaboradorId) {
         const validade = new Date(item.dataValidade);
         validade.setHours(0, 0, 0, 0);
         if (validade >= hoje) {
@@ -2470,7 +2507,6 @@ export async function getAsoDashboard(tenantId: number) {
       }
     });
 
-    const totalColaboradores = colaboradoresRows.length;
     const colaboradoresCobertos = setCobertos.size;
     const colaboradoresSemAso = Math.max(totalColaboradores - colaboradoresCobertos, 0);
     const coberturaPercentual = totalColaboradores
@@ -2499,6 +2535,19 @@ export async function getAsoDashboard(tenantId: number) {
       .slice(0, 6)
       .map(([mes, total]) => ({ mes, total }));
 
+    // Buscar nomes das empresas para topEmpresasVencidos
+    const empresasMap = new Map<number, string>();
+    const empresasIds = new Set(registros.map((r) => r.empresaId).filter((id): id is number => id !== null));
+    if (empresasIds.size > 0) {
+      const empresasList = await db
+        .select({ id: empresas.id, razaoSocial: empresas.razaoSocial })
+        .from(empresas)
+        .where(inArray(empresas.id, Array.from(empresasIds)));
+      empresasList.forEach((empresa) => {
+        empresasMap.set(empresa.id, empresa.razaoSocial);
+      });
+    }
+
     const topEmpresasVencidosMap = new Map<number, number>();
     registros.forEach((item: RegistroAso) => {
       if (!item.dataValidade || !item.empresaId) return;
@@ -2512,13 +2561,25 @@ export async function getAsoDashboard(tenantId: number) {
       .slice(0, 5)
       .map(([empresaId, total]) => ({
         empresaId,
-        empresaNome: null as string | null,
+        empresaNome: empresasMap.get(empresaId) || null,
         total,
       }));
 
+    // Buscar nomes dos colaboradores para proximosVencimentos e asosVencidosRecentes
+    const colaboradoresMap = new Map<number, string>();
+    if (colaboradoresRows.length > 0) {
+      const colaboradoresCompleto = await db
+        .select({ id: colaboradores.id, nomeCompleto: colaboradores.nomeCompleto })
+        .from(colaboradores)
+        .where(inArray(colaboradores.id, Array.from(colaboradoresIds)));
+      colaboradoresCompleto.forEach((colab) => {
+        colaboradoresMap.set(colab.id, colab.nomeCompleto || "N/A");
+      });
+    }
+
     const proximosVencimentos = registros
       .filter((item: RegistroAso) => {
-        if (!item.dataValidade) return false;
+        if (!item.dataValidade || !item.colaboradorId) return false;
         const validade = new Date(item.dataValidade);
         validade.setHours(0, 0, 0, 0);
         return validade >= hoje;
@@ -2535,14 +2596,14 @@ export async function getAsoDashboard(tenantId: number) {
         dataValidade: item.dataValidade ? new Date(item.dataValidade).toISOString() : null,
         tipoAso: item.tipoAso,
         colaboradorId: item.colaboradorId,
-        colaboradorNome: null as string | null,
+        colaboradorNome: item.colaboradorId ? colaboradoresMap.get(item.colaboradorId) || null : null,
         empresaId: item.empresaId,
-        empresaNome: null as string | null,
+        empresaNome: item.empresaId ? empresasMap.get(item.empresaId) || null : null,
       }));
 
     const asosVencidosRecentes = registros
       .filter((item: RegistroAso) => {
-        if (!item.dataValidade) return false;
+        if (!item.dataValidade || !item.colaboradorId) return false;
         const validade = new Date(item.dataValidade);
         validade.setHours(0, 0, 0, 0);
         return validade < hoje;
@@ -2559,13 +2620,13 @@ export async function getAsoDashboard(tenantId: number) {
         dataValidade: item.dataValidade ? new Date(item.dataValidade).toISOString() : null,
         tipoAso: item.tipoAso,
         colaboradorId: item.colaboradorId,
-        colaboradorNome: null as string | null,
+        colaboradorNome: item.colaboradorId ? colaboradoresMap.get(item.colaboradorId) || null : null,
         empresaId: item.empresaId,
-        empresaNome: null as string | null,
+        empresaNome: item.empresaId ? empresasMap.get(item.empresaId) || null : null,
       }));
 
     const totalAVencer30 = registros.filter((item: RegistroAso) => {
-      if (!item.dataValidade) return false;
+      if (!item.dataValidade || !item.colaboradorId) return false;
       const validade = new Date(item.dataValidade);
       validade.setHours(0, 0, 0, 0);
       const diff = Math.round((validade.getTime() - hoje.getTime()) / dayMs);
@@ -2573,7 +2634,7 @@ export async function getAsoDashboard(tenantId: number) {
     }).length;
 
     const totalAVencer5 = registros.filter((item: RegistroAso) => {
-      if (!item.dataValidade) return false;
+      if (!item.dataValidade || !item.colaboradorId) return false;
       const validade = new Date(item.dataValidade);
       validade.setHours(0, 0, 0, 0);
       const diff = Math.round((validade.getTime() - hoje.getTime()) / dayMs);

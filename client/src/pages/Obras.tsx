@@ -6,11 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Plus, Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Plus, Pencil, Trash2, FileText } from "lucide-react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
 
 const GRAUS_RISCO = ["1", "2", "3", "4"];
 const TIPOS_LOGRADOURO = ["Rua", "Avenida", "Travessa", "Alameda", "Estrada", "Rodovia", "Praça", "Largo", "Passagem", "Beco"];
@@ -19,6 +21,7 @@ const ESTADOS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT
 export default function Obras() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [formData, setFormData] = useState({
     nomeObra: "",
     cnpj: "",
@@ -71,6 +74,18 @@ export default function Obras() {
     onSuccess: () => {
       utils.obras.list.invalidate();
       toast.success("Obra excluída com sucesso!");
+      setSelectedIds([]);
+    },
+  });
+
+  const deleteBatchMutation = trpc.obras.deleteBatch.useMutation({
+    onSuccess: (data) => {
+      utils.obras.list.invalidate();
+      toast.success(`${data.deletedCount} obra(s) excluída(s) com sucesso!`);
+      setSelectedIds([]);
+    },
+    onError: (error) => {
+      toast.error(`Erro ao excluir obras: ${error.message}`);
     },
   });
 
@@ -156,6 +171,168 @@ export default function Obras() {
   const getEmpresaName = (empresaId: number): string => {
     return empresas?.find((e: any) => e.id === empresaId)?.razaoSocial || "-";
   };
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((selectedId) => selectedId !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === obras?.length && obras && obras.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(obras?.map((obra: any) => obra.id) || []);
+    }
+  };
+
+  const handleDeleteBatch = () => {
+    if (selectedIds.length === 0) {
+      toast.error("Selecione pelo menos uma obra para excluir");
+      return;
+    }
+
+    const obrasSelecionadas = obras?.filter((obra: any) => selectedIds.includes(obra.id));
+    const nomesObras = obrasSelecionadas?.map((obra: any) => obra.nomeObra || `Obra #${obra.id}`).join(", ") || "";
+
+    if (confirm(`Tem certeza que deseja excluir ${selectedIds.length} obra(s)?\n\nObras: ${nomesObras.substring(0, 200)}${nomesObras.length > 200 ? "..." : ""}`)) {
+      deleteBatchMutation.mutate({ ids: selectedIds });
+    }
+  };
+
+  const gerarPDFFicha = (obra: any) => {
+    try {
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const margin = 20;
+      const pageWidth = 210;
+      let y = margin;
+
+      // Título
+      pdf.setFontSize(16);
+      pdf.setFont("helvetica", "bold");
+      const title = "FICHA DE OBRA";
+      const titleWidth = pdf.getTextWidth(title);
+      pdf.text(title, (pageWidth - titleWidth) / 2, y);
+      y += 15;
+
+      // Informações Básicas
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("INFORMAÇÕES BÁSICAS", margin, y);
+      y += 8;
+
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      const lineHeight = 7;
+
+      const addField = (label: string, value: string | undefined) => {
+        if (y > 280) {
+          pdf.addPage();
+          y = margin;
+        }
+        pdf.setFont("helvetica", "bold");
+        pdf.text(`${label}:`, margin, y);
+        pdf.setFont("helvetica", "normal");
+        const textValue = value || "-";
+        const maxWidth = 150;
+        const lines = pdf.splitTextToSize(textValue, maxWidth);
+        pdf.text(lines, margin + 50, y);
+        y += lineHeight * lines.length;
+      };
+
+      addField("Nome da Obra", obra.nomeObra);
+      addField("Empresa", getEmpresaName(obra.empresaId));
+      addField("Status", obra.status === "ativa" ? "Ativa" : "Concluída");
+      addField("Grau de Risco", obra.grauRisco);
+      addField("Colaboradores Previstos", obra.quantidadePrevistoColaboradores?.toString());
+
+      y += 5;
+
+      // Identificação
+      if (obra.cnpj || obra.cno || obra.cnae) {
+        pdf.setFontSize(12);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("IDENTIFICAÇÃO", margin, y);
+        y += 8;
+
+        pdf.setFontSize(10);
+        pdf.setFont("helvetica", "normal");
+        addField("CNPJ", obra.cnpj);
+        addField("CNO", obra.cno);
+        addField("CNAE", obra.cnae);
+        y += 5;
+      }
+
+      // Descrição da Atividade
+      if (obra.descricaoAtividade) {
+        pdf.setFontSize(12);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("DESCRIÇÃO DA ATIVIDADE", margin, y);
+        y += 8;
+
+        pdf.setFontSize(10);
+        pdf.setFont("helvetica", "normal");
+        const descLines = pdf.splitTextToSize(obra.descricaoAtividade, pageWidth - 2 * margin);
+        pdf.text(descLines, margin, y);
+        y += lineHeight * descLines.length + 5;
+      }
+
+      // Localização
+      if (obra.tipoLogradouro || obra.nomeLogradouro) {
+        pdf.setFontSize(12);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("LOCALIZAÇÃO", margin, y);
+        y += 8;
+
+        pdf.setFontSize(10);
+        pdf.setFont("helvetica", "normal");
+        const enderecoParts = [];
+        if (obra.tipoLogradouro) enderecoParts.push(obra.tipoLogradouro);
+        if (obra.nomeLogradouro) enderecoParts.push(obra.nomeLogradouro);
+        if (obra.numeroEndereco) enderecoParts.push(obra.numeroEndereco);
+        if (obra.complementoEndereco) enderecoParts.push(obra.complementoEndereco);
+        const endereco = enderecoParts.join(", ");
+        addField("Endereço", endereco || undefined);
+        addField("Bairro", obra.bairroEndereco);
+        addField("Cidade", obra.cidadeEndereco);
+        addField("Estado", obra.estadoEndereco);
+        addField("CEP", obra.cepEndereco);
+        y += 5;
+      }
+
+      // Datas
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("DATAS", margin, y);
+      y += 8;
+
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      addField("Data de Início", obra.dataInicio ? formatDate(obra.dataInicio) : undefined);
+      addField("Data de Término", obra.dataFim ? formatDate(obra.dataFim) : undefined);
+
+      // Salvar PDF
+      const fileName = `Ficha_Obra_${obra.nomeObra.replace(/[^a-zA-Z0-9]/g, "_")}_${new Date().getTime()}.pdf`;
+      pdf.save(fileName);
+      toast.success("PDF gerado com sucesso!");
+    } catch (error: any) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error(`Erro ao gerar PDF: ${error.message}`);
+    }
+  };
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [obras]);
 
   if (isLoading) return <div>Carregando...</div>;
 
@@ -439,13 +616,37 @@ export default function Obras() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Obras</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle>Lista de Obras</CardTitle>
+            {selectedIds.length > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDeleteBatch}
+                disabled={deleteBatchMutation.isPending}
+              >
+                {deleteBatchMutation.isPending ? "Excluindo..." : `Excluir ${selectedIds.length} selecionada(s)`}
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
+            {obras && obras.length > 0 && (
+              <div className="flex items-center gap-2 pb-2 border-b mb-2">
+                <Checkbox
+                  checked={selectedIds.length === obras.length && obras.length > 0}
+                  onCheckedChange={handleSelectAll}
+                />
+                <span className="text-sm text-muted-foreground">
+                  Selecionar todas ({selectedIds.length}/{obras.length})
+                </span>
+              </div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12"></TableHead>
                   <TableHead>Nome da Obra</TableHead>
                   <TableHead>Empresa</TableHead>
                   <TableHead>Grau de Risco</TableHead>
@@ -458,6 +659,12 @@ export default function Obras() {
               <TableBody>
                 {obras?.map((obra: any) => (
                   <TableRow key={obra.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.includes(obra.id)}
+                        onCheckedChange={() => handleToggleSelect(obra.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{obra.nomeObra}</TableCell>
                     <TableCell>{getEmpresaName(obra.empresaId)}</TableCell>
                     <TableCell>{obra.grauRisco || "-"}</TableCell>
@@ -472,6 +679,14 @@ export default function Obras() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => gerarPDFFicha(obra)}
+                          title="Baixar Ficha em PDF"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"

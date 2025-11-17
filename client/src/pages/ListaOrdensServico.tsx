@@ -744,7 +744,7 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
           <table style="width: 100%; border-collapse: collapse;">
             <tr style="background-color: #f9fafb;">
               <th style="padding: 6px; border: 1px solid #000; text-align: left; font-weight: bold; font-size: 11px; width: 30%;">Tipo de Agente</th>
-              <th style="padding: 6px; border: 1px solid #000; text-align: left; font-weight: bold; font-size: 11px;">Descrição dos Riscos</th>
+              <th style="padding: 6px; border: 1px solid #000; text-align: left; font-weight: bold; font-size: 11px;">Conclusão</th>
             </tr>
             ${riscos.map((risco) => `
             <tr>
