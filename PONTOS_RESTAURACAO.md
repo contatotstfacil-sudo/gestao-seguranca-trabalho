@@ -82,6 +82,7 @@ git tag -a $tagName -m "Ponto de restauração criado em $data"
 
 ## 📝 Pontos Criados
 
+- **restore-point-2025-11-17_12-01-25**: Implementação banco CBO (Classificação Brasileira de Ocupações), exclusão em massa Setores, ordenação alfabética em todas as listas do sistema (17/11/2025 12:01:25)
 - **restore-point-2025-11-14_19-02-11**: Correções nos riscos ocupacionais, remoção da página Riscos Ocupacionais, ajustes no PGRO com scroll no dialog, e melhorias na barra lateral (14/11/2025 19:02:11)
 - **restore-point-2025-11-12_11-56-34**: Otimizações SEO completas - Meta tags, Schema.org, Open Graph, robots.txt, sitemap.xml, performance (12/11/2025 11:56:34)
 - **restore-point-2025-11-10_23-55-21**: Sistema funcional antes de mudanças futuras (10/11/2025 23:55:21)
