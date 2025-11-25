@@ -2008,7 +2008,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(1, 9)],
+                children: [criarHeaderTable(1, 12)],
               }),
             },
             footers: {
@@ -2035,7 +2035,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(2, 9)],
+                children: [criarHeaderTable(2, 12)],
               }),
             },
             footers: {
@@ -2173,7 +2173,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(3, 9)],
+                children: [criarHeaderTable(3, 12)],
               }),
             },
             footers: {
@@ -2270,7 +2270,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(4, 9)],
+                children: [criarHeaderTable(4, 12)],
               }),
             },
             footers: {
@@ -2368,7 +2368,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(5, 9)],
+                children: [criarHeaderTable(5, 12)],
               }),
             },
             footers: {
@@ -2466,7 +2466,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(6, 9)],
+                children: [criarHeaderTable(6, 12)],
               }),
             },
             footers: {
@@ -2564,7 +2564,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(7, 9)],
+                children: [criarHeaderTable(7, 12)],
               }),
             },
             footers: {
@@ -2662,7 +2662,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(8, 9)],
+                children: [criarHeaderTable(8, 12)],
               }),
             },
             footers: {
@@ -2800,7 +2800,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(9, 9)],
+                children: [criarHeaderTable(9, 12)],
               }),
             },
             footers: {
@@ -4783,6 +4783,509 @@ export default function LaudoPgro() {
                 */
               ];
               return page9Content;
+            })(),
+          },
+          {
+            // Décima página com 7. RESPONSABILIDADES
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(10, 12)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page10Content: any[] = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "7. RESPONSABILIDADES", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "808080", // Cinza
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Primeiro item: Implantação do PGRO
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "• ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Implantação do PGRO do Sócio-Diretor ou preposto da empresa:", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.LEFT,
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "O Sócio-Diretor da empresa ou seu preposto ou representante legal na empresa ficará inteiramente responsável pelos seus comandados, respondendo civil e criminalmente por quaisquer atos contrários às normas de higiene e segurança do trabalho estabelecido por este Programa.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Segundo item: Operacional do PGRO
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "• ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Operacional do PGRO Designado pelo empregador, treinado nas ações de prevenção de acidentes:", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.LEFT,
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "Colaborar e participar na manutenção e execução das ações previstas no PGRO. Cumprir as disposições legais e regulares sobre Segurança e Medicina do Trabalho inclusive as ordens de serviços de segurança expedidas pelo Empregador (item 1.7 da NR-01 da Portaria 3.214/78). Seguir as orientações recebidas nos treinamentos do Programa. Informar ao superior hierárquico direto as ocorrências ou situações que, a seu julgamento, possam implicar em riscos à saúde e a integridade física dos trabalhadores.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+              ];
+              return page10Content;
+            })(),
+          },
+          {
+            // Décima primeira página com 8. INVENTARIO DE RISCOS
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(11, 12)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page11Content: any[] = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza escuro (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "8. INVENTARIO DE RISCOS: RECONHECIMENTOS, AVALIAÇÃO E CONTROLE", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "808080", // Cinza escuro
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Parágrafo introdutório
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "Nesta etapa foi feito análise qualitativa através de inspeção \"in loco\" e quantitativa com utilização de equipamentos de dados que foi possível obter através da visita técnica, segue abaixo quadro de riscos por função. No reconhecimento foi montada a planilha da seguinte forma:", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Tabela de Agente Ambiental
+                new Table({
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                  alignment: AlignmentType.CENTER,
+                  rows: [
+                    // Linha 1: Cabeçalho
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Agente Ambiental", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "DCE6F1", // Azul claro
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 2: Grupo 1 - Riscos Físicos
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Grupo 1 - Riscos Físicos", 
+                                  font: "Calibri Light", 
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "00B050", // Verde
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 3: Grupo 2 - Riscos Químicos
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Grupo 2 - Riscos Químicos", 
+                                  font: "Calibri Light", 
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "FF0000", // Vermelho
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 4: Grupo 3 - Riscos Biológicos
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Grupo 3 - Riscos Biológicos", 
+                                  font: "Calibri Light", 
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "8B8B45", // Verde oliva escuro
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 5: Grupo 4 - Riscos Ergonômicos
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Grupo 4 - Riscos Ergonômicos", 
+                                  font: "Calibri Light", 
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "FFFF00", // Amarelo
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 6: Grupo 5 - Riscos de Acidentes
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Grupo 5 - Riscos de Acidentes", 
+                                  font: "Calibri Light", 
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "DCE6F1", // Azul claro
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ];
+              return page11Content;
+            })(),
+          },
+          {
+            // Décima segunda página com 8.1 QUADRO DE INVENTARIO DE RISCOS
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(12, 12)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page12Content: any[] = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "8.1 QUADRO DE INVENTARIO DE RISCOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "808080", // Cinza
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 200 } }),
+                // Total de Cargos e Setores
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "Total de Cargos: ", 
+                      font: "Calibri Light", 
+                      bold: true,
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: `${emissao.cargos?.length || 0}`, 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "    ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Total de Setores: ", 
+                      font: "Calibri Light", 
+                      bold: true,
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: `${new Set(emissao.cargos?.map(c => c.setorNome).filter(s => s) || []).size}`, 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                  alignment: AlignmentType.LEFT,
+                }),
+              ];
+              return page12Content;
             })(),
           },
         ],
