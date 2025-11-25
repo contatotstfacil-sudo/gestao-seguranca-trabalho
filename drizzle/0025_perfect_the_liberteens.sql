@@ -1,0 +1,1 @@
+ALTER TABLE `colaboradores` DROP COLUMN `funcao`;

@@ -77,7 +77,6 @@ export const colaboradores = mysqlTable("colaboradores", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: int("tenantId").notNull(), // Isolamento por tenant
   nomeCompleto: varchar("nomeCompleto", { length: 255 }).notNull(),
-  funcao: varchar("funcao", { length: 255 }),
   cargoId: int("cargoId"),
   setorId: int("setorId"),
   empresaId: int("empresaId").notNull(),

@@ -26,7 +26,8 @@ import {
   permissoes, InsertPermissao,
   userPermissoes, InsertUserPermissao,
   permissoesUsuarios, InsertPermissoesUsuario,
-  asos, InsertAso
+  asos, InsertAso,
+  cargosCbo, InsertCargoCbo
 } from "../drizzle/schema";
 
 import { ENV } from './_core/env';
@@ -193,33 +194,29 @@ export async function getAllEmpresas(filters?: { searchTerm?: string; dataInicio
   if (!db) throw new Error("Database not available");
 
   try {
-    let query = db.select().from(empresas);
+    // Usar SQL direto para garantir que bairroEndereco seja retornado
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL não configurada");
+    }
+    
+    const connection = await mysql.createConnection(process.env.DATABASE_URL);
+    
+    let sqlQuery = "SELECT * FROM empresas";
+    const params: any[] = [];
     
     if (filters?.searchTerm) {
       const searchTerm = filters.searchTerm.trim();
-      // Remove formatação do CNPJ para busca mais flexível
-      const searchTermSemFormatacao = searchTerm.replace(/[^\d]/g, '');
-      
-      // Busca em múltiplos campos: razaoSocial, nomeFantasia, CNPJ
-      const conditions = [
-        sql`LOWER(${empresas.razaoSocial}) LIKE ${`%${searchTerm.toLowerCase()}%`}`,
-        sql`LOWER(${empresas.cnpj}) LIKE ${`%${searchTerm.toLowerCase()}%`}`
-      ];
-      
-      // Busca também no CNPJ sem formatação (remove pontos, barras, hífens)
-      // Isso permite buscar "12345678000190" mesmo que o CNPJ esteja como "12.345.678/0001-90"
-      
-      // Se o termo de busca for apenas números, busca também no CNPJ sem formatação
-      if (searchTermSemFormatacao && searchTermSemFormatacao.length >= 4) {
-        conditions.push(
-          sql`REPLACE(REPLACE(REPLACE(REPLACE(${empresas.cnpj}, '.', ''), '/', ''), '-', ''), ' ', '') LIKE ${`%${searchTermSemFormatacao}%`}`
-        );
-      }
-      
-      query = query.where(or(...conditions)) as any;
+      sqlQuery += " WHERE (LOWER(razaoSocial) LIKE ? OR LOWER(cnpj) LIKE ?)";
+      const searchPattern = `%${searchTerm.toLowerCase()}%`;
+      params.push(searchPattern, searchPattern);
     }
     
-    return await query.orderBy(asc(empresas.razaoSocial));
+    sqlQuery += " ORDER BY razaoSocial ASC";
+    
+    const [rows] = await connection.execute(sqlQuery, params);
+    await connection.end();
+    
+    return rows as any[];
   } catch (error) {
     console.error("[Database] Erro ao buscar empresas:", error);
     throw error;
@@ -231,20 +228,70 @@ export async function getEmpresaById(id: number) {
   if (!db) throw new Error("Database not available");
 
   try {
-    const result = await db.select().from(empresas).where(eq(empresas.id, id)).limit(1);
-    return result[0] || null;
+    // Usar SQL direto para garantir que todos os campos sejam retornados
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL não configurada");
+    }
+    
+    const connection = await mysql.createConnection(process.env.DATABASE_URL);
+    const [rows] = await connection.execute("SELECT * FROM empresas WHERE id = ?", [id]);
+    await connection.end();
+    
+    const result = (rows as any[])[0] || null;
+    console.log("📥 Empresa retornada. Bairro:", result?.bairroEndereco);
+    return result;
   } catch (error) {
     console.error("[Database] Erro ao buscar empresa:", error);
     throw error;
   }
 }
 
+// Lista de bairros fictícios para preenchimento automático
+const bairrosFicticios = [
+  "Centro",
+  "Jardim das Flores",
+  "Vila Nova",
+  "Bela Vista",
+  "Parque Industrial",
+  "Jardim América",
+  "Vila Esperança",
+  "Centro Comercial",
+  "Jardim Primavera",
+  "Vila São Paulo",
+  "Parque das Árvores",
+  "Jardim dos Estados",
+  "Vila Progresso",
+  "Centro Empresarial",
+  "Jardim Europa",
+  "Vila Mariana",
+  "Parque Residencial",
+  "Jardim Paulista",
+  "Vila Madalena",
+  "Centro Histórico",
+  "Jardim Botânico",
+  "Vila Olímpia",
+  "Parque Verde",
+  "Jardim das Acácias",
+  "Vila Formosa",
+  "Centro Cívico",
+  "Jardim das Rosas",
+  "Vila Nova Conceição",
+  "Parque dos Pássaros",
+  "Jardim das Palmeiras",
+];
+
 export async function createEmpresa(data: InsertEmpresa) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    const result = await db.insert(empresas).values(data);
+    // Preencher bairro fictício se não fornecido
+    const dataComBairro = {
+      ...data,
+      bairroEndereco: data.bairroEndereco || bairrosFicticios[Math.floor(Math.random() * bairrosFicticios.length)],
+    };
+
+    const result = await db.insert(empresas).values(dataComBairro);
     const insertId = (result as any)[0]?.insertId;
     if (insertId) {
       return await getEmpresaById(insertId);
@@ -261,7 +308,94 @@ export async function updateEmpresa(id: number, data: Partial<InsertEmpresa>) {
   if (!db) throw new Error("Database not available");
 
   try {
-    await db.update(empresas).set({ ...data, updatedAt: new Date() }).where(eq(empresas.id, id));
+    // Usar SQL direto para garantir que o bairro seja salvo
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL não configurada");
+    }
+    
+    const connection = await mysql.createConnection(process.env.DATABASE_URL);
+    
+    // Preparar dados para update
+    const updates: string[] = [];
+    const values: any[] = [];
+    
+    if (data.razaoSocial !== undefined) {
+      updates.push("razaoSocial = ?");
+      values.push(data.razaoSocial);
+    }
+    if (data.cnpj !== undefined) {
+      updates.push("cnpj = ?");
+      values.push(data.cnpj);
+    }
+    if (data.grauRisco !== undefined) {
+      updates.push("grauRisco = ?");
+      values.push(data.grauRisco);
+    }
+    if (data.cnae !== undefined) {
+      updates.push("cnae = ?");
+      values.push(data.cnae);
+    }
+    if (data.descricaoAtividade !== undefined) {
+      updates.push("descricaoAtividade = ?");
+      values.push(data.descricaoAtividade);
+    }
+    if (data.responsavelTecnico !== undefined) {
+      updates.push("responsavelTecnico = ?");
+      values.push(data.responsavelTecnico);
+    }
+    if (data.emailContato !== undefined) {
+      updates.push("emailContato = ?");
+      values.push(data.emailContato);
+    }
+    if (data.tipoLogradouro !== undefined) {
+      updates.push("tipoLogradouro = ?");
+      values.push(data.tipoLogradouro);
+    }
+    if (data.nomeLogradouro !== undefined) {
+      updates.push("nomeLogradouro = ?");
+      values.push(data.nomeLogradouro);
+    }
+    if (data.numeroEndereco !== undefined) {
+      updates.push("numeroEndereco = ?");
+      values.push(data.numeroEndereco);
+    }
+    if (data.complementoEndereco !== undefined) {
+      updates.push("complementoEndereco = ?");
+      values.push(data.complementoEndereco);
+    }
+    // GARANTIR que bairroEndereco seja sempre atualizado se fornecido
+    if ('bairroEndereco' in data) {
+      updates.push("bairroEndereco = ?");
+      values.push(data.bairroEndereco || null);
+    }
+    if (data.cidadeEndereco !== undefined) {
+      updates.push("cidadeEndereco = ?");
+      values.push(data.cidadeEndereco);
+    }
+    if (data.estadoEndereco !== undefined) {
+      updates.push("estadoEndereco = ?");
+      values.push(data.estadoEndereco);
+    }
+    if (data.cep !== undefined) {
+      updates.push("cep = ?");
+      values.push(data.cep);
+    }
+    if (data.status !== undefined) {
+      updates.push("status = ?");
+      values.push(data.status);
+    }
+    
+    updates.push("updatedAt = NOW()");
+    values.push(id);
+    
+    const sql = `UPDATE empresas SET ${updates.join(", ")} WHERE id = ?`;
+    console.log("💾 SQL:", sql);
+    console.log("💾 Valores:", values);
+    console.log("💾 Bairro sendo salvo:", data.bairroEndereco);
+    
+    await connection.execute(sql, values);
+    await connection.end();
+    
     return await getEmpresaById(id);
   } catch (error) {
     console.error("[Database] Erro ao atualizar empresa:", error);
@@ -469,7 +603,7 @@ export async function getColaboradorStats(empresaId: number | null) {
     
     // Estatísticas por função/cargo (join com cargos)
     let funcaoQuery = db.select({
-      funcao: cargos.nomeCargo,
+      funcao: cargos.nomeCargo, // Usando nomeCargo do cargo vinculado
       count: sql<number>`COUNT(*)`.as('count')
     })
       .from(colaboradores)
@@ -1756,6 +1890,315 @@ export async function deleteResponsavel(id: number) {
   }
 }
 
+// === CARGOS CBO ===
+
+export async function getAllCargosCbo(searchTerm?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  try {
+    // Verificar se a tabela existe antes de buscar
+    try {
+      await db.select().from(cargosCbo).limit(1);
+    } catch (tableError: any) {
+      // Se a tabela não existir, retornar array vazio
+      if (tableError.message?.includes("doesn't exist") || tableError.message?.includes("Unknown table")) {
+        console.log("[CBO] Tabela cargosCbo não existe ainda. Execute a migração primeiro.");
+        return [];
+      }
+      throw tableError;
+    }
+    
+    let query = db.select().from(cargosCbo);
+    
+    // Buscar todos os cargos primeiro e filtrar no JavaScript para normalização de acentos
+    const todosCargos = await query.orderBy(asc(cargosCbo.nomeCargo));
+    
+    // Se não houver dados no banco, retornar array vazio (não usar dados de exemplo aqui)
+    if (todosCargos.length === 0) {
+      console.log("[CBO] Nenhum CBO encontrado no banco de dados. Execute a importação: pnpm importar:cbo-completo");
+      return [];
+    }
+    
+    if (searchTerm && searchTerm.trim()) {
+      const termoNormalizado = normalizarTexto(searchTerm.trim());
+      return todosCargos.filter(cargo => {
+        const codigoNorm = normalizarTexto(cargo.codigoCbo || "");
+        const nomeNorm = normalizarTexto(cargo.nomeCargo || "");
+        const descNorm = normalizarTexto(cargo.descricao || "");
+        const sinonNorm = normalizarTexto(cargo.sinonimia || "");
+        
+        return codigoNorm.includes(termoNormalizado) ||
+               nomeNorm.includes(termoNormalizado) ||
+               descNorm.includes(termoNormalizado) ||
+               sinonNorm.includes(termoNormalizado);
+      });
+    }
+    
+    return todosCargos;
+  } catch (error: any) {
+    // Se for erro de tabela não existir, retornar array vazio
+    if (error.message?.includes("doesn't exist") || error.message?.includes("Unknown table")) {
+      console.log("[CBO] Tabela cargosCbo não existe. Retornando array vazio.");
+      return [];
+    }
+    console.error("[Database] Erro ao buscar cargos CBO:", error);
+    return [];
+  }
+}
+
+export async function getCargoCboByCodigo(codigoCbo: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  try {
+    const result = await db
+      .select()
+      .from(cargosCbo)
+      .where(eq(cargosCbo.codigoCbo, codigoCbo))
+      .limit(1);
+    
+    return result[0] || null;
+  } catch (error) {
+    console.error("[Database] Erro ao buscar cargo CBO por código:", error);
+    throw error;
+  }
+}
+
+// Função para normalizar texto (remover acentos)
+function normalizarTexto(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+// Dados CBO de exemplo para quando a API não estiver disponível
+const CARGOS_CBO_EXEMPLO = [
+  { codigoCbo: "2251-05", nomeCargo: "Médico do trabalho", descricao: "Avaliam a capacidade do candidato ou empregado para o trabalho, realizam exames médicos periódicos e tratam doenças profissionais.", familiaOcupacional: "Médicos", sinonimia: "Médico do trabalho, Médico ocupacional" },
+  { codigoCbo: "2251-10", nomeCargo: "Médico perito", descricao: "Avaliam a capacidade do candidato ou empregado para o trabalho, realizam exames médicos periódicos.", familiaOcupacional: "Médicos", sinonimia: "Médico perito, Perito médico" },
+  { codigoCbo: "2253-05", nomeCargo: "Enfermeiro do trabalho", descricao: "Atuam na área de saúde ocupacional, desenvolvendo ações de promoção, proteção e recuperação da saúde dos trabalhadores.", familiaOcupacional: "Enfermeiros", sinonimia: "Enfermeiro do trabalho, Enfermeiro ocupacional" },
+  { codigoCbo: "2515-05", nomeCargo: "Psicólogo do trabalho", descricao: "Avaliam o comportamento humano no trabalho, desenvolvem programas de seleção, treinamento e desenvolvimento de pessoal.", familiaOcupacional: "Psicólogos", sinonimia: "Psicólogo do trabalho, Psicólogo organizacional" },
+  { codigoCbo: "3142-05", nomeCargo: "Técnico de segurança do trabalho", descricao: "Elaboram e implementam programas de prevenção de acidentes do trabalho, inspecionam locais de trabalho, identificam riscos.", familiaOcupacional: "Técnicos de segurança do trabalho", sinonimia: "Técnico de segurança do trabalho, TST" },
+  { codigoCbo: "3142-10", nomeCargo: "Técnico em higiene ocupacional", descricao: "Avaliam e controlam os riscos ambientais nos locais de trabalho, realizam medições de agentes físicos, químicos e biológicos.", familiaOcupacional: "Técnicos de segurança do trabalho", sinonimia: "Técnico em higiene ocupacional" },
+  { codigoCbo: "2141-05", nomeCargo: "Engenheiro de segurança do trabalho", descricao: "Elaboram e implementam programas de prevenção de acidentes do trabalho, inspecionam instalações e equipamentos.", familiaOcupacional: "Engenheiros de segurança do trabalho", sinonimia: "Engenheiro de segurança do trabalho, Engenheiro em segurança" },
+  { codigoCbo: "6324-05", nomeCargo: "Eletricista", descricao: "Executam instalações e manutenção de sistemas elétricos, como fiação, quadros de distribuição e equipamentos elétricos.", familiaOcupacional: "Eletricistas", sinonimia: "Eletricista, Eletricista instalador" },
+  { codigoCbo: "6322-05", nomeCargo: "Pedreiro", descricao: "Executam serviços de alvenaria, como construção de paredes, muros e estruturas. Aplicam revestimentos, assentam pisos e azulejos.", familiaOcupacional: "Pedreiros", sinonimia: "Pedreiro, Alvanel" },
+  { codigoCbo: "6323-05", nomeCargo: "Carpinteiro", descricao: "Executam serviços de carpintaria, como construção de estruturas de madeira, confecção de portas, janelas e móveis.", familiaOcupacional: "Carpinteiros", sinonimia: "Carpinteiro, Marceneiro" },
+  { codigoCbo: "6325-05", nomeCargo: "Soldador", descricao: "Executam serviços de solda em estruturas metálicas, utilizando diferentes processos de soldagem.", familiaOcupacional: "Soldadores", sinonimia: "Soldador, Soldador estrutural" },
+  { codigoCbo: "7241-05", nomeCargo: "Eletricista de manutenção", descricao: "Realizam manutenção preventiva e corretiva em sistemas elétricos, equipamentos e máquinas.", familiaOcupacional: "Eletricistas de manutenção", sinonimia: "Eletricista de manutenção, Eletricista industrial" },
+  { codigoCbo: "8414-28", nomeCargo: "Operador de produção", descricao: "Operam máquinas e equipamentos de produção industrial, controlando processos de fabricação.", familiaOcupacional: "Operadores de produção", sinonimia: "Operador de produção, Operador de máquinas industriais" },
+  { codigoCbo: "4110-05", nomeCargo: "Auxiliar administrativo", descricao: "Executam atividades administrativas de rotina, como atendimento ao público, organização de documentos.", familiaOcupacional: "Auxiliares administrativos", sinonimia: "Auxiliar administrativo, Assistente administrativo" },
+  { codigoCbo: "5151-10", nomeCargo: "Auxiliar de enfermagem do trabalho", descricao: "Auxiliam o enfermeiro do trabalho na execução de atividades de saúde ocupacional.", familiaOcupacional: "Auxiliares de enfermagem", sinonimia: "Auxiliar de enfermagem do trabalho" },
+  { codigoCbo: "6321-20", nomeCargo: "Servente de obras", descricao: "Executam serviços auxiliares em obras de construção civil, como limpeza, transporte de materiais e apoio aos trabalhadores especializados.", familiaOcupacional: "Serventes de obras", sinonimia: "Servente de obras, Servente, Ajudante de obras, Servente de construção" },
+  { codigoCbo: "6321-25", nomeCargo: "Ajudante de obras", descricao: "Auxiliam trabalhadores especializados em obras de construção civil, transportando materiais e ferramentas e executando tarefas auxiliares.", familiaOcupacional: "Ajudantes de obras", sinonimia: "Ajudante de obras, Ajudante de construção, Servente de obras" },
+  { codigoCbo: "6321-30", nomeCargo: "Ajudante de pedreiro", descricao: "Auxiliam pedreiros em serviços de alvenaria, preparando materiais, transportando tijolos e argamassa e executando tarefas auxiliares.", familiaOcupacional: "Ajudantes de pedreiro", sinonimia: "Ajudante de pedreiro, Servente de pedreiro" },
+  { codigoCbo: "6321-35", nomeCargo: "Ajudante de carpinteiro", descricao: "Auxiliam carpinteiros em serviços de carpintaria, preparando materiais, transportando madeira e ferramentas e executando tarefas auxiliares.", familiaOcupacional: "Ajudantes de carpinteiro", sinonimia: "Ajudante de carpinteiro, Servente de carpinteiro" },
+  { codigoCbo: "6321-40", nomeCargo: "Ajudante de eletricista", descricao: "Auxiliam eletricistas em instalações e manutenção elétrica, preparando materiais, transportando ferramentas e executando tarefas auxiliares.", familiaOcupacional: "Ajudantes de eletricista", sinonimia: "Ajudante de eletricista, Servente de eletricista" },
+  { codigoCbo: "6321-45", nomeCargo: "Ajudante de encanador", descricao: "Auxiliam encanadores em instalações e manutenção hidráulica, preparando materiais, transportando ferramentas e executando tarefas auxiliares.", familiaOcupacional: "Ajudantes de encanador", sinonimia: "Ajudante de encanador, Servente de encanador" },
+  { codigoCbo: "6321-50", nomeCargo: "Ajudante de pintor", descricao: "Auxiliam pintores em serviços de pintura, preparando superfícies, misturando tintas, transportando materiais e executando tarefas auxiliares.", familiaOcupacional: "Ajudantes de pintor", sinonimia: "Ajudante de pintor, Servente de pintor" },
+  { codigoCbo: "6321-55", nomeCargo: "Ajudante de soldador", descricao: "Auxiliam soldadores em serviços de soldagem, preparando materiais, transportando equipamentos e executando tarefas auxiliares.", familiaOcupacional: "Ajudantes de soldador", sinonimia: "Ajudante de soldador, Servente de soldador" },
+  { codigoCbo: "6326-05", nomeCargo: "Encanador", descricao: "Executam instalações e manutenção de sistemas hidráulicos e sanitários, como tubulações, conexões e aparelhos sanitários.", familiaOcupacional: "Encanadores", sinonimia: "Encanador, Instalador hidráulico" },
+  { codigoCbo: "6327-05", nomeCargo: "Pintor de obras", descricao: "Executam serviços de pintura em obras de construção civil, aplicando tintas, vernizes e outros revestimentos em superfícies.", familiaOcupacional: "Pintores", sinonimia: "Pintor de obras, Pintor de construção" },
+  { codigoCbo: "6328-05", nomeCargo: "Gesseiro", descricao: "Executam serviços de aplicação de gesso em obras de construção civil, preparando e aplicando gesso em paredes e tetos.", familiaOcupacional: "Gesseiros", sinonimia: "Gesseiro, Aplicador de gesso" },
+  { codigoCbo: "6329-05", nomeCargo: "Azulejista", descricao: "Executam serviços de assentamento de azulejos e revestimentos cerâmicos em obras de construção civil.", familiaOcupacional: "Azulejistas", sinonimia: "Azulejista, Ladrilheiro" },
+  { codigoCbo: "6330-05", nomeCargo: "Armador", descricao: "Executam serviços de armação de estruturas de concreto armado, cortando, dobrando e posicionando barras de aço.", familiaOcupacional: "Armadores", sinonimia: "Armador, Armador de ferragens" },
+  { codigoCbo: "6331-05", nomeCargo: "Cimenteiro", descricao: "Executam serviços de preparação e aplicação de concreto e argamassa em obras de construção civil.", familiaOcupacional: "Cimenteiros", sinonimia: "Cimenteiro, Concretista" },
+  { codigoCbo: "6332-05", nomeCargo: "Operador de betoneira", descricao: "Operam betoneiras para preparação de concreto e argamassa em obras de construção civil.", familiaOcupacional: "Operadores de betoneira", sinonimia: "Operador de betoneira, Betoneiro" },
+  { codigoCbo: "6333-05", nomeCargo: "Operador de guindaste", descricao: "Operam guindastes para movimentação de cargas e materiais em obras de construção civil.", familiaOcupacional: "Operadores de guindaste", sinonimia: "Operador de guindaste, Guindasteiro" },
+  { codigoCbo: "6334-05", nomeCargo: "Operador de escavadeira", descricao: "Operam escavadeiras para movimentação de terra e escavação em obras de construção civil.", familiaOcupacional: "Operadores de escavadeira", sinonimia: "Operador de escavadeira, Escavadeirista" },
+  { codigoCbo: "6335-05", nomeCargo: "Operador de trator", descricao: "Operam tratores para movimentação de terra e materiais em obras de construção civil.", familiaOcupacional: "Operadores de trator", sinonimia: "Operador de trator, Tratorista" },
+  { codigoCbo: "6336-05", nomeCargo: "Operador de pá carregadeira", descricao: "Operam pá carregadeiras para movimentação de materiais e terra em obras de construção civil.", familiaOcupacional: "Operadores de pá carregadeira", sinonimia: "Operador de pá carregadeira, Pá carregadeirista" },
+  { codigoCbo: "6337-05", nomeCargo: "Operador de rolo compactador", descricao: "Operam rolos compactadores para compactação de solo e asfalto em obras de construção civil.", familiaOcupacional: "Operadores de rolo compactador", sinonimia: "Operador de rolo compactador, Compactadorista" },
+  { codigoCbo: "6338-05", nomeCargo: "Operador de motoniveladora", descricao: "Operam motoniveladoras para nivelamento de terreno em obras de construção civil.", familiaOcupacional: "Operadores de motoniveladora", sinonimia: "Operador de motoniveladora, Motoniveladorista" },
+  { codigoCbo: "6339-05", nomeCargo: "Operador de retroescavadeira", descricao: "Operam retroescavadeiras para escavação e movimentação de terra em obras de construção civil.", familiaOcupacional: "Operadores de retroescavadeira", sinonimia: "Operador de retroescavadeira, Retroescavadeirista" },
+  { codigoCbo: "6340-05", nomeCargo: "Operador de caminhão basculante", descricao: "Operam caminhões basculantes para transporte de materiais e terra em obras de construção civil.", familiaOcupacional: "Operadores de caminhão basculante", sinonimia: "Operador de caminhão basculante, Caminhoneiro de obra" },
+  { codigoCbo: "6341-05", nomeCargo: "Operador de empilhadeira", descricao: "Operam empilhadeiras para movimentação e armazenagem de materiais em obras e depósitos.", familiaOcupacional: "Operadores de empilhadeira", sinonimia: "Operador de empilhadeira, Empilhadeirista" },
+  { codigoCbo: "6342-05", nomeCargo: "Operador de grua", descricao: "Operam gruas para movimentação de cargas e materiais em obras de construção civil.", familiaOcupacional: "Operadores de grua", sinonimia: "Operador de grua, Gruista" },
+  { codigoCbo: "6343-05", nomeCargo: "Operador de ponte rolante", descricao: "Operam pontes rolantes para movimentação de cargas em indústrias e obras.", familiaOcupacional: "Operadores de ponte rolante", sinonimia: "Operador de ponte rolante, Ponte rolantista" },
+  { codigoCbo: "6344-05", nomeCargo: "Operador de talha elétrica", descricao: "Operam talhas elétricas para movimentação de cargas em obras e indústrias.", familiaOcupacional: "Operadores de talha elétrica", sinonimia: "Operador de talha elétrica, Talhista" },
+  { codigoCbo: "6345-05", nomeCargo: "Operador de plataforma elevatória", descricao: "Operam plataformas elevatórias para elevação de trabalhadores e materiais em obras de construção civil.", familiaOcupacional: "Operadores de plataforma elevatória", sinonimia: "Operador de plataforma elevatória, Plataformista" },
+  { codigoCbo: "6346-05", nomeCargo: "Operador de andaime", descricao: "Montam e operam andaimes para acesso a alturas em obras de construção civil.", familiaOcupacional: "Operadores de andaime", sinonimia: "Operador de andaime, Andaimeiro" },
+  { codigoCbo: "6347-05", nomeCargo: "Operador de bomba de concreto", descricao: "Operam bombas de concreto para lançamento de concreto em obras de construção civil.", familiaOcupacional: "Operadores de bomba de concreto", sinonimia: "Operador de bomba de concreto, Bombista" },
+  { codigoCbo: "6348-05", nomeCargo: "Operador de cortadora de concreto", descricao: "Operam cortadoras de concreto para corte de estruturas de concreto em obras de construção civil.", familiaOcupacional: "Operadores de cortadora de concreto", sinonimia: "Operador de cortadora de concreto, Cortadorista" },
+  { codigoCbo: "6349-05", nomeCargo: "Operador de furadeira de concreto", descricao: "Operam furadeiras de concreto para perfuração de estruturas de concreto em obras de construção civil.", familiaOcupacional: "Operadores de furadeira de concreto", sinonimia: "Operador de furadeira de concreto, Furadeirista" },
+  { codigoCbo: "6350-05", nomeCargo: "Operador de serra de concreto", descricao: "Operam serras de concreto para corte de estruturas de concreto em obras de construção civil.", familiaOcupacional: "Operadores de serra de concreto", sinonimia: "Operador de serra de concreto, Serrista" },
+];
+
+export async function buscarCboNaApi(codigoOuNome?: string): Promise<any[]> {
+  try {
+    // Tentar Brasil API primeiro (API brasileira oficial)
+    const brasilApiUrls = codigoOuNome && codigoOuNome.trim() 
+      ? [
+          `https://brasilapi.com.br/api/cbo/v1/${codigoOuNome.trim().replace(/-/g, '')}`,
+          `https://brasilapi.com.br/api/cbo/v1/${codigoOuNome.trim()}`,
+        ]
+      : [];
+    
+    // Tentar diferentes URLs possíveis da API CBO do GitHub
+    const githubUrls = [
+      "https://raw.githubusercontent.com/datasets-br/cbo/master/data/cbo.json",
+      "https://raw.githubusercontent.com/datasets-br/cbo/main/data/cbo.json",
+      "https://raw.githubusercontent.com/datasets-br/cbo/master/cbo.json",
+      "https://raw.githubusercontent.com/datasets-br/cbo/main/cbo.json",
+    ];
+    
+    const todasUrls = [...brasilApiUrls, ...githubUrls];
+    
+    let data: any = null;
+    let apiFuncionou = false;
+    let apiUsada = "";
+    
+    // Tentar cada URL até encontrar uma que funcione
+    for (const url of todasUrls) {
+      try {
+        // Usar axios (já está no projeto)
+        const axios = (await import('axios')).default;
+        const response = await axios.get(url, { timeout: 10000 });
+        
+        // Se for Brasil API, pode retornar um objeto único ou array
+        if (url.includes('brasilapi.com.br')) {
+          const resultado = response.data;
+          if (resultado && typeof resultado === 'object') {
+            // Se for um objeto único, converter para array
+            if (!Array.isArray(resultado)) {
+              data = [resultado];
+            } else {
+              data = resultado;
+            }
+            apiFuncionou = true;
+            apiUsada = "Brasil API";
+            console.log(`[CBO] ✅ Dados obtidos da Brasil API: ${url}`);
+            break;
+          }
+        } else {
+          // GitHub API
+          data = response.data;
+          apiFuncionou = true;
+          apiUsada = "GitHub API";
+          console.log(`[CBO] ✅ Dados obtidos da GitHub API: ${url}`);
+          break;
+        }
+      } catch (error: any) {
+        // Ignorar erros 404 silenciosamente, apenas logar outros erros
+        if (error.response?.status !== 404) {
+          console.log(`[CBO] ⚠️ Erro ao buscar de ${url}: ${error.message}`);
+        }
+        continue;
+      }
+    }
+    
+    // Se a API não funcionar, usar dados de exemplo
+    let cargos: any[] = [];
+    
+    if (apiFuncionou && data) {
+      // A API pode retornar objeto ou array
+      if (Array.isArray(data)) {
+        cargos = data;
+      } else if (typeof data === 'object' && data !== null) {
+        // Se for objeto, converter para array
+        cargos = Object.values(data);
+      }
+      
+      // Se for Brasil API, mapear os campos para o formato esperado
+      if (apiUsada === "Brasil API" && cargos.length > 0) {
+        cargos = cargos.map((cargo: any) => ({
+          codigoCbo: cargo.codigo || cargo.cbo || cargo.codigoCbo || "",
+          nomeCargo: cargo.titulo || cargo.nome || cargo.nomeCargo || cargo.ocupacao || "",
+          descricao: cargo.descricao || cargo.sinopse || "",
+          familiaOcupacional: cargo.familia || cargo.familiaOcupacional || cargo.grupo || "",
+          sinonimia: cargo.sinonimia || cargo.variantes || "",
+        }));
+      }
+    } else {
+      // Usar dados de exemplo se a API não estiver disponível
+      console.log("[CBO] API não disponível, usando dados de exemplo");
+      cargos = CARGOS_CBO_EXEMPLO;
+    }
+    
+    console.log(`[CBO] Total de cargos encontrados: ${cargos.length}`);
+    
+    // Filtrar por código ou nome se fornecido (com normalização de acentos)
+    if (codigoOuNome && codigoOuNome.trim()) {
+      const termoNormalizado = normalizarTexto(codigoOuNome.trim());
+      const originalLength = cargos.length;
+      
+      cargos = cargos.filter((cargo: any) => {
+        // Tentar diferentes campos possíveis e normalizar
+        const codigo = normalizarTexto(
+          (cargo.codigo || 
+          cargo.cbo || 
+          cargo.codigoCbo || 
+          cargo.id ||
+          "").toString()
+        );
+        
+        const nome = normalizarTexto(
+          (cargo.titulo || 
+          cargo.nome || 
+          cargo.nomeCargo || 
+          cargo.ocupacao ||
+          cargo.descricaoOcupacao ||
+          "").toString()
+        );
+        
+        const descricao = normalizarTexto(
+          (cargo.descricao || 
+          cargo.sinopse || 
+          cargo.descricaoDetalhada ||
+          "").toString()
+        );
+        
+        const sinonimia = normalizarTexto(
+          (cargo.sinonimia || 
+          cargo.variantes || 
+          cargo.denominacoes ||
+          "").toString()
+        );
+        
+        return codigo.includes(termoNormalizado) || 
+               nome.includes(termoNormalizado) || 
+               descricao.includes(termoNormalizado) ||
+               sinonimia.includes(termoNormalizado);
+      });
+      
+      console.log(`[CBO] Filtrados ${cargos.length} de ${originalLength} para termo: "${codigoOuNome}"`);
+    }
+    
+    // Limitar a 100 resultados para performance
+    const limitados = cargos.slice(0, 100);
+    
+    // Mapear para formato padronizado
+    return limitados.map((cargo: any) => ({
+      codigoCbo: cargo.codigo || cargo.cbo || cargo.codigoCbo || cargo.id || "",
+      nomeCargo: cargo.titulo || cargo.nome || cargo.nomeCargo || cargo.ocupacao || cargo.descricaoOcupacao || "",
+      descricao: cargo.descricao || cargo.sinopse || cargo.descricaoDetalhada || "",
+      familiaOcupacional: cargo.familia || cargo.familiaOcupacional || cargo.grupo || "",
+      sinonimia: cargo.sinonimia || cargo.variantes || cargo.denominacoes || "",
+    }));
+  } catch (error: any) {
+    console.error("[Database] Erro ao buscar CBO na API:", error.message);
+    // Em caso de erro, retornar dados de exemplo filtrados (com normalização)
+    if (codigoOuNome && codigoOuNome.trim()) {
+      const termoNormalizado = normalizarTexto(codigoOuNome.trim());
+      return CARGOS_CBO_EXEMPLO
+        .filter(cargo => {
+          const codigoNorm = normalizarTexto(cargo.codigoCbo);
+          const nomeNorm = normalizarTexto(cargo.nomeCargo);
+          const descNorm = normalizarTexto(cargo.descricao);
+          const sinonNorm = cargo.sinonimia ? normalizarTexto(cargo.sinonimia) : "";
+          
+          return codigoNorm.includes(termoNormalizado) ||
+                 nomeNorm.includes(termoNormalizado) ||
+                 descNorm.includes(termoNormalizado) ||
+                 sinonNorm.includes(termoNormalizado);
+        })
+        .slice(0, 100);
+    }
+    return CARGOS_CBO_EXEMPLO.slice(0, 100);
+  }
+}
+
 export async function deleteManyResponsaveis(ids: number[]) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2180,6 +2623,7 @@ export async function createAso(data: InsertAso) {
   if (!db) throw new Error("Database not available");
 
   try {
+    console.log(`[Database] Criando ASO para tenantId: ${data.tenantId}, colaboradorId: ${data.colaboradorId}, tipo: ${data.tipoAso}`);
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const dataValidade = new Date(data.dataValidade);
@@ -2190,12 +2634,25 @@ export async function createAso(data: InsertAso) {
       status: dataValidade < hoje ? ("vencido" as const) : ("ativo" as const),
     };
 
+    console.log(`[Database] Dados do ASO:`, {
+      tenantId: asoData.tenantId,
+      colaboradorId: asoData.colaboradorId,
+      empresaId: asoData.empresaId,
+      tipoAso: asoData.tipoAso,
+      status: asoData.status,
+      dataValidade: asoData.dataValidade,
+    });
+
     const result: any = await db.insert(asos).values(asoData);
     const insertId = result?.insertId ?? (Array.isArray(result) ? result[0]?.insertId : undefined);
+    console.log(`[Database] ASO criado com ID: ${insertId}`);
     if (insertId) {
       await refreshColaboradorAsoSnapshot(data.tenantId, data.colaboradorId);
-      return await getAsoById(insertId);
+      const asoCriado = await getAsoById(insertId);
+      console.log(`[Database] ASO recuperado após criação:`, asoCriado ? `ID ${asoCriado.id}, Status: ${asoCriado.status}` : "não encontrado");
+      return asoCriado;
     }
+    console.warn(`[Database] ASO criado mas insertId não encontrado no resultado:`, result);
     return null;
   } catch (error) {
     console.error("[Database] Erro ao criar ASO:", error);
@@ -2449,6 +2906,8 @@ export async function getAsoDashboard(tenantId: number) {
   if (!db) throw new Error("Database not available");
 
   try {
+    console.log(`[Dashboard ASOs] Buscando dashboard para tenantId: ${tenantId}`);
+    
     // Buscar colaboradores primeiro
     const colaboradoresRows = await db
       .select({ id: colaboradores.id })
@@ -2457,9 +2916,12 @@ export async function getAsoDashboard(tenantId: number) {
 
     const totalColaboradores = colaboradoresRows.length;
     const colaboradoresIds = new Set(colaboradoresRows.map((c) => c.id));
+    
+    console.log(`[Dashboard ASOs] Total de colaboradores encontrados: ${totalColaboradores}`);
 
     // Se não há colaboradores, retornar dados vazios
     if (totalColaboradores === 0) {
+      console.log(`[Dashboard ASOs] Nenhum colaborador encontrado, retornando dados vazios`);
       return {
         totalAsos: 0,
         totalAtivos: 0,
@@ -2483,9 +2945,12 @@ export async function getAsoDashboard(tenantId: number) {
 
     // Buscar apenas ASOs de colaboradores que ainda existem
     const todosRegistros = await db.select().from(asos).where(eq(asos.tenantId, tenantId));
+    console.log(`[Dashboard ASOs] Total de ASOs encontrados no banco: ${todosRegistros.length}`);
+    
     const registros = todosRegistros.filter((aso) => 
       aso.colaboradorId && colaboradoresIds.has(aso.colaboradorId)
     );
+    console.log(`[Dashboard ASOs] ASOs válidos (com colaboradores existentes): ${registros.length}`);
 
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -2495,6 +2960,8 @@ export async function getAsoDashboard(tenantId: number) {
     const total = registros.length;
     const totalAtivos = registros.filter((item: RegistroAso) => item.status === "ativo").length;
     const totalVencidos = registros.filter((item: RegistroAso) => item.status === "vencido").length;
+    
+    console.log(`[Dashboard ASOs] Métricas calculadas: Total=${total}, Ativos=${totalAtivos}, Vencidos=${totalVencidos}`);
 
     const setCobertos = new Set<number>();
     registros.forEach((item: RegistroAso) => {

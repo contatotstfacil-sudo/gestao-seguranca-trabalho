@@ -114,6 +114,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   const [empresaSearch, setEmpresaSearch] = useState("");
   const [buscaCargo, setBuscaCargo] = useState("");
   const [empresaFiltroId, setEmpresaFiltroId] = useState<string>("");
+  const [cboPopoverOpen, setCboPopoverOpen] = useState(false);
+  const [cboSearch, setCboSearch] = useState("");
   const { data: treinamentosByCargo = [], refetch: refetchTreinamentos } = trpc.cargoTreinamentos.getByCargo.useQuery(
     { cargoId: expandedCargo || 0 },
     { enabled: expandedCargo !== null }
@@ -133,6 +135,16 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   const { data: setores = [] } = trpc.setores.list.useQuery();
   const { data: riscosOcupacionais = [], refetch: refetchRiscosList } = trpc.riscosOcupacionais.list.useQuery();
   const utilsRiscos = trpc.useUtils();
+  
+  // Buscar cargos CBO - sempre habilitado quando o popover está aberto
+  const { data: cargosCbo = [], isLoading: isLoadingCbo } = trpc.cargosCbo.list.useQuery(
+    { searchTerm: cboSearch.trim() || undefined },
+    { 
+      enabled: cboPopoverOpen,
+      retry: 1,
+      refetchOnWindowFocus: false
+    }
+  );
 
   const createMutation = trpc.cargos.create.useMutation({
     onSuccess: () => {
@@ -140,6 +152,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       setFormData({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
       setEmpresaSearch("");
       setEmpresaPopoverOpen(false);
+      setCboSearch("");
+      setCboPopoverOpen(false);
       setDialogOpen(false);
       refetch();
       refetchTreinamentos();
@@ -155,6 +169,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       setFormData({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
       setEmpresaSearch("");
       setEmpresaPopoverOpen(false);
+      setCboSearch("");
+      setCboPopoverOpen(false);
       setEditingId(null);
       setDialogOpen(false);
       refetch();
@@ -962,6 +978,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                   setFormData({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
                   setEmpresaSearch("");
                   setEmpresaPopoverOpen(false);
+                  setCboSearch("");
+                  setCboPopoverOpen(false);
                 }}
               >
                 <Plus className="mr-2 h-4 w-4" /> Novo Cargo
@@ -973,12 +991,115 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <Label htmlFor="nomeCargo">Nome do Cargo</Label>
+                  <Label>Buscar Cargo CBO (Opcional)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      readOnly
+                      value={formData.codigoCbo ? `${formData.codigoCbo} - ${formData.nomeCargo}` : ""}
+                      placeholder="Busque um cargo do CBO para preencher automaticamente"
+                      className="bg-muted/40"
+                    />
+                    <Popover open={cboPopoverOpen} onOpenChange={setCboPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0"
+                          type="button"
+                        >
+                          <Search className="h-4 w-4" />
+                          <span className="sr-only">Buscar cargo CBO</span>
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="p-0 w-[32rem]" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por código CBO, nome ou descrição (mín. 2 caracteres)"
+                            value={cboSearch}
+                            onValueChange={setCboSearch}
+                            autoFocus
+                          />
+                          <CommandList>
+                            <CommandEmpty>
+                              {isLoadingCbo
+                                ? "Buscando cargos CBO..."
+                                : cboSearch.trim().length > 0 && cboSearch.trim().length < 2
+                                ? "Digite pelo menos 2 caracteres para buscar"
+                                : cboSearch.trim().length >= 2
+                                ? "Nenhum cargo CBO encontrado. Tente outro termo de busca."
+                                : "Digite para buscar cargos CBO (ex: eletricista, médico, técnico)"}
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {cargosCbo.length > 0 ? (
+                                cargosCbo.slice(0, 50).map((cargo: any) => (
+                                  <CommandItem
+                                    key={cargo.codigoCbo || cargo.id}
+                                    value={`${cargo.codigoCbo} ${cargo.nomeCargo}`}
+                                    onSelect={() => {
+                                      setFormData({
+                                        ...formData,
+                                        nomeCargo: cargo.nomeCargo || "",
+                                        descricao: cargo.descricao || "",
+                                        codigoCbo: cargo.codigoCbo || "",
+                                      });
+                                      setCboSearch("");
+                                      setCboPopoverOpen(false);
+                                      toast.success("Cargo CBO selecionado! Campos preenchidos automaticamente.");
+                                    }}
+                                  >
+                                    <div className="flex flex-col">
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-xs">
+                                          {cargo.codigoCbo}
+                                        </Badge>
+                                        <span className="font-medium">{cargo.nomeCargo}</span>
+                                      </div>
+                                      {cargo.descricao && (
+                                        <span className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                          {cargo.descricao}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </CommandItem>
+                                ))
+                              ) : (
+                                !isLoadingCbo && cboSearch.trim().length >= 2 && (
+                                  <div className="p-4 text-sm text-muted-foreground text-center">
+                                    Nenhum resultado encontrado para "{cboSearch}"
+                                  </div>
+                                )
+                              )}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    {formData.codigoCbo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setFormData({ ...formData, codigoCbo: "", nomeCargo: "", descricao: "" });
+                          toast.info("Campos CBO limpos. Você pode preencher manualmente.");
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Busque um cargo da Classificação Brasileira de Ocupações para preencher automaticamente os campos abaixo.
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="nomeCargo">Nome do Cargo *</Label>
                   <Input
                     id="nomeCargo"
                     value={formData.nomeCargo}
                     onChange={(e) => setFormData({ ...formData, nomeCargo: e.target.value })}
                     placeholder="Ex: Eletricista"
+                    required
                   />
                 </div>
                 <div>
@@ -998,6 +1119,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                     value={formData.descricao}
                     onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                     placeholder="Descrição do cargo"
+                    rows={4}
                   />
                 </div>
                 <div>

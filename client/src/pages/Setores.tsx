@@ -67,7 +67,7 @@ type SetorFormData = {
   empresaId: string;
 };
 
-export default function Setores() {
+export default function Setores({ showLayout = true }: { showLayout?: boolean }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState<SetorFormData>({
@@ -300,30 +300,28 @@ export default function Setores() {
   };
 
   if (isLoadingSetores) {
-    return (
-      <DashboardLayout>
-        <div className="p-6">
-          <p className="text-sm text-muted-foreground">Carregando setores...</p>
-        </div>
-      </DashboardLayout>
+    const loadingContent = (
+      <div className="p-6">
+        <p className="text-sm text-muted-foreground">Carregando setores...</p>
+      </div>
     );
+    if (!showLayout) return loadingContent;
+    return <DashboardLayout>{loadingContent}</DashboardLayout>;
   }
 
-  return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Setores</h1>
-            <p className="text-muted-foreground">Organize os setores de cada empresa e mantenha o vínculo atualizado.</p>
-          </div>
+  const content = (
+    <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold">Setores</h1>
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open);
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button onClick={() => resetForm()} className="gap-2">
-                <Plus className="h-4 w-4" /> Novo setor
+              <Button
+                onClick={() => resetForm()}
+              >
+                <Plus className="mr-2 h-4 w-4" /> Novo Setor
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
@@ -438,11 +436,7 @@ export default function Setores() {
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-semibold">{totalSetores}</p>
-              <p className="text-xs text-muted-foreground">
-                {totalSetoresFiltrados !== totalSetores
-                  ? `${totalSetoresFiltrados} exibidos com filtros`
-                  : "Todos os setores cadastrados"}
-              </p>
+              <p className="text-xs text-muted-foreground">{totalSetoresFiltrados !== totalSetores ? `${totalSetoresFiltrados} exibidos com filtros` : "Todos os setores cadastrados"}</p>
             </CardContent>
           </Card>
           <Card>
@@ -451,7 +445,7 @@ export default function Setores() {
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-semibold">{totalEmpresas}</p>
-              <p className="text-xs text-muted-foreground">Quantidade de empresas com setores registrados</p>
+              <p className="text-xs text-muted-foreground">Distribuição de setores por empresa</p>
             </CardContent>
           </Card>
           <Card>
@@ -465,39 +459,21 @@ export default function Setores() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Ações rápidas</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Busca ativa</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>Utilize os filtros abaixo para refinar a visualização. Selecione setores para ações em lote.</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setBuscaSetor("");
-                    setEmpresaFiltroId("__all__");
-                  }}
-                  className="gap-1"
-                >
-                  <X className="h-4 w-4" /> Limpar filtros
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSelectAll}
-                  className="gap-1"
-                  disabled={setores.length === 0}
-                >
-                  <Filter className="h-4 w-4" /> {selectedIds.length === setores.length ? "Desmarcar todos" : "Selecionar todos"}
-                </Button>
-              </div>
+            <CardContent className="flex flex-col gap-1">
+              <p className="text-sm text-muted-foreground">Resultados atualizados conforme filtros abaixo.</p>
+              <Button variant="outline" size="sm" className="self-start" onClick={() => {
+                setBuscaSetor("");
+                setEmpresaFiltroId("__all__");
+              }}>Limpar filtros</Button>
             </CardContent>
           </Card>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Filtros avançados</CardTitle>
+            <CardTitle>Filtros rápidos</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
@@ -544,56 +520,64 @@ export default function Setores() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <CardTitle>Lista de setores</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDeleteMany}
-                disabled={selectedIds.length === 0}
-                className="gap-2"
-              >
-                <Trash2 className="h-4 w-4" /> Excluir selecionados ({selectedIds.length})
-              </Button>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle>Lista de Setores</CardTitle>
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteMany}
+                  disabled={deleteManyMutation.isPending}
+                >
+                  {deleteManyMutation.isPending ? "Excluindo..." : `Excluir ${selectedIds.length} selecionado(s)`}
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
-            {setores.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">
-                Nenhum setor encontrado com os filtros atuais. Ajuste os filtros ou cadastre um novo setor.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {setores.map((setor: any) => {
+            <div className="space-y-2">
+              {setores.length > 0 && (
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Checkbox
+                    checked={selectedIds.length === setores.length && setores.length > 0}
+                    onCheckedChange={handleSelectAll}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    Selecionar todos ({selectedIds.length}/{setores.length})
+                  </span>
+                </div>
+              )}
+              {setores.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">
+                  Nenhum setor encontrado com os filtros atuais. Ajuste os filtros ou cadastre um novo setor.
+                </div>
+              ) : (
+                setores.map((setor: any) => {
                   const empresaNome = setor.empresaId ? empresasMap.get(setor.empresaId.toString()) : undefined;
-                  const selecionado = selectedIds.includes(setor.id);
-
                   return (
-                    <div key={setor.id} className="rounded-lg border p-4">
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="flex flex-1 flex-col gap-2">
-                          <div className="flex flex-col gap-2">
-                            <div className="flex items-start gap-3">
-                              <Checkbox
-                                checked={selecionado}
-                                onCheckedChange={() => handleToggleSelect(setor.id)}
-                              />
-                              <div className="space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <h3 className="text-lg font-semibold">{setor.nomeSetor}</h3>
-                                  {empresaNome && <Badge>{empresaNome}</Badge>}
-                                </div>
-                                {setor.descricao ? (
-                                  <p className="text-sm text-muted-foreground">{setor.descricao}</p>
-                                ) : (
-                                  <p className="text-sm italic text-muted-foreground">Sem descrição cadastrada.</p>
-                                )}
-                              </div>
+                    <div key={setor.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3 flex-1">
+                          <Checkbox
+                            checked={selectedIds.includes(setor.id)}
+                            onCheckedChange={() => handleToggleSelect(setor.id)}
+                          />
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold text-lg">{setor.nomeSetor}</h3>
+                              {empresaNome && (
+                                <Badge>{empresaNome}</Badge>
+                              )}
                             </div>
+                            {setor.descricao ? (
+                              <p className="text-sm text-muted-foreground mt-2">{setor.descricao}</p>
+                            ) : (
+                              <p className="text-sm italic text-muted-foreground mt-2">Sem descrição cadastrada.</p>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex gap-2">
                           <Button variant="ghost" size="sm" onClick={() => handleEdit(setor)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -604,25 +588,21 @@ export default function Setores() {
                       </div>
                     </div>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
           </CardContent>
         </Card>
-
-        {selectedIds.length > 0 && (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
-              <span className="text-muted-foreground">
-                {selectedIds.length} setor(es) selecionado(s).
-              </span>
-              <Button variant="destructive" size="sm" onClick={handleDeleteMany} className="gap-2">
-                <Trash2 className="h-4 w-4" /> Excluir seleção
-              </Button>
-            </CardContent>
-          </Card>
-        )}
       </div>
+  );
+
+  if (!showLayout) {
+    return content;
+  }
+
+  return (
+    <DashboardLayout>
+      {content}
     </DashboardLayout>
   );
 }

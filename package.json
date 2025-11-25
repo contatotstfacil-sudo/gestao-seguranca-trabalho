@@ -34,7 +34,12 @@
     "migrate:riscos": "tsx scripts/aplicar-migracao-riscos.ts",
     "migrate:valor-analise": "tsx scripts/aplicar-migracao-valor-analise.ts",
     "importar:cargos-cbo": "tsx scripts/importar-cargos-cbo.ts",
-    "importar:cargos-cbo:custom": "tsx scripts/importar-cargos-cbo.ts"
+    "importar:cargos-cbo:custom": "tsx scripts/importar-cargos-cbo.ts",
+    "importar:cbo-completo": "tsx scripts/importar-cbo-completo.ts",
+    "gerar-descricoes-cbo": "tsx scripts/gerar-descricoes-cbo.ts",
+    "criar:colaboradores-construtoras": "tsx scripts/criar-colaboradores-construtoras.ts",
+    "migrate:cargos-cbo": "tsx scripts/aplicar-migracao-cargos-cbo.ts",
+    "seed:empresas-detalhes": "tsx scripts/preencher-grau-risco-e-atividades-empresas.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

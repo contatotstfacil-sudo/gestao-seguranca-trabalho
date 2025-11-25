@@ -126,3 +126,11 @@ Após importar os dados, será necessário:
 
 Os dados do CBO são de domínio público e mantidos pelo Ministério do Trabalho e Emprego. Este sistema apenas facilita o uso desses dados para padronização de cadastros.
 
+
+
+
+
+
+
+
+

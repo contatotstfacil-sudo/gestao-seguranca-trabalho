@@ -10,7 +10,6 @@ import Empresas from "./pages/Empresas";
 import Colaboradores from "./pages/Colaboradores";
 import Obras from "./pages/Obras";
 import Cargos from "./pages/Cargos";
-import Setores from "./pages/Setores";
 import TiposTreinamentos from "./pages/TiposTreinamentos";
 import TreinamentosPainel from "./pages/TreinamentosPainel";
 import Epis from "./pages/Epis";
@@ -53,17 +52,21 @@ function Router() {
       <Route path="/cargos-e-funcoes/cargos">
         <CargosEFuncoes />
       </Route>
+      <Route path="/cargos-e-funcoes/setores">
+        <CargosEFuncoes />
+      </Route>
       <Route path="/cargos-e-funcoes/relatorio">
         <CargosEFuncoes />
       </Route>
       <Route path="/cargos-e-funcoes">
         <CargosEFuncoes />
       </Route>
+      {/* Manter rota antiga de setores para compatibilidade - redireciona para dentro do menu */}
+      <Route path="/setores">
+        <CargosEFuncoes />
+      </Route>
       <Route path="/relatorio-cargos">
         <RelatorioCargos />
-      </Route>
-      <Route path="/setores">
-        <Setores />
       </Route>
       <Route path="/treinamentos/tipos">
         <TreinamentosPainel />
@@ -125,6 +128,9 @@ function Router() {
       <Route path="/gestao-asos">
         <GestaoAsos />
       </Route>
+      <Route path="/laudos-ocupacionais/modelos">
+        <LaudosOcupacionais />
+      </Route>
       <Route path="/laudos-ocupacionais/pgro">
         <LaudosOcupacionais />
       </Route>
@@ -177,6 +183,11 @@ function Router() {
 // - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
 
 function App() {
+  // Log para debug
+  if (typeof window !== "undefined") {
+    console.log("[App] Componente App sendo renderizado");
+  }
+
   return (
     <ErrorBoundary>
       <ThemeProvider

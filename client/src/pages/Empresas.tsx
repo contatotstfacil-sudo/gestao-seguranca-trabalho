@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -39,12 +39,14 @@ export default function Empresas() {
     cnpj: "",
     grauRisco: "",
     cnae: "",
+    descricaoAtividade: "",
     responsavelTecnico: "",
     emailContato: "",
     tipoLogradouro: "",
     nomeLogradouro: "",
     numeroEndereco: "",
     complementoEndereco: "",
+    bairroEndereco: "",
     cidadeEndereco: "",
     estadoEndereco: "",
     cep: "",
@@ -66,6 +68,38 @@ export default function Empresas() {
   useEffect(() => {
     setSelectedIds([]);
   }, [filters.searchTerm, filters.dataInicio, filters.dataFim]);
+
+  // Forçar atualização do Select quando dialog abrir e grauRisco mudar
+  const grauRiscoValue = useMemo(() => {
+    if (formData.grauRisco && formData.grauRisco.trim() !== "") {
+      const trimmed = formData.grauRisco.trim();
+      // Verificar se corresponde exatamente
+      if (GRAUS_RISCO.includes(trimmed)) {
+        return trimmed;
+      }
+      // Tentar mapear valores antigos (ex: "4" -> "Grau 4 (Alto)")
+      const grauNumero = trimmed.match(/\d+/)?.[0];
+      if (grauNumero) {
+        const grauMapeado = GRAUS_RISCO.find(g => g.includes(`Grau ${grauNumero}`));
+        if (grauMapeado) {
+          return grauMapeado;
+        }
+      }
+      return trimmed;
+    }
+    return undefined;
+  }, [formData.grauRisco, dialogOpen]);
+
+  // Forçar re-render do Select quando dialog abrir
+  useEffect(() => {
+    if (dialogOpen && editingId && formData.grauRisco) {
+      // Pequeno delay para garantir que o Select seja atualizado
+      const timer = setTimeout(() => {
+        console.log("🔍 Dialog aberto, grauRisco:", formData.grauRisco);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [dialogOpen, editingId, formData.grauRisco]);
   
   const createMutation = trpc.empresas.create.useMutation({
     onSuccess: () => {
@@ -85,7 +119,12 @@ export default function Empresas() {
       resetForm();
     },
     onError: (error) => {
+      console.error("❌ Erro ao atualizar:", error);
       toast.error("Erro ao atualizar empresa: " + error.message);
+    },
+    onMutate: (variables) => {
+      console.log("🔄 Mutação iniciada com dados:", variables);
+      console.log("🔄 Bairro sendo enviado:", variables.bairroEndereco);
     },
   });
 
@@ -117,12 +156,14 @@ export default function Empresas() {
       cnpj: "",
       grauRisco: "",
       cnae: "",
+      descricaoAtividade: "",
       responsavelTecnico: "",
       emailContato: "",
       tipoLogradouro: "",
       nomeLogradouro: "",
       numeroEndereco: "",
       complementoEndereco: "",
+      bairroEndereco: "",
       cidadeEndereco: "",
       estadoEndereco: "",
       cep: "",
@@ -134,31 +175,76 @@ export default function Empresas() {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Garantir que todos os campos sejam enviados, incluindo bairroEndereco
+    const dadosParaEnviar = {
+      ...formData,
+      bairroEndereco: formData.bairroEndereco || "", // Sempre incluir, mesmo se vazio
+    };
+    
+    console.log("📤 Enviando dados completos:", dadosParaEnviar);
+    console.log("📤 Bairro no formData:", formData.bairroEndereco);
+    console.log("📤 Bairro sendo enviado:", dadosParaEnviar.bairroEndereco);
+    
     if (editingId) {
-      updateMutation.mutate({ id: editingId, ...formData });
+      updateMutation.mutate({ id: editingId, ...dadosParaEnviar });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(dadosParaEnviar);
     }
   };
 
   const handleEdit = (empresa: any) => {
+    console.log("🔍 Editando empresa:", empresa);
+    console.log("🔍 grauRisco da empresa:", empresa.grauRisco);
+    
     setEditingId(empresa.id);
+    
+    // Garantir que grauRisco seja uma string válida e corresponda a um valor do array
+    let grauRisco = "";
+    if (empresa.grauRisco && typeof empresa.grauRisco === "string" && empresa.grauRisco.trim() !== "") {
+      const grauRiscoTrimmed = empresa.grauRisco.trim();
+      // Verificar se o valor corresponde exatamente a um dos valores do array
+      if (GRAUS_RISCO.includes(grauRiscoTrimmed)) {
+        grauRisco = grauRiscoTrimmed;
+      } else {
+        // Tentar mapear valores antigos (ex: "4" -> "Grau 4 (Alto)")
+        const grauNumero = grauRiscoTrimmed.match(/\d+/)?.[0];
+        if (grauNumero) {
+          const grauMapeado = GRAUS_RISCO.find(g => g.includes(`Grau ${grauNumero}`));
+          if (grauMapeado) {
+            grauRisco = grauMapeado;
+          } else {
+            grauRisco = grauRiscoTrimmed;
+          }
+        } else {
+          grauRisco = grauRiscoTrimmed;
+        }
+      }
+    }
+    
+    console.log("🔍 grauRisco processado:", grauRisco);
+    
     setFormData({
       razaoSocial: empresa.razaoSocial,
       cnpj: empresa.cnpj,
-      grauRisco: empresa.grauRisco || "",
+      grauRisco: grauRisco,
       cnae: empresa.cnae || "",
+      descricaoAtividade: empresa.descricaoAtividade || "",
       responsavelTecnico: empresa.responsavelTecnico || "",
       emailContato: empresa.emailContato || "",
       tipoLogradouro: empresa.tipoLogradouro || "",
       nomeLogradouro: empresa.nomeLogradouro || "",
       numeroEndereco: empresa.numeroEndereco || "",
       complementoEndereco: empresa.complementoEndereco || "",
+      bairroEndereco: empresa.bairroEndereco ?? "",
       cidadeEndereco: empresa.cidadeEndereco || "",
       estadoEndereco: empresa.estadoEndereco || "",
       cep: empresa.cep || "",
       status: empresa.status,
     });
+    
+    console.log("🔍 formData.grauRisco após setFormData:", grauRisco);
+    
     setDialogOpen(true);
   };
 
@@ -252,13 +338,27 @@ export default function Empresas() {
                       />
                     </div>
                     <div>
+                      <Label htmlFor="descricaoAtividade">Atividades da Empresa</Label>
+                      <Textarea
+                        id="descricaoAtividade"
+                        value={formData.descricaoAtividade}
+                        onChange={(e) => setFormData({ ...formData, descricaoAtividade: e.target.value })}
+                        placeholder="Descreva as atividades da empresa"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
                       <Label htmlFor="grauRisco">Grau de Risco</Label>
                       <Select
-                        value={formData.grauRisco}
-                        onValueChange={(value) => setFormData({ ...formData, grauRisco: value })}
+                        key={`grau-risco-${editingId || 'new'}-${grauRiscoValue || 'empty'}`}
+                        value={grauRiscoValue}
+                        onValueChange={(value) => {
+                          console.log("🔍 Select onChange:", value);
+                          setFormData({ ...formData, grauRisco: value });
+                        }}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
+                        <SelectTrigger className="w-full" id="grauRisco">
+                          <SelectValue placeholder="Selecione o grau de risco" />
                         </SelectTrigger>
                         <SelectContent>
                           {GRAUS_RISCO.map((grau) => (
@@ -331,12 +431,11 @@ export default function Empresas() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="complementoEndereco">Complemento</Label>
+                      <Label htmlFor="bairroEndereco">Bairro</Label>
                       <Input
-                        id="complementoEndereco"
-                        value={formData.complementoEndereco}
-                        onChange={(e) => setFormData({ ...formData, complementoEndereco: e.target.value })}
-                        placeholder="Sala, bloco, etc"
+                        id="bairroEndereco"
+                        value={formData.bairroEndereco}
+                        onChange={(e) => setFormData({ ...formData, bairroEndereco: e.target.value })}
                       />
                     </div>
                     <div>
@@ -370,6 +469,15 @@ export default function Empresas() {
                         value={formData.cep}
                         onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
                         placeholder="Ex: 12345-678"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="complementoEndereco">Complemento</Label>
+                      <Input
+                        id="complementoEndereco"
+                        value={formData.complementoEndereco}
+                        onChange={(e) => setFormData({ ...formData, complementoEndereco: e.target.value })}
+                        placeholder="Sala, bloco, etc"
                       />
                     </div>
                   </div>
@@ -492,8 +600,6 @@ export default function Empresas() {
                       <TableHead>Razão Social</TableHead>
                       <TableHead>CNPJ</TableHead>
                       <TableHead>Grau de Risco</TableHead>
-                      <TableHead>CNAE</TableHead>
-                      <TableHead>Cidade</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
@@ -519,8 +625,6 @@ export default function Empresas() {
                         <TableCell className="font-medium">{empresa.razaoSocial}</TableCell>
                         <TableCell>{empresa.cnpj}</TableCell>
                         <TableCell>{empresa.grauRisco || "-"}</TableCell>
-                        <TableCell>{empresa.cnae || "-"}</TableCell>
-                        <TableCell>{empresa.cidadeEndereco || "-"}</TableCell>
                         <TableCell>
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

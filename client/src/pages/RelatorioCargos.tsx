@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
-export default function RelatorioCargos() {
+export default function RelatorioCargos({ showLayout = true }: { showLayout?: boolean }) {
   const [empresaFiltro, setEmpresaFiltro] = useState<number | undefined>(undefined);
   
   const { data: empresas = [] } = trpc.empresas.list.useQuery();
@@ -51,16 +51,12 @@ export default function RelatorioCargos() {
   const totalCargos = relatorioPorEmpresa.reduce((sum: number, item: any) => sum + (Number(item.quantidade) || 0), 0);
   const totalSetores = relatorioPorSetor.length;
 
-  return (
-    <DashboardLayout>
-      <div className="space-y-6 p-6">
+  const content = (
+    <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Relatório de Cargos</h1>
-            <p className="text-gray-600 mt-1">Quantidade de cargos por empresas e setores</p>
-          </div>
-          <Button onClick={handleExportCSV} className="flex items-center gap-2">
-            <Download className="h-4 w-4" />
+          <h1 className="text-3xl font-bold">Relatório de Cargos</h1>
+          <Button onClick={handleExportCSV}>
+            <Download className="mr-2 h-4 w-4" />
             Exportar CSV
           </Button>
         </div>
@@ -94,7 +90,7 @@ export default function RelatorioCargos() {
         </Card>
 
         {/* Cards de Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">
@@ -269,7 +265,19 @@ export default function RelatorioCargos() {
           </CardContent>
         </Card>
       </div>
+  );
+
+  if (!showLayout) {
+    return content;
+  }
+
+  return (
+    <DashboardLayout>
+      {content}
     </DashboardLayout>
   );
 }
+
+
+
 

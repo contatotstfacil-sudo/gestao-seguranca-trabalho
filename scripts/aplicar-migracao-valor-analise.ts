@@ -39,3 +39,11 @@ async function aplicarMigracaoValorAnalise() {
 
 aplicarMigracaoValorAnalise();
 
+
+
+
+
+
+
+
+

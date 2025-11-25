@@ -1,7 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { ClipboardList, FileText, ShieldAlert, ShieldCheck, Thermometer, ChevronRight } from "lucide-react";
+import { ClipboardList, FileText, ShieldAlert, ShieldCheck, Thermometer, ChevronRight, FolderOpen } from "lucide-react";
 import { useLocation } from "wouter";
 import React from "react";
 
@@ -10,6 +10,7 @@ import LaudoPgr from "./laudos/LaudoPgr";
 import LaudoLtcat from "./laudos/LaudoLtcat";
 import LaudoInsalubridade from "./laudos/LaudoInsalubridade";
 import LaudoPericulosidade from "./laudos/LaudoPericulosidade";
+import ModeloPgro from "./laudos/ModeloPgro";
 
 type LaudoSection = {
   id: string;
@@ -21,6 +22,14 @@ type LaudoSection = {
 };
 
 const laudoSections: LaudoSection[] = [
+  {
+    id: "modelos",
+    label: "Modelos",
+    description: "Gerencie modelos de documentos para facilitar a criação de laudos.",
+    icon: FolderOpen,
+    path: "/laudos-ocupacionais/modelos",
+    component: ModeloPgro,
+  },
   {
     id: "pgro",
     label: "PGRO",

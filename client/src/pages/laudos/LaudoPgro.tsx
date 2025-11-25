@@ -4,6 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, VerticalAlign, Header, Footer, InternalHyperlink, PageBreak, ExternalHyperlink, XmlComponent, Media, ImageRun } from "docx";
+import { saveAs } from "file-saver";
+
+// Nota: A biblioteca docx não suporta campos dinâmicos de página nativamente
+// Por enquanto, usamos texto fixo "Página 1 de 2"
+// O usuário pode atualizar manualmente no Word se necessário
 import {
   Dialog,
   DialogContent,
@@ -43,17 +49,39 @@ import {
   UserCheck,
   X,
   Filter,
+  FileText,
+  File,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import jsPDF from "jspdf";
 
 type EmpresaResumo = {
   id: string;
   razaoSocial: string;
   nomeFantasia?: string | null;
   cnpj?: string | null;
+  descricaoAtividade?: string | null;
+  tipoLogradouro?: string | null;
+  nomeLogradouro?: string | null;
+  numeroEndereco?: string | null;
+  complementoEndereco?: string | null;
+  cidadeEndereco?: string | null;
+  estadoEndereco?: string | null;
+  cep?: string | null;
+  emailContato?: string | null;
+  cnae?: string | null;
+  grauRisco?: string | null;
 };
 
 type ResponsavelResumo = {
@@ -186,12 +214,6 @@ export default function LaudoPgro() {
       // Garantir que sempre busca todas as empresas
       staleTime: 5 * 60 * 1000, // 5 minutos
       refetchOnWindowFocus: false,
-      onSuccess: (data) => {
-        console.log(`[PGRO] ✅ Empresas carregadas: ${data.length}`);
-      },
-      onError: (error) => {
-        console.error("[PGRO] ❌ Erro ao carregar empresas:", error);
-      },
     }
   );
   const { data: responsaveisData = [], isLoading: isLoadingResponsaveis } =
@@ -215,6 +237,17 @@ export default function LaudoPgro() {
         razaoSocial: empresa.razaoSocial ?? "",
         nomeFantasia: empresa.nomeFantasia ?? "",
         cnpj: empresa.cnpj ?? "",
+        descricaoAtividade: empresa.descricaoAtividade ?? "",
+        tipoLogradouro: empresa.tipoLogradouro ?? "",
+        nomeLogradouro: empresa.nomeLogradouro ?? "",
+        numeroEndereco: empresa.numeroEndereco ?? "",
+        complementoEndereco: empresa.complementoEndereco ?? "",
+        cidadeEndereco: empresa.cidadeEndereco ?? "",
+        estadoEndereco: empresa.estadoEndereco ?? "",
+        cep: empresa.cep ?? "",
+        emailContato: empresa.emailContato ?? "",
+        cnae: empresa.cnae ?? null,
+        grauRisco: empresa.grauRisco ?? null,
       })),
     [empresasData]
   );
@@ -288,7 +321,7 @@ export default function LaudoPgro() {
 
       if (!empresaIdNumber) return mapped;
       const empresaIdStr = empresaIdNumber.toString();
-      return mapped.filter((cargo) => cargo.empresaId === null || cargo.empresaId === empresaIdStr);
+      return mapped.filter((cargo: { empresaId: string | null }) => cargo.empresaId === null || cargo.empresaId === empresaIdStr);
     },
     [cargosData, empresaIdNumber, queryEnabled]
   );
@@ -306,7 +339,7 @@ export default function LaudoPgro() {
 
       if (!empresaIdNumber) return mapped;
       const empresaIdStr = empresaIdNumber.toString();
-      return mapped.filter((setor) => setor.empresaId === null || setor.empresaId === empresaIdStr);
+      return mapped.filter((setor: SetorResumo) => setor.empresaId === null || setor.empresaId === empresaIdStr);
     },
     [setoresData, empresaIdNumber, queryEnabled]
   );
@@ -339,21 +372,27 @@ export default function LaudoPgro() {
     setResponsavelSelecionado(null);
     setObservacoes("");
     setCargosPlano([createEmptyCargoItem()]);
+    setEmissaoEditandoId(null);
+    setSalvando(false);
   }, [createEmptyCargoItem]);
 
   const handleDialogToggle = useCallback(
     (open: boolean) => {
       setDialogOpen(open);
       if (!open) {
-        resetDialogState();
+        setTimeout(() => {
+          resetDialogState();
+        }, 100);
       }
     },
     [resetDialogState]
   );
 
   const handleDialogClose = useCallback(() => {
-    resetDialogState();
     setDialogOpen(false);
+    setTimeout(() => {
+      resetDialogState();
+    }, 100);
   }, [resetDialogState]);
 
   const nomeEmpresaSelecionada = selectedEmpresa
@@ -610,20 +649,4160 @@ export default function LaudoPgro() {
     toast.success("Emissões selecionadas foram excluídas.");
   }, [emissoes, emissoesSelecionadas, salvarEmissoesLocal]);
 
-  const handleBaixarEmissao = useCallback((emissao: EmissaoPgro) => {
-    const texto = `Relatório PGRO / PPRA\n\nEmpresa: ${emissao.empresaNome}\nResponsável: ${emissao.responsavelNome}\nVigência: ${format(new Date(emissao.vigenciaInicio), "dd/MM/yyyy")} - ${format(new Date(emissao.vigenciaFim), "dd/MM/yyyy")}\n\nCargos contemplados:\n${emissao.cargos
-      .map((item) => `- ${item.cargoNome} (Setor: ${item.setorNome} | CBO: ${item.cbo || "-"})`)
-      .join("\n")}\n\nObservações:\n${emissao.observacoes || "Nenhuma"}`;
+  // Modelo padrão PGRO - Capa em branco em formato retrato com margens estreitas (1,27 cm) e cabeçalho
+  const gerarTemplatePGROPadrao = useCallback((emissao: EmissaoPgro) => {
+    // Buscar dados da empresa
+    const empresa = empresas.find((e) => e.id === emissao.empresaId);
+    const empresaCnpj = empresa?.cnpj || '';
+    const empresaAtividade = empresa?.descricaoAtividade || '';
+    
+    // Formatar datas corretamente (evitar problemas de timezone)
+    const formatarData = (dataString: string) => {
+      if (!dataString) return '';
+      // Se já está no formato YYYY-MM-DD, usar diretamente
+      if (dataString.match(/^\d{4}-\d{2}-\d{2}/)) {
+        const [ano, mes, dia] = dataString.split('-');
+        return `${dia}/${mes}/${ano}`;
+      }
+      // Caso contrário, tentar formatar com date-fns
+      try {
+        return format(new Date(dataString), "dd/MM/yyyy");
+      } catch {
+        return dataString;
+      }
+    };
+    
+    const dataEmissao = formatarData(emissao.vigenciaInicio);
+    const dataVencimento = formatarData(emissao.vigenciaFim);
+    
+    // Formatar mês/ano da data de vencimento em maiúsculo
+    const formatarMesAno = (dataString: string) => {
+      if (!dataString) return '';
+      try {
+        let data: Date;
+        // Se está no formato YYYY-MM-DD, criar Date corretamente
+        if (dataString.match(/^\d{4}-\d{2}-\d{2}/)) {
+          const [ano, mes, dia] = dataString.split('-').map(Number);
+          data = new Date(ano, mes - 1, dia);
+        } else {
+          data = new Date(dataString);
+        }
+        return format(data, "MMMM / yyyy", { locale: ptBR }).toUpperCase();
+      } catch {
+        return '';
+      }
+    };
+    
+    const mesAnoVencimento = formatarMesAno(emissao.vigenciaFim);
+    
+    // Formatar endereço completo da empresa
+    const formatarEndereco = () => {
+      if (!empresa) return '';
+      
+      const partes: string[] = [];
+      
+      // Tipo de logradouro + Nome do logradouro
+      if (empresa.tipoLogradouro && empresa.nomeLogradouro) {
+        partes.push(`${empresa.tipoLogradouro.toUpperCase()} ${empresa.nomeLogradouro.toUpperCase()}`);
+      } else if (empresa.nomeLogradouro) {
+        partes.push(empresa.nomeLogradouro.toUpperCase());
+      }
+      
+      // Número
+      if (empresa.numeroEndereco && partes.length > 0) {
+        partes[partes.length - 1] += `, Nº ${empresa.numeroEndereco}`;
+      }
+      
+      // Complemento (se houver)
+      if (empresa.complementoEndereco) {
+        partes.push(empresa.complementoEndereco.toUpperCase());
+      }
+      
+      // Cidade - Estado
+      if (empresa.cidadeEndereco && empresa.estadoEndereco) {
+        partes.push(`${empresa.cidadeEndereco.toUpperCase()}-${empresa.estadoEndereco.toUpperCase()}`);
+      } else if (empresa.cidadeEndereco) {
+        partes.push(empresa.cidadeEndereco.toUpperCase());
+      }
+      
+      // CEP
+      if (empresa.cep) {
+        const cepFormatado = empresa.cep.replace(/(\d{2})(\d{3})(\d{3})/, '$1.$2-$3');
+        partes.push(`CEP ${cepFormatado}`);
+      }
+      
+      return partes.join(', ');
+    };
+    
+    const enderecoCompleto = formatarEndereco();
+    const telefoneEmpresa = empresa?.emailContato || '';
+    
+    return `
+      <!DOCTYPE html>
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:v="urn:schemas-microsoft-com:vml" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="ProgId" content="Word.Document">
+          <meta name="Generator" content="Microsoft Word">
+          <meta name="Originator" content="Microsoft Word">
+          <!--[if gte mso 9]>
+          <xml>
+            <w:WordDocument xmlns:w="urn:schemas-microsoft-com:office:word">
+              <w:View>Print</w:View>
+              <w:Zoom>100</w:Zoom>
+              <w:DoNotOptimizeForBrowser/>
+            </w:WordDocument>
+            <o:DocumentProperties xmlns:o="urn:schemas-microsoft-com:office:office">
+              <o:Version>12.00</o:Version>
+            </o:DocumentProperties>
+          </xml>
+          <![endif]-->
+          <style>
+            @page {
+              size: A4 portrait;
+              margin-top: 1.27cm;
+              margin-bottom: 1.27cm;
+              margin-left: 1.27cm;
+              margin-right: 1.27cm;
+            }
+            body {
+              font-family: "Calibri Light", Calibri, sans-serif;
+              margin: 0;
+              padding: 0;
+              width: 100%;
+              height: 100%;
+              background-color: #ffffff;
+            }
+            .capa {
+              width: 100%;
+              height: 100%;
+              min-height: calc(100vh - 60px);
+              background-color: #ffffff;
+              page-break-after: always;
+            }
+            .pagina {
+              page-break-after: always;
+            }
+            .pagina:last-child {
+              page-break-after: auto;
+            }
+          </style>
+          <!--[if gte mso 9]>
+          <style>
+            @page Section1 {
+              size: 21.0cm 29.7cm;
+              margin: 1.27cm 1.27cm 1.27cm 1.27cm;
+              mso-header-margin: 0.635cm;
+              mso-footer-margin: 0.635cm;
+              mso-paper-source: 0;
+            }
+            div.Section1 {
+              page: Section1;
+            }
+            table {
+              mso-displayed-decimal-separator: "\\,";
+              mso-displayed-thousand-separator: "\\.";
+            }
+          </style>
+          <![endif]-->
+        </head>
+        <body>
+          <!--[if gte mso 9]>
+          <div class="Section1">
+          <![endif]-->
+          <!-- Cabeçalho que se repete em todas as páginas -->
+          <table style="width: 100%; border: 1px solid #000000; border-collapse: collapse; margin: 0; padding: 0; font-family: 'Calibri Light', Calibri, sans-serif;">
+            <tr>
+              <td style="width: 70%; padding: 8px 12px; vertical-align: middle; border-right: 1px solid #000000; font-weight: bold; text-transform: uppercase; white-space: nowrap; text-align: center; font-family: 'Calibri Light', Calibri, sans-serif;">PGRO – PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</td>
+              <td style="width: 30%; padding: 8px 12px; vertical-align: middle; text-align: center; white-space: nowrap; font-family: 'Calibri Light', Calibri, sans-serif;">
+                Página <span style="mso-field-code: ' PAGE '"></span> de <span style="mso-field-code: ' NUMPAGES '"></span>
+              </td>
+            </tr>
+          </table>
+          <div style="line-height: 1.5; font-family: 'Calibri Light', Calibri, sans-serif;">
+            <br/><br/><br/><br/><br/><br/><br/><br/>
+            <div style="text-align: center; font-family: 'Calibri Light', Calibri, sans-serif;">
+              <div style="font-size: 20pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif;">PROGRAMA DE GERENCIAMENTO DE RISCO</div>
+              <div style="font-size: 20pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif;">OCUPACIONAIS</div>
+              <div style="font-size: 12pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif; margin-top: 20px;">Referencias Normativas: NR01 – NR09</div>
+              <br/><br/>
+              <div style="font-size: 15pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif; color: #003366;">${emissao.empresaNome || ''}</div>
+              <div style="font-size: 15pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif; color: #003366;">CNPJ: ${empresaCnpj}</div>
+              <br/><br/><br/><br/><br/><br/><br/><br/><br/>
+              <div style="font-size: 10pt; font-family: 'Calibri Light', Calibri, sans-serif; color: #000000; text-align: left;"><span style="font-weight: bold;">Descrição de atividades:</span> ${empresaAtividade}</div>
+              <br/><br/><br/><br/>
+              <div style="text-align: right; font-family: 'Calibri Light', Calibri, sans-serif;">
+                <table style="margin-left: auto; margin-right: 0; border-collapse: collapse; font-size: 10pt; font-family: 'Calibri Light', Calibri, sans-serif;">
+                  <tr>
+                    <td style="padding-right: 15px; text-align: right; font-family: 'Calibri Light', Calibri, sans-serif; font-weight: bold;">Data de emissão do programa:</td>
+                    <td style="text-align: left; font-family: 'Calibri Light', Calibri, sans-serif;">${dataEmissao}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding-right: 15px; text-align: right; font-family: 'Calibri Light', Calibri, sans-serif; font-weight: bold;">Data vencimento programa:</td>
+                    <td style="text-align: left; font-family: 'Calibri Light', Calibri, sans-serif;">${dataVencimento}</td>
+                  </tr>
+                </table>
+              </div>
+              <br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
+              <div style="text-align: center; font-family: 'Calibri Light', Calibri, sans-serif;">
+                <div style="font-size: 23pt; font-weight: bold; color: #FF0000; text-transform: uppercase; font-family: 'Calibri Light', Calibri, sans-serif;">- ${mesAnoVencimento} -</div>
+              </div>
+              <br/><br/>
+              <div style="text-align: center; font-family: 'Calibri Light', Calibri, sans-serif; width: 100%;">
+                <hr style="border: none; border-top: 1px solid #CCCCCC; width: 100%; margin: 10px 0;" />
+                ${enderecoCompleto ? `<div style="font-size: 10pt; color: #808080; font-family: 'Calibri Light', Calibri, sans-serif; margin-top: 10px; text-align: center;">${enderecoCompleto}</div>` : ''}
+                ${telefoneEmpresa ? `<div style="font-size: 10pt; color: #808080; font-family: 'Calibri Light', Calibri, sans-serif; margin-top: 5px; text-align: center;">${telefoneEmpresa}</div>` : ''}
+              </div>
+            </div>
+          </div>
+          <!--[if gte mso 9]>
+          </div>
+          <![endif]-->
+        </body>
+      </html>
+    `;
+  }, [empresas]);
 
-    const blob = new Blob([texto], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `relatorio-pgro-${emissao.id}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("Relatório básico gerado em TXT.");
+  // Código antigo removido - modelo completo desconsiderado
+  /*
+    let modelo = modeloPgro;
+    if (!modelo) {
+      const modelosSalvos = typeof window !== "undefined" ? localStorage.getItem("modelos-pgro") : null;
+      if (modelosSalvos) {
+        try {
+          const modelos = JSON.parse(modelosSalvos);
+          modelo = modelos.length > 0 ? modelos[0] : null; // Usar o primeiro modelo
+        } catch (e) {
+          console.error("Erro ao carregar modelo:", e);
+        }
+      }
+    }
+
+    const dataInicio = format(new Date(emissao.vigenciaInicio), "dd/MM/yyyy", { locale: ptBR });
+    const dataFim = format(new Date(emissao.vigenciaFim), "dd/MM/yyyy", { locale: ptBR });
+    const dataAtual = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
+    const mesAno = format(new Date(emissao.vigenciaFim), "MMMM/yyyy", { locale: ptBR }).toUpperCase();
+    const cidade = empresa?.cidade || "Campinas";
+    const estado = empresa?.estado || "SP";
+
+    // Função para formatar texto do modelo
+    const formatarTexto = (texto: string) => {
+      if (!texto) return "";
+      if (texto.includes("<img") || texto.includes("<table") || texto.includes("<div")) {
+        return texto;
+      }
+      return texto.replace(/\n/g, "<br>");
+    };
+
+    // PÁGINA 1 - CAPA
+    const pagina1 = `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página 1 de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="text-align: center; margin: 60px 0;">
+          <div style="font-size: 48px; font-weight: bold; margin-bottom: 20px;">PGRO</div>
+          <div style="font-size: 24px; font-weight: bold; margin-bottom: 30px;">PROGRAMA DE GERENCIAMENTO DE RISCO OCUPACIONAIS</div>
+          <div style="font-size: 14px; margin-bottom: 40px;">Referencias Normativas: NR01 - NR09</div>
+          <div style="font-size: 28px; font-weight: bold; color: #FF6600; margin-bottom: 20px;">${emissao.responsavelNome.toUpperCase()}</div>
+          <div style="font-size: 24px; font-weight: bold; color: #FF6600; margin-bottom: 40px;">${empresa?.razaoSocial || empresa?.nomeFantasia || emissao.empresaNome}</div>
+          <div style="font-size: 14px; margin-bottom: 20px;"><strong>DESCRIÇÃO DAS ATIVIDADES:</strong></div>
+          <div style="font-size: 14px;">${empresa?.atividade || "Obras de terraplenagem"}</div>
+        </div>
+
+        <div style="margin-top: 80px;">
+          <table style="width: 60%; margin: 0 auto; border-collapse: collapse;">
+            <tr>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; width: 50%;">INÍCIO DO INVENTÁRIO:</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">${dataInicio}</td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold;">LEVANTAMENTO DE RISCOS:</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">${dataInicio}</td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold;">VENCIMENTO DO INVENTÁRIO:</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">${dataFim}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center;">
+          <div style="font-size: 20px; font-weight: bold; color: #CC0000;">– ${mesAno} –</div>
+          <div style="margin-top: 20px; font-size: 11px;">
+            ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // PÁGINA 2 - CONTROLE DE REVISÕES
+    const pagina2 = `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página 2 de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+          <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">CONTROLE DE REVISÕES</div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr style="background-color: #D3D3D3;">
+            <td style="border: 1px solid #000; padding: 10px; font-weight: bold; text-align: center; width: 15%;">REV</td>
+            <td style="border: 1px solid #000; padding: 10px; font-weight: bold; text-align: center; width: 60%;">DESCRIÇÃO</td>
+            <td style="border: 1px solid #000; padding: 10px; font-weight: bold; text-align: center; width: 25%;">DATA</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 10px; text-align: center;">00</td>
+            <td style="border: 1px solid #000; padding: 10px;">Emissão Geral</td>
+            <td style="border: 1px solid #000; padding: 10px; color: #CC0000;">preencher</td>
+          </tr>
+          ${Array.from({ length: 10 }, (_, i) => `
+            <tr>
+              <td style="border: 1px solid #000; padding: 10px; text-align: center;"></td>
+              <td style="border: 1px solid #000; padding: 10px;"></td>
+              <td style="border: 1px solid #000; padding: 10px;"></td>
+            </tr>
+          `).join("")}
+        </table>
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+          ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+        </div>
+      </div>
+    `;
+
+    // PÁGINA 3 - IDENTIFICAÇÃO DA EMPRESA
+    const pagina3 = `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página 3 de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+          <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">IDENTIFICAÇÃO DA EMPRESA</div>
+        </div>
+
+        <div style="line-height: 2;">
+          <p><strong>Razão Social:</strong> ${empresa?.razaoSocial || emissao.empresaNome}</p>
+          <p><strong>Cnpj:</strong> ${empresa?.cnpj || "00.000.000/0000-00"}</p>
+          <p><strong>Atividade:</strong> ${empresa?.atividade || "Obra de Terraplenagem"}</p>
+          <p><strong>Cnae principal:</strong> ${empresa?.cnae || "43.13-4-00"}</p>
+          <p><strong>Grau de Risco:</strong> ${empresa?.grauRisco || "03"}</p>
+          <p><strong>Rua:</strong> ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"}</p>
+          <p><strong>Total de Empregado:</strong> ${empresa?.totalFuncionarios || "04"}</p>
+          <p><strong>Empregados Homens:</strong> ${empresa?.funcionariosHomens || "04"}</p>
+          <p><strong>Empregados Mulheres:</strong> ${empresa?.funcionariosMulheres || "00"}</p>
+          <p><strong>Horário de Trabalho:</strong> ${empresa?.horarioTrabalho || "De segunda a quinta feira das 07h às 17h de sexta das 07h às 16h."}</p>
+        </div>
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+          ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+        </div>
+      </div>
+    `;
+
+    // PÁGINA 4 - ÍNDICE
+    const pagina4 = `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página 4 de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+          <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">ÍNDICE</div>
+        </div>
+
+        <div style="line-height: 2.5;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>1. objetivos.</strong></span>
+            <span>05</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>2. Fundamentação legal.</strong></span>
+            <span>06</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>3. Informação/Divulgação dos dados.</strong></span>
+            <span>07</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>4. Periodicidade e analise global do PGR.</strong></span>
+            <span>08</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>5. Monitoramento da Exposição aos riscos.</strong></span>
+            <span>09</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>6. Analise de exposição dos riscos.</strong></span>
+            <span>10</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>7. CIPA.</strong></span>
+            <span>11</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>8. Responsabilidades.</strong></span>
+            <span>12</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>9. Inventario de reconhecimento avaliação e controle.</strong></span>
+            <span>13</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>10. Cronograma de ações.</strong></span>
+            <span>20</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding: 5px 0;">
+            <span><strong>11. Termino do Programa.</strong></span>
+            <span>21</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+          ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+        </div>
+      </div>
+    `;
+
+    // PÁGINAS 5-12 - CONTEÚDO DO MODELO
+    const gerarPaginaConteudo = (numero: number, titulo: string, conteudo: string) => {
+      return `
+        <div class="page" style="font-family: Arial, sans-serif;">
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr>
+              <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+                <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                  <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                  <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+                </div>
+              </td>
+              <td style="width: 50%; text-align: center; vertical-align: top;">
+                <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                  <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+                </div>
+              </td>
+              <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+                <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                  <div style="font-size: 12px;">Página ${numero} de 21</div>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+            <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">${titulo}</div>
+          </div>
+
+          <div style="line-height: 1.8; text-align: justify;">
+            ${formatarTexto(conteudo)}
+          </div>
+
+          <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+            ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+          </div>
+        </div>
+      `;
+    };
+
+    const pagina5 = gerarPaginaConteudo(5, "1. OBJETIVOS", modelo?.objetivos || "");
+    const pagina6 = gerarPaginaConteudo(6, "2. FUNDAMENTO LEGAL", modelo?.fundamentacaoLegal || "");
+    const pagina7 = gerarPaginaConteudo(7, "3. INFORMAÇÃO/DIVULGAÇÃO DOS DADOS", modelo?.informacaoDivulgacao || "");
+    const pagina8 = gerarPaginaConteudo(8, "4. PERIODICIDADE E ANALISE GLOBAL DO PPRA", modelo?.periodicidadeAnalise || "");
+    const pagina9 = gerarPaginaConteudo(9, "5. MONITORAMENTO DA EXPOSIÇÃO AOS RISCOS", modelo?.monitoramentoExposicao || "");
+    const pagina10 = gerarPaginaConteudo(10, "6. ANALISE DE EXPOSIÇÃO DOS TRABALHADORES", modelo?.analiseExposicao || "");
+    
+    // PÁGINA 11 - CIPA
+    const pagina11 = `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página 11 de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+          <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">7. COMISSÃO INTERNA DE PREVENÇÃO DE ACIDENTES – CIPA NR 05</div>
+        </div>
+
+        <div style="line-height: 1.8; text-align: justify; margin-bottom: 30px;">
+          <p>
+            Comissão Interna de Prevenção de Acidentes (CIPA) é, segundo a legislação brasileira, uma comissão constituída por representantes indicados pelo empregador e membros eleitos pelos trabalhadores, de forma partidária, em cada estabelecimento da empresa, que tem a finalidade de prevenir acidentes e doenças decorrentes da vila laboral de cada trabalhador.
+          </p>
+        </div>
+
+        <div style="margin-bottom: 30px;">
+          <div style="font-weight: bold; margin-bottom: 10px;">QUADRO I</div>
+          <div style="font-weight: bold; margin-bottom: 10px;">NÚMERO DE FUNCIONÁRIOS NA EMPRESA</div>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr style="background-color: #D3D3D3;">
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center;">GRUPOS</td>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center;">ELEITOS DA CIPA</td>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center;">0 a 19</td>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center;">20 a 29</td>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center;">30 a 50</td>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center;">51 a 80</td>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center;">81 a 100</td>
+              <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center;">101 a 120</td>
+            </tr>
+            <tr>
+              <td rowspan="2" style="border: 1px solid #000; padding: 8px; text-align: center; vertical-align: middle;">C-18</td>
+              <td style="border: 1px solid #000; padding: 8px;">Titulares</td>
+              <td style="border: 1px solid #000; padding: 8px;"></td>
+              <td style="border: 1px solid #000; padding: 8px;"></td>
+              <td style="border: 1px solid #000; padding: 8px;"></td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">2</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">2</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">4</td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 8px;">Suplentes</td>
+              <td style="border: 1px solid #000; padding: 8px;"></td>
+              <td style="border: 1px solid #000; padding: 8px;"></td>
+              <td style="border: 1px solid #000; padding: 8px;"></td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">2</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">2</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">3</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="line-height: 1.8; text-align: justify;">
+          <p>
+            De acordo com o quadro I da NR 05, as empresas que não atingirem o quadro de CIPA é necessário designar um empregado para representante da empresa para o cumprimento das atribuições da NR 05.
+          </p>
+        </div>
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+          ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+        </div>
+      </div>
+    `;
+    
+    const pagina12 = gerarPaginaConteudo(12, "8. DAS RESPONSABILIDADES", modelo?.responsabilidades || "");
+
+    // PÁGINA 13 - INVENTÁRIO DE RISCOS
+    const pagina13 = `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página 13 de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+          <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">9. INVENTARIO DE RISCOS: RECONHECIMENTOS, AVALIAÇÃO E CONTROLE</div>
+        </div>
+
+        <p style="margin-bottom: 20px; text-align: justify;">
+          Nesta etapa foi feito análise qualitativa através de inspeção "in loco" e quantitativa com utilização de equipamentos de dados que foi possível obter através da visita técnica, segue abaixo quadro de riscos por função. No reconhecimento foi montada a planilha da seguinte forma:
+        </p>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td colspan="2" style="border: 1px solid #000; padding: 10px; background-color: #ADD8E6; font-weight: bold; text-align: center; color: #000;">Agente Ambiental</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #228B22; color: #fff; width: 50%;">Grupo 1 - Riscos Físicos</td>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #228B22; color: #fff; width: 50%;"></td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #DC143C; color: #fff; width: 50%;">Grupo 2 - Riscos Químicos</td>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #DC143C; color: #fff; width: 50%;"></td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #6B8E23; color: #fff; width: 50%;">Grupo 3 - Riscos Biológicos</td>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #6B8E23; color: #fff; width: 50%;"></td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #FFD700; color: #000; width: 50%;">Grupo 4 - Riscos Ergonômicos</td>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #FFD700; color: #000; width: 50%;"></td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #87CEEB; color: #000; width: 50%;">Grupo 5 - Riscos de Acidentes</td>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #87CEEB; color: #000; width: 50%;"></td>
+          </tr>
+        </table>
+
+        ${formatarTexto(modelo?.inventarioReconhecimento || "")}
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+          ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+        </div>
+      </div>
+    `;
+
+    // PÁGINAS 14-19 - QUADROS DE RISCOS (serão preenchidas com dados dos cargos)
+    const paginasRiscos = emissao.cargos.map((cargo, index) => `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página ${14 + index} de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+          <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">QUADRO DE RECONHECIMENTO DOS RISCOS</div>
+          <div style="color: #fff; font-weight: bold; font-size: 14px; text-align: center; margin-top: 5px;">ANÁLISE QUALITATIVA DOS RISCOS AMBIENTAIS</div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <p><strong>Setor:</strong> ${cargo.setorNome || "Obras"}</p>
+          <p><strong>Função:</strong> ${cargo.cargoNome}</p>
+          <p><strong>CBO:</strong> ${cargo.cbo || "-"}</p>
+        </div>
+
+        <p style="margin-bottom: 20px; text-align: justify;">
+          Descrição do cargo e riscos identificados para esta função serão preenchidos aqui.
+        </p>
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+          ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+        </div>
+      </div>
+    `).join("");
+
+    // PÁGINA 20 - CRONOGRAMA DE AÇÕES
+    const pagina20 = `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página 20 de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+          <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">10. Cronograma de Ações</div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+          <tr style="background-color: #D3D3D3;">
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 5%;">Item</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 25%;">Ação</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 15%;">Meta</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 30%;">Estratégia e Metodologia</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">MAI</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">JUN</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">JUL</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">AGO</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">SET</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">OUT</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">NOV</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">DEZ</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">JAN</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">FEV</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">MAR</td>
+            <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: center; width: 3%;">ABR</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">01</td>
+            <td style="border: 1px solid #000; padding: 8px;">Instruir os Empregados dos Riscos Existentes No PGR.</td>
+            <td style="border: 1px solid #000; padding: 8px;">2 vezes no ano</td>
+            <td style="border: 1px solid #000; padding: 8px;">Realizar instrução dos riscos através de DDS e recolher assinatura e lista de presença.</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">02</td>
+            <td style="border: 1px solid #000; padding: 8px;">Treinamento Admissional.</td>
+            <td style="border: 1px solid #000; padding: 8px;">1 vez ao ano</td>
+            <td style="border: 1px solid #000; padding: 8px;">Realizar treinamento admissional, com carga horaria predefinia em lista de presença sobre consulta da NR18.</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">03</td>
+            <td style="border: 1px solid #000; padding: 8px;">Emitir Ordem de Serviço.</td>
+            <td style="border: 1px solid #000; padding: 8px;">Anual</td>
+            <td style="border: 1px solid #000; padding: 8px;">Emitir ordem de serviço sempre que necessário, ou quando houver mudança de riscos e função.</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">04</td>
+            <td style="border: 1px solid #000; padding: 8px;">Elaborar e manter atualizadas fichas de epi.</td>
+            <td style="border: 1px solid #000; padding: 8px;">Mensal</td>
+            <td style="border: 1px solid #000; padding: 8px;">Entregar e sempre deixar as fichas de EPI atualizadas.</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">05</td>
+            <td style="border: 1px solid #000; padding: 8px;">Elaborar PGR ou Análise Global do inventario de risco</td>
+            <td style="border: 1px solid #000; padding: 8px;">Anual</td>
+            <td style="border: 1px solid #000; padding: 8px;">Realizar encerramento e anexar as tarefas que foram executadas dentro deste programa.</td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+            <td style="border: 1px solid #000; padding: 8px;"></td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">06</td>
+            <td style="border: 1px solid #000; padding: 8px;">Fazer Checklists de máquinas e Equipamentos.</td>
+            <td style="border: 1px solid #000; padding: 8px;">Mensal</td>
+            <td style="border: 1px solid #000; padding: 8px;">Inspecionar os equipamentos.</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">X</td>
+          </tr>
+        </table>
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+          ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+        </div>
+      </div>
+    `;
+
+    // PÁGINA 21 - ENCERRAMENTO
+    const pagina21 = `
+      <div class="page" style="font-family: Arial, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 30%; vertical-align: top; padding-right: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; background-color: #E6F3FF; text-align: center;">
+                <div style="font-weight: bold; font-size: 14px; color: #0066CC;">${empresa?.nomeFantasia?.split(" ")[0] || "EMPRESA"}</div>
+                <div style="font-weight: bold; font-size: 12px; color: #0066CC; margin-top: 5px;">${empresa?.nomeFantasia?.split(" ").slice(1).join(" ") || "MAQUINAS"}</div>
+              </div>
+            </td>
+            <td style="width: 50%; text-align: center; vertical-align: top;">
+              <div style="border: 1px solid #000; padding: 15px; background-color: #fff;">
+                <div style="font-weight: bold; font-size: 16px; text-transform: uppercase;">PGRO - PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</div>
+              </div>
+            </td>
+            <td style="width: 20%; text-align: right; vertical-align: top; padding-left: 10px;">
+              <div style="border: 1px solid #000; padding: 10px; text-align: center;">
+                <div style="font-size: 12px;">Página 21 de 21</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #808080; padding: 15px; margin-bottom: 30px;">
+          <div style="color: #fff; font-weight: bold; font-size: 18px; text-align: center; text-transform: uppercase;">11. ENCERRAMENTO</div>
+        </div>
+
+        <div style="line-height: 1.8; text-align: justify; margin-bottom: 40px;">
+          <p style="margin-bottom: 15px;">
+            Tendo cumprido a solicitação da empresa: ${empresa?.razaoSocial || emissao.empresaNome}, com base no levantamento "in loco" realizado no cliente, elaboramos o presente Programa de Prevenção de Riscos Ambientais.
+          </p>
+          <p style="margin-bottom: 15px;">
+            O presente documento deverá sofrer Analise Global e Anual, para avaliação do seu desenvolvimento e realização de seus ajustes necessários, bem como, o estabelecimento de novas metas e prioridades.
+          </p>
+          <p style="margin-bottom: 15px;">
+            As medidas aqui propostas deverão obrigatoriamente estar vinculadas ao PCMSO a fim de que, seja possível descobrir o nexo causal de possíveis problemas ocupacionais, as medidas de proteção aos empregados sejam imediatamente revistas.
+          </p>
+          <p style="margin-bottom: 15px;">
+            Ainda neste programa contempla a planilha de reconhecimento de riscos e em anexo está o complemento da analise ergonômica
+          </p>
+          <p style="margin-bottom: 15px;">
+            E por fim formalizamos este programa através de assinatura abaixo reconhecendo que o programa e composto por 21 páginas totais (desde a capa até seus anexos).
+          </p>
+        </div>
+
+        <div style="text-align: center; margin: 40px 0;">
+          <p style="margin-bottom: 30px;">${cidade} - ${estado}, dia ${dataAtual}.</p>
+          <div style="margin: 40px 0; min-height: 60px;">
+            <div style="border-bottom: 1px solid #000; width: 300px; margin: 0 auto; padding-bottom: 5px;"></div>
+            <p style="margin-top: 10px; font-weight: bold;">${emissao.responsavelNome}</p>
+            <p style="margin-top: 5px;">Técnico de Segurança do Trabalho</p>
+            <p style="margin-top: 5px;">MTE: ${emissao.responsavelRegistro || "50002/SP"}</p>
+          </div>
+        </div>
+
+        <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px;">
+          <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">${empresa?.razaoSocial || emissao.empresaNome}</div>
+          <div style="text-align: center; margin-bottom: 20px;">Cnpj: ${empresa?.cnpj || "00.000.000/0000-00"}</div>
+          <div style="border-top: 1px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
+            ${empresa?.endereco || "R ANTONIO MALAQUIAS PAES, Nº 321, JARDIM GUANABARA, MONTE MOR-SP, CEP 13.190-656"} ${empresa?.telefone || "(19) 99791-5106"}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Montar documento completo
+    return `
+      <!DOCTYPE html>
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="ProgId" content="Word.Document">
+          <meta name="Generator" content="Microsoft Word">
+          <meta name="Originator" content="Microsoft Word">
+          <xml>
+            <w:WordDocument>
+              <w:View>Print</w:View>
+              <w:Zoom>100</w:Zoom>
+              <w:DoNotOptimizeForBrowser/>
+            </w:WordDocument>
+          </xml>
+          <style>
+            @page {
+              size: A4;
+              margin: 20mm;
+            }
+            body {
+              font-family: Arial, sans-serif;
+              margin: 0;
+              padding: 0;
+            }
+            .page {
+              page-break-after: always;
+              min-height: 297mm;
+              padding: 20mm;
+              box-sizing: border-box;
+            }
+            .page:last-child {
+              page-break-after: auto;
+            }
+            table {
+              border-collapse: collapse;
+              width: 100%;
+            }
+            td, th {
+              border: 1px solid #000;
+              padding: 8px;
+            }
+          </style>
+        </head>
+        <body>
+          ${pagina1}
+          ${pagina2}
+          ${pagina3}
+          ${pagina4}
+          ${pagina5}
+          ${pagina6}
+          ${pagina7}
+          ${pagina8}
+          ${pagina9}
+          ${pagina10}
+          ${pagina11}
+          ${pagina12}
+          ${pagina13}
+          ${paginasRiscos}
+          ${pagina20}
+          ${pagina21}
+        </body>
+      </html>
+    `;
   }, []);
+  */
+
+  const gerarPDF = useCallback((emissao: EmissaoPgro) => {
+    try {
+      // Gerar HTML com modelo padrão (capa em branco)
+      const htmlContent = gerarTemplatePGROPadrao(emissao);
+      
+      // Abrir em nova janela para impressão
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        try {
+          printWindow.document.open();
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          
+          // Aguardar o carregamento completo antes de imprimir
+          printWindow.onload = () => {
+            setTimeout(() => {
+              try {
+                printWindow.print();
+              } catch (printError) {
+                console.error("Erro ao imprimir:", printError);
+                toast.error("Erro ao abrir diálogo de impressão");
+              }
+            }, 500);
+          };
+          
+          toast.success("PDF pronto para impressão!");
+        } catch (error) {
+          console.error("Erro ao escrever no documento:", error);
+          printWindow.close();
+          toast.error("Erro ao gerar janela de impressão");
+        }
+      } else {
+        toast.error("Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-ups está desativado.");
+      }
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error("Erro ao gerar PDF");
+    }
+  }, [gerarTemplatePGROPadrao]);
+
+  const gerarWord = useCallback(async (emissao: EmissaoPgro) => {
+    try {
+      // Buscar dados da empresa
+      const empresa = empresas.find((e) => e.id === emissao.empresaId);
+      const empresaCnpj = empresa?.cnpj || '';
+      const empresaAtividade = empresa?.descricaoAtividade || '';
+      
+      // Buscar colaboradores da empresa para calcular totais
+      const empresaIdNumber = empresa?.id ? parseInt(empresa.id) : null;
+      let totalEmpregados = 0;
+      let empregadosHomens = 0;
+      let empregadosMulheres = 0;
+      
+      if (empresaIdNumber) {
+        try {
+          const colaboradoresData = await utils.colaboradores.list.fetch({
+            empresaId: empresaIdNumber,
+          });
+          
+          // Filtrar apenas colaboradores ativos
+          const colaboradoresAtivos = (colaboradoresData || []).filter((c: any) => c.status === 'ativo');
+          
+          totalEmpregados = colaboradoresAtivos.length;
+          empregadosHomens = colaboradoresAtivos.filter((c: any) => c.sexo === 'masculino').length;
+          empregadosMulheres = colaboradoresAtivos.filter((c: any) => c.sexo === 'feminino').length;
+        } catch (error) {
+          console.error("Erro ao buscar colaboradores:", error);
+          // Usar valores padrão em caso de erro
+          totalEmpregados = 0;
+          empregadosHomens = 0;
+          empregadosMulheres = 0;
+        }
+      }
+      
+      // Formatar datas corretamente (evitar problemas de timezone)
+      const formatarData = (dataString: string) => {
+        if (!dataString) return '';
+        // Se já está no formato YYYY-MM-DD, usar diretamente
+        if (dataString.match(/^\d{4}-\d{2}-\d{2}/)) {
+          const [ano, mes, dia] = dataString.split('-');
+          return `${dia}/${mes}/${ano}`;
+        }
+        // Caso contrário, tentar formatar com date-fns
+        try {
+          return format(new Date(dataString), "dd/MM/yyyy");
+        } catch {
+          return dataString;
+        }
+      };
+      
+      const dataEmissao = formatarData(emissao.vigenciaInicio);
+      const dataVencimento = formatarData(emissao.vigenciaFim);
+      
+      // Formatar mês/ano da data de vencimento em maiúsculo
+      const formatarMesAno = (dataString: string) => {
+        if (!dataString) return '';
+        try {
+          let data: Date;
+          // Se está no formato YYYY-MM-DD, criar Date corretamente
+          if (dataString.match(/^\d{4}-\d{2}-\d{2}/)) {
+            const [ano, mes, dia] = dataString.split('-').map(Number);
+            data = new Date(ano, mes - 1, dia);
+          } else {
+            data = new Date(dataString);
+          }
+          return format(data, "MMMM / yyyy", { locale: ptBR }).toUpperCase();
+        } catch {
+          return '';
+        }
+      };
+      
+      const mesAnoVencimento = formatarMesAno(emissao.vigenciaFim);
+      
+      // Formatar endereço completo da empresa
+      const formatarEndereco = () => {
+        if (!empresa) return '';
+        
+        const partes: string[] = [];
+        
+        // Tipo de logradouro + Nome do logradouro
+        if (empresa.tipoLogradouro && empresa.nomeLogradouro) {
+          partes.push(`${empresa.tipoLogradouro.toUpperCase()} ${empresa.nomeLogradouro.toUpperCase()}`);
+        } else if (empresa.nomeLogradouro) {
+          partes.push(empresa.nomeLogradouro.toUpperCase());
+        }
+        
+        // Número
+        if (empresa.numeroEndereco) {
+          partes[partes.length - 1] += `, Nº ${empresa.numeroEndereco}`;
+        }
+        
+        // Complemento (se houver)
+        if (empresa.complementoEndereco) {
+          partes.push(empresa.complementoEndereco.toUpperCase());
+        }
+        
+        // Cidade - Estado
+        if (empresa.cidadeEndereco && empresa.estadoEndereco) {
+          partes.push(`${empresa.cidadeEndereco.toUpperCase()}-${empresa.estadoEndereco.toUpperCase()}`);
+        } else if (empresa.cidadeEndereco) {
+          partes.push(empresa.cidadeEndereco.toUpperCase());
+        }
+        
+        // CEP
+        if (empresa.cep) {
+          const cepFormatado = empresa.cep.replace(/(\d{2})(\d{3})(\d{3})/, '$1.$2-$3');
+          partes.push(`CEP ${cepFormatado}`);
+        }
+        
+        return partes.join(', ');
+      };
+      
+      const enderecoCompleto = formatarEndereco();
+      const telefoneEmpresa = empresa?.emailContato || '';
+      
+
+      // Função para criar tabela do cabeçalho com numeração específica
+      const criarHeaderTable = (numeroPagina: number, totalPaginas: number) => {
+        return new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+          },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  width: { size: 75, type: WidthType.PERCENTAGE },
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: "PGRO – PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS",
+                          font: "Calibri Light",
+                          size: 28,
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                      keepLines: true,
+                    }),
+                  ],
+                  verticalAlign: VerticalAlign.CENTER,
+                  borders: {
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                  },
+                }),
+                new TableCell({
+                  width: { size: 25, type: WidthType.PERCENTAGE },
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({ 
+                          text: `Página ${numeroPagina} de ${totalPaginas}`,
+                          font: "Calibri Light",
+                          size: 28,
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                    }),
+                  ],
+                  verticalAlign: VerticalAlign.CENTER,
+                }),
+              ],
+            }),
+          ],
+        });
+      };
+
+      // Criar conteúdo da capa
+      const coverContent = [
+        new Paragraph({ text: "", spacing: { before: 1200, after: 0 } }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "PROGRAMA DE GERENCIAMENTO", font: "Calibri Light", size: 40, bold: true }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 0 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "DE RISCO OCUPACIONAIS", font: "Calibri Light", size: 40, bold: true }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Referencias Normativas: NR01 – NR09", font: "Calibri Light", bold: true }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: emissao.empresaNome || '', font: "Calibri Light", size: 28, color: "003366", bold: true }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `CNPJ: ${empresaCnpj}`, font: "Calibri Light", size: 28, color: "003366", bold: true }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 2000 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Descrição de atividades: ", bold: true, font: "Calibri Light" }),
+            new TextRun({ text: empresaAtividade, font: "Calibri Light" }),
+          ],
+          spacing: { after: 2000 },
+        }),
+        new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          children: [
+            new TextRun({ text: "Data de emissão do programa: ", bold: true, font: "Calibri Light" }),
+            new TextRun({ text: dataEmissao, font: "Calibri Light" }),
+          ],
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          children: [
+            new TextRun({ text: "Data vencimento programa: ", bold: true, font: "Calibri Light" }),
+            new TextRun({ text: dataVencimento, font: "Calibri Light" }),
+          ],
+          spacing: { after: 2000 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `- ${mesAnoVencimento} -`, font: "Calibri Light", size: 60, bold: true, color: "FF0000" }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 0 },
+        }),
+      ];
+
+      // Criar rodapé reutilizável
+      const criarFooter = () => {
+        const footerParagraphs = [
+          new Paragraph({
+            children: [
+              new TextRun({ text: "________________________________________________________________________________", font: "Calibri Light" }),
+            ],
+            alignment: AlignmentType.CENTER,
+          }),
+        ];
+        if (enderecoCompleto) {
+          footerParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: enderecoCompleto, font: "Calibri Light" }),
+              ],
+              alignment: AlignmentType.CENTER,
+            })
+          );
+        }
+        if (telefoneEmpresa) {
+          footerParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: telefoneEmpresa, font: "Calibri Light" }),
+              ],
+              alignment: AlignmentType.CENTER,
+            })
+          );
+        }
+        return footerParagraphs;
+      };
+
+      // Criar documento Word
+      const doc = new Document({
+        sections: [
+          {
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720, // 1.27cm in twips
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(1, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: coverContent,
+          },
+          {
+            // Segunda página com informações da empresa
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(2, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page2Content = [
+                // Espaçamento antes da tabela de identificação (reduzido)
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "IDENTIFICAÇÃO DA EMPRESA", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "D3D3D3", // Cinza claro
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Razão Social
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Razão Social: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: empresa?.razaoSocial || emissao.empresaNome || '-', font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+                // CNPJ
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Cnpj: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: empresaCnpj || '-', font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+                // Atividade
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Atividade: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: empresaAtividade || '-', font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+                // CNAE principal (usando valor padrão se não existir)
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Cnae principal: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: empresa?.cnae || "43.13-4-00", font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+                // Grau de Risco
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Grau de Risco: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: empresa?.grauRisco || "03", font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+                // Rua (Endereço completo)
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Rua: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: enderecoCompleto || '-', font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+                // Total de Empregados (calculado dos colaboradores cadastrados)
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Total de Empregado: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: totalEmpregados.toString().padStart(2, '0'), font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+                // Empregados Homens (calculado dos colaboradores cadastrados)
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Empregados Homens: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: empregadosHomens.toString().padStart(2, '0'), font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+                // Empregados Mulheres (calculado dos colaboradores cadastrados)
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Empregados Mulheres: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: empregadosMulheres.toString().padStart(2, '0'), font: "Calibri Light", size: 24 }), // 12pt
+                  ],
+                  spacing: { after: 200 },
+                }),
+              ];
+              return page2Content;
+            })(),
+          },
+          {
+            // Terceira página com índice
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(3, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page3Content = [
+                // Espaçamento antes da tabela de índice
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "ÍNDICE", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "D3D3D3", // Cinza claro
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Itens do índice
+                ...(() => {
+                  const itensIndice = [
+                    { numero: 1, texto: "objetivos", pagina: 5 },
+                    { numero: 2, texto: "Fundamentação legal", pagina: 6 },
+                    { numero: 3, texto: "Informação/Divulgação dos dados", pagina: 7 },
+                    { numero: 4, texto: "Periodicidade e analise global do PGR", pagina: 8 },
+                    { numero: 5, texto: "Monitoramento da Exposição aos riscos", pagina: 9 },
+                    { numero: 6, texto: "Analise de exposição dos riscos", pagina: 10 },
+                    { numero: 7, texto: "CIPA", pagina: 11 },
+                    { numero: 8, texto: "Responsabilidades", pagina: 12 },
+                    { numero: 9, texto: "Inventario de reconhecimento avaliação e controle", pagina: 13 },
+                    { numero: 10, texto: "Cronograma de ações", pagina: 20 },
+                    { numero: 11, texto: "Termino do Programa", pagina: 21 },
+                  ];
+
+                  return itensIndice.map((item) => {
+                    // Criar parágrafo simples apenas com número e texto
+                    return new Paragraph({
+                      children: [
+                        new TextRun({ 
+                          text: `${item.numero}. ${item.texto}`, 
+                          font: "Calibri Light", 
+                          size: 24,
+                        }),
+                      ],
+                      spacing: { after: 120 },
+                      alignment: AlignmentType.LEFT,
+                    });
+                  });
+                })(),
+              ];
+              return page3Content;
+            })(),
+          },
+          {
+            // Quarta página com 1. OBJETIVOS
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(4, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page4Content = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                            new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "1. OBJETIVOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "808080", // Cinza
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Texto principal
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "Fornece um levantamento técnico sobre condições ambientais de trabalho, indicando a prestação de serviço em condições insalubres e/ou periculosas, além da especificação da exposição a fatores de riscos e respectivas medidas de controle, que irá orientar o preenchimento do Perfil Profissiográfico Previdenciário (PPP), processos de aposentadoria especial e atender à exigência legal da NR 09 - Programa de Prevenção de Riscos Ambientais, E (PGR) da Construção Civil NR18 - Programa de Gerenciamento de Riscos, do Ministério do Trabalho e Emprego e do Decreto 3.048/99 e suas alterações e Instrução normativa 77/2015 e suas atualizações e dos requisitos do E-Social.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Seção NOTA
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "NOTA: ", 
+                      font: "Calibri Light", 
+                      bold: true,
+                      size: 18, // 9pt
+                    }),
+                    new TextRun({ 
+                      text: "O E-Social tem por objetivo, informações trabalhistas, previdenciárias, tributárias e fiscais relativas à contratação e utilização de mão obra, com ou sem vínculo empregatício e também de outras informações previdenciárias e fiscais previstas na lei 8.212, de 1991.", 
+                      font: "Calibri Light", 
+                      size: 18, // 9pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+              ];
+              return page4Content;
+            })(),
+          },
+          {
+            // Quinta página com 2. FUNDAMENTO LEGAL
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(5, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page5Content = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "2. FUNDAMENTO LEGAL", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "808080", // Cinza
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Texto principal
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "Em 29 de dezembro de 1994, a Portaria N. º25 aprovaram o texto da Norma Regulamentadora, NR-09 que estabelece a obrigatoriedade da elaboração e implantação, por parte de todos os empregadores e instituições que admitam trabalhadores como empregados, visando à preservação da saúde e da integridade dos trabalhadores. As ações do PPRA (Programa de Prevenção de Riscos Ambientais) devem ser desenvolvidas no âmbito de cada estabelecimento da empresa, sob a responsabilidade de empregador, com a participação dos trabalhadores e deverá ser efetuada, sempre que necessário e ao menos uma vez ao ano a sua atualização.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Seção NOTA
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "Nota: ", 
+                      font: "Calibri Light", 
+                      bold: true,
+                      size: 18, // 9pt
+                    }),
+                    new TextRun({ 
+                      text: "Este documento serve de base para a elaboração do Programa de Controle Médico e Saúde Ocupacional – PCMSO, obrigatório pela NR-07.", 
+                      font: "Calibri Light", 
+                      size: 18, // 9pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+              ];
+              return page5Content;
+            })(),
+          },
+          {
+            // Sexta página com 3. INFORMAÇÃO/DIVULGAÇÃO DOS DADOS
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(6, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page6Content = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "3. INFORMAÇÃO/DIVULGAÇÃO DOS DADOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "808080", // Cinza
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Texto principal
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "As informações técnicas e administrativas, tais como: Laudos Ambientais, Mapas de Risco, relação de funcionários expostos a agentes nocivos com as respectivas funções e setores, bem como outros dados pertinentes permanecerão disponíveis no estabelecimento para consulta pela CIPA, trabalhadores e demais interessados, como também, para eventual fiscalização pelas autoridades.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Seção NOTA
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "Nota: ", 
+                      font: "Calibri Light", 
+                      bold: true,
+                      size: 18, // 9pt
+                    }),
+                    new TextRun({ 
+                      text: "Serão mantidas no setor administrativo da empresa, que fará a divulgação das informações e soluções através dos meios de comunicação existentes na empresa e/ou através de boletins, palestras e por meios eletrônicos.", 
+                      font: "Calibri Light", 
+                      size: 18, // 9pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+              ];
+              return page6Content;
+            })(),
+          },
+          {
+            // Sétima página com 4. PERIODICIDADE E ANÁLISE GLOBAL DO PGR
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(7, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page7Content = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "4. PERIODICIDADE E ANÁLISE GLOBAL DO PGR", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "808080", // Cinza
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Texto principal
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "O PGR deverá ser atualizado anualmente ou sempre que ocorrerem mudanças significativas no ambiente de trabalho, nos processos produtivos, na organização do trabalho, na introdução de novas tecnologias ou quando houver alterações nas condições de trabalho que possam afetar a saúde e segurança dos trabalhadores. A análise global do PGR será realizada periodicamente, considerando os resultados das avaliações, as ações corretivas implementadas e a eficácia das medidas de controle adotadas.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Seção NOTA
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "Nota: ", 
+                      font: "Calibri Light", 
+                      bold: true,
+                      size: 18, // 9pt
+                    }),
+                    new TextRun({ 
+                      text: "A atualização do PGR deve ser documentada e comunicada a todos os trabalhadores envolvidos, garantindo a continuidade das ações de prevenção e controle dos riscos ocupacionais.", 
+                      font: "Calibri Light", 
+                      size: 18, // 9pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+              ];
+              return page7Content;
+            })(),
+          },
+          {
+            // Oitava página com 5. MONITORAMENTO DA EXPOSIÇÃO AOS RISCOS
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(8, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page8Content = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "5. MONITORAMENTO DA EXPOSIÇÃO AOS RISCOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "808080", // Cinza
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Primeiro bullet
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "• ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Avaliações quantitativas da exposição aos riscos, quando aplicável: (LAUDOS E OUTROS).", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Segundo bullet
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "• ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "As inspeções de monitoramento devem incluir:", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Sub-item a)
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "a) ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Exemplos concretos de não conformidade ou deficiências encontradas, devidamente documentadas (fotografadas se possível), indicando através de relatórios suas possíveis causas ou razões.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { left: 567, firstLine: 567 }, // 1cm de indentação + 1cm de recuo primeira linha
+                }),
+                // Sub-item b)
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "b) ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Os relatórios de monitoramento devem incluir as ações corretivas que são sugeridas para corrigir as deficiências encontradas.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { left: 567, firstLine: 567 }, // 1cm de indentação + 1cm de recuo primeira linha
+                }),
+              ];
+              return page8Content;
+            })(),
+          },
+          {
+            // Nona página com 6. ANALISE DE EXPOSIÇÃO DOS TRABALHADORES
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait",
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(9, 9)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: (() => {
+              const page9Content: any[] = [
+                // Espaçamento antes do título
+                new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+                // Título com fundo cinza (usando tabela)
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "6. ANALISE DE EXPOSIÇÃO DOS TRABALHADORES", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "D3D3D3", // Cinza claro
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: "", spacing: { after: 300 } }),
+                // Parágrafo introdutório
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "A análise é feita com base em informações e parâmetros internacionais e nacionais:", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 300 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Primeiro bullet
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "• ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Monitoramento ambiental físico, químico biológico (exames médicos) dos expostos, para detecção de agravos à saúde em virtude de exposição aos riscos.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 120 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Segundo bullet
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "• ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Acompanhamento dos relatórios de inspeção quanto a realização das ações sugeridas.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 120 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Terceiro bullet
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: "• ", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                    new TextRun({ 
+                      text: "Análise crítica por ocasião de reedição anual do PPRA.", 
+                      font: "Calibri Light", 
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 300 },
+                  alignment: AlignmentType.JUSTIFIED,
+                  indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
+                }),
+                // Tabela única com fonte na primeira linha e 6 colunas na segunda linha
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    // Linha 1: Fonte (célula única mesclada em todas as 6 colunas)
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          columnSpan: 6,
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Fonte: AIHA – AMERICAN INDUSTRIAL HYGIENE ASSOCIATION * Gradação",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000", // Texto preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                              keepLines: true,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          shading: {
+                            fill: "7A7A7A", // Cinza escuro
+                            type: "clear",
+                          },
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 2: 6 colunas vazias
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Categoria",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000", // Texto preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          shading: {
+                            fill: "DCE6F1", // Azul claro
+                            type: "clear",
+                          },
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "*Gradação Efeitos à Saúde",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000", // Texto preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          shading: {
+                            fill: "7A7A7A", // Cinza escuro
+                            type: "clear",
+                          },
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Categoria",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000", // Texto preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          shading: {
+                            fill: "DCE6F1", // Azul claro
+                            type: "clear",
+                          },
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "*Gradação Qualitativa de Exposição",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000", // Texto preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          shading: {
+                            fill: "7A7A7A", // Cinza escuro
+                            type: "clear",
+                          },
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Situação da Exposição",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000", // Texto preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          shading: {
+                            fill: "DCE6F1", // Azul claro
+                            type: "clear",
+                          },
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Ação",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000", // Texto preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          shading: {
+                            fill: "7A7A7A", // Cinza escuro
+                            type: "clear",
+                          },
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 3: Primeira linha de dados
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "0",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Efeitos reversíveis e pequenos",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "0",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Nenhum contato com o agente ou desprezível",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Comum",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Sem ação",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 4: Segunda linha de dados
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "1",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Efeitos reversíveis à saúde, preocupante",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "1",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Contatos esporádicos com o agente",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Aceitável",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Baixa",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 5: Terceira linha de dados
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "2",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Efeitos severos à saúde, preocupante",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "2",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Contato frequente c/ o agente à baixa concentração",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "De atenção",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Média",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 6: Quarta linha de dados
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "3",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Efeitos irreversíveis à saúde, preocupante",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "3",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Contato frequente c/ o agente a altas concentrações",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Crítica",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Alta",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 7: Quinta linha de dados
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "4",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Ameaça à vida, lesão incapacitante ocupacional",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "4",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  bold: true,
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Contato frequente à altíssima concentração",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "De emergência",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({
+                                  text: "Imediatamente",
+                                  font: "Calibri Light",
+                                  size: 18, // 9pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                /* REMOVIDO: Tabela completa - fonte + cabeçalhos + dados
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                  },
+                  rows: [
+                    // Linha 1: Fonte (mesclada - ocupa todas as 6 colunas, texto centralizado)
+                    new TableRow({
+                      children: [
+                        // Célula 1 com o texto centralizado (ocupa toda a largura visualmente)
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Fonte: AIHA – AMERICAN INDUSTRIAL HYGIENE ASSOCIATION * Gradação", 
+                                  font: "Calibri", 
+                                  size: 20, // 10pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                              keepLines: true,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.NONE, size: 0, color: "000000" }, // Sem borda direita para mesclar
+                          },
+                        }),
+                        // Células 2-6 vazias para completar a mesclagem visual
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                            right: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                            right: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                            right: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                            right: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.NONE, size: 0, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 2: Cabeçalho principal (cinza escuro #7A7A7A)
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "CATEGORIA", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "FFFFFF",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "7A7A7A", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*Graduação Efeitos à Saúde", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "FFFFFF",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "7A7A7A", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "CATEGORIA", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "FFFFFF",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "7A7A7A", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*Graduação Qualitativa de Exposição", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "FFFFFF",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "7A7A7A", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Situação da Exposição", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "FFFFFF",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "7A7A7A", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Ação", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "FFFFFF",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "7A7A7A", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 3: Cabeçalhos internos (cinza claro #D9D9D9)
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "CATEGORIA", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "D9D9D9", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*Graduação Efeitos à Saúde", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "D9D9D9", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "CATEGORIA", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "D9D9D9", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*Graduação Qualitativa de Exposição", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "D9D9D9", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Situação da Exposição", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "D9D9D9", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          width: { size: 15, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Ação", 
+                                  font: "Calibri", 
+                                  bold: true,
+                                  size: 20, // 10pt
+                                  color: "000000",
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: { fill: "D9D9D9", type: "clear" },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 4: Categoria 0
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "0", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Efeitos reversíveis e pequenos", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "0", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Nenhum contato com o agente ou desprezível", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Comum", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Sem ação", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 3: Categoria 1
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "1", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Efeitos reversíveis à saúde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "1", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Contatos esporádicos com o agente", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Aceitável", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Baixa", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 4: Categoria 2
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "2", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Efeitos severos à saúde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "2", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Contato frequente c/ o agente à baixa concentração", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "De atenção", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Média", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 5: Categoria 3
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "3", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Efeitos irreversíveis à saúde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "3", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Contato frequente c/ o agente a altas concentrações", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Crítica", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Alta", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha 6: Categoria 4
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "4", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Ameaça à vida, lesão incapacitante ocupacional.", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "4", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Contato frequente à altíssima concentração", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "De emergência", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: "Imediatamente", font: "Calibri Light", size: 24, color: "000000" }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                */
+              ];
+              return page9Content;
+            })(),
+          },
+        ],
+      });
+
+      // Gerar e baixar o documento
+      try {
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, `pgro-${emissao.empresaNome.replace(/\s+/g, "-")}-${emissao.id}.docx`);
+        toast.success("Documento Word gerado com sucesso!");
+      } catch (packError) {
+        console.error("Erro ao gerar blob:", packError);
+        throw packError;
+      }
+    } catch (error: any) {
+      console.error("Erro ao gerar Word:", error);
+      console.error("Stack trace:", error?.stack);
+      toast.error(`Erro ao gerar documento Word: ${error?.message || "Erro desconhecido"}`);
+    }
+  }, [empresas, utils]);
 
   const handleEditarEmissao = useCallback(
     (emissao: EmissaoPgro) => {
@@ -907,7 +5086,7 @@ export default function LaudoPgro() {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="p-0 w-[24rem]" align="end">
-                          <Command>
+                          <Command shouldFilter={false}>
                             <CommandInput
                               placeholder="Buscar por nome, função ou registro"
                               value={responsavelSearch}
@@ -1038,7 +5217,7 @@ export default function LaudoPgro() {
 
                         return (
                           <div
-                            key={item.id}
+                            key={`cargo-${item.id}-${index}`}
                             className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,3fr)_minmax(0,2fr)_auto] gap-4 rounded-lg border bg-muted/20 p-4"
                           >
                             <div className="space-y-2">
@@ -1066,7 +5245,7 @@ export default function LaudoPgro() {
                                     </Button>
                                   </PopoverTrigger>
                                   <PopoverContent className="p-0 w-[26rem]" align="start">
-                                    <Command>
+                                    <Command shouldFilter={false}>
                                       <CommandInput
                                         placeholder="Buscar cargo ou CBO"
                                         value={item.cargoSearch}
@@ -1128,7 +5307,7 @@ export default function LaudoPgro() {
                                     </Button>
                                   </PopoverTrigger>
                                   <PopoverContent className="p-0 w-[24rem]" align="start">
-                                    <Command>
+                                    <Command shouldFilter={false}>
                                       <CommandInput
                                         placeholder="Filtrar setores"
                                         value={item.setorSearch}
@@ -1387,9 +5566,23 @@ export default function LaudoPgro() {
                           <Button variant="outline" size="sm" className="gap-2" onClick={(event) => { event.stopPropagation(); handleEditarEmissao(emissao); }}>
                             <Edit className="h-4 w-4" /> Editar
                           </Button>
-                          <Button variant="outline" size="sm" className="gap-2" onClick={(event) => { event.stopPropagation(); handleBaixarEmissao(emissao); }}>
-                            <FileDown className="h-4 w-4" /> Baixar TXT
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm" className="gap-2" onClick={(e) => e.stopPropagation()}>
+                                <FileDown className="h-4 w-4" /> Gerar <ChevronDown className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenuItem onClick={() => gerarPDF(emissao)}>
+                                <FileText className="mr-2 h-4 w-4" />
+                                Gerar PDF
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => gerarWord(emissao)}>
+                                <File className="mr-2 h-4 w-4" />
+                                Gerar Word
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                           <Button variant="outline" size="sm" className="gap-2 text-destructive" onClick={(event) => { event.stopPropagation(); handleExcluirEmissao(emissao.id); }}>
                             <Trash2 className="h-4 w-4" /> Excluir
                           </Button>

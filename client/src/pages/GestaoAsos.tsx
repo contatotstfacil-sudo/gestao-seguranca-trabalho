@@ -191,7 +191,7 @@ export default function GestaoAsos() {
   });
 
   const [filters, setFilters] = useState<AsoFiltersState>(defaultFilters);
-  const [mostrarHistorico, setMostrarHistorico] = useState(false);
+  // Removido: mostrarHistorico - sempre mostrar histórico completo, usar filtros para controlar
   const [filtroRapidoAtivo, setFiltroRapidoAtivo] = useState<
     "todos" | "ativos" | "vencidos" | "aVencer30" | "aVencer5"
   >("todos");
@@ -227,8 +227,22 @@ export default function GestaoAsos() {
   const isRelatorios = normalizedLocation === "/gestao-asos/relatorios";
 
   const utils = trpc.useUtils();
-  const { data: dashboardData, isLoading: dashboardLoading } = trpc.asos.dashboard.useQuery(undefined, {
-    refetchInterval: 1000 * 60,
+  const { data: dashboardData, isLoading: dashboardLoading, refetch: refetchDashboard, error: dashboardError } = trpc.asos.dashboard.useQuery(undefined, {
+    refetchInterval: 1000 * 30, // Atualizar a cada 30 segundos automaticamente
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
+    onSuccess: (data) => {
+      console.log("[ASOs Dashboard] Dados carregados:", {
+        totalAsos: data?.totalAsos,
+        totalAtivos: data?.totalAtivos,
+        totalVencidos: data?.totalVencidos,
+        cobertura: data?.cobertura,
+      });
+    },
+    onError: (error) => {
+      console.error("[ASOs Dashboard] Erro ao carregar:", error);
+    },
   });
   const { data: asosData, isLoading } = trpc.asos.list.useQuery({
     colaboradorId: filters.colaboradorId !== "all" ? Number(filters.colaboradorId) : undefined,
@@ -238,8 +252,21 @@ export default function GestaoAsos() {
     vencidos: filters.vencidos ? true : undefined,
     aVencerEmDias: filters.aVencerEmDias ? Number(filters.aVencerEmDias) : undefined,
   });
-  const asos = (asosData ?? []) as any[];
+  
   const { data: colaboradores = [] } = trpc.colaboradores.list.useQuery();
+  
+  // Filtrar ASOs de colaboradores que não existem mais - aplicar logo após receber os dados
+  const colaboradoresIds = useMemo(() => 
+    new Set(colaboradores.map((c: any) => c.id)), 
+    [colaboradores]
+  );
+  
+  const asos = useMemo(() => {
+    const todosAsos = (asosData ?? []) as any[];
+    return todosAsos.filter((aso: any) => 
+      colaboradoresIds.has(aso.colaboradorId)
+    );
+  }, [asosData, colaboradoresIds]);
   const { data: empresas = [] } = trpc.empresas.list.useQuery();
 
   useEffect(() => {
@@ -248,9 +275,10 @@ export default function GestaoAsos() {
   }, [anotacoes]);
 
   const createMutation = trpc.asos.create.useMutation({
-    onSuccess: () => {
-      utils.asos.list.invalidate();
-      utils.asos.dashboard.invalidate();
+    onSuccess: async () => {
+      await utils.asos.list.invalidate();
+      await utils.asos.dashboard.invalidate();
+      await refetchDashboard();
       toast.success("ASO cadastrado com sucesso!");
       resetForm();
       setDialogOpen(false);
@@ -261,9 +289,11 @@ export default function GestaoAsos() {
   });
 
   const updateMutation = trpc.asos.update.useMutation({
-    onSuccess: () => {
-      utils.asos.list.invalidate();
-      utils.asos.dashboard.invalidate();
+    onSuccess: async () => {
+      // Invalidar cache para atualização automática imediata
+      await utils.asos.list.invalidate();
+      await utils.asos.dashboard.invalidate();
+      // O refetch será automático devido ao refetchInterval configurado
       toast.success("ASO atualizado com sucesso!");
       resetForm();
       setDialogOpen(false);
@@ -274,9 +304,11 @@ export default function GestaoAsos() {
   });
 
   const deleteMutation = trpc.asos.delete.useMutation({
-    onSuccess: () => {
-      utils.asos.list.invalidate();
-      utils.asos.dashboard.invalidate();
+    onSuccess: async () => {
+      // Invalidar cache para atualização automática imediata
+      await utils.asos.list.invalidate();
+      await utils.asos.dashboard.invalidate();
+      // O refetch será automático devido ao refetchInterval configurado
       toast.success("ASO excluído com sucesso!");
     },
     onError: (error) => {
@@ -285,9 +317,12 @@ export default function GestaoAsos() {
   });
 
   const atualizarStatusMutation = trpc.asos.atualizarStatusVencidos.useMutation({
-    onSuccess: () => {
-      utils.asos.list.invalidate();
-      utils.asos.dashboard.invalidate();
+    onSuccess: async () => {
+      // Invalidar cache para atualização automática imediata
+      await utils.asos.list.invalidate();
+      await utils.asos.dashboard.invalidate();
+      // O refetch será automático devido ao refetchInterval configurado
+      toast.success("Status dos ASOs atualizado!");
     },
   });
 
@@ -740,6 +775,7 @@ export default function GestaoAsos() {
   };
 
   const filteredAsos = useMemo(() => {
+    // Os ASOs já foram filtrados acima para remover colaboradores excluídos
     let lista = asos as any[];
 
     if (filters.colaboradorId !== "all") {
@@ -842,8 +878,14 @@ export default function GestaoAsos() {
 
   const asosAgrupados = useMemo(() => {
     const agrupados = new Map<number, any>();
+    const colaboradoresIds = new Set(colaboradores.map((c: any) => c.id));
 
     filteredAsos.forEach((aso: any) => {
+      // Ignorar ASOs de colaboradores excluídos
+      if (!colaboradoresIds.has(aso.colaboradorId)) {
+        return;
+      }
+
       const atual = agrupados.get(aso.colaboradorId);
       if (!atual) {
         agrupados.set(aso.colaboradorId, aso);
@@ -859,9 +901,10 @@ export default function GestaoAsos() {
     });
 
     return Array.from(agrupados.values());
-  }, [filteredAsos]);
+  }, [filteredAsos, colaboradores]);
 
-  const asosParaTabela = mostrarHistorico ? filteredAsos : asosAgrupados;
+  // Sempre mostrar histórico completo - usar filtros para controlar a visualização
+  const asosParaTabela = filteredAsos;
 
   const aplicarFiltroRapido = (
     tipo: "todos" | "ativos" | "vencidos" | "aVencer30" | "aVencer5"
@@ -870,7 +913,6 @@ export default function GestaoAsos() {
 
     switch (tipo) {
       case "vencidos":
-        setMostrarHistorico(true);
         setFilters({
           ...defaultFilters,
           status: "vencido",
@@ -878,7 +920,6 @@ export default function GestaoAsos() {
         });
         break;
       case "aVencer30":
-        setMostrarHistorico(false);
         setFilters({
           ...defaultFilters,
           status: "ativo",
@@ -886,7 +927,6 @@ export default function GestaoAsos() {
         });
         break;
       case "aVencer5":
-        setMostrarHistorico(false);
         setFilters({
           ...defaultFilters,
           status: "ativo",
@@ -894,14 +934,12 @@ export default function GestaoAsos() {
         });
         break;
       case "ativos":
-        setMostrarHistorico(false);
         setFilters({
           ...defaultFilters,
           status: "ativo",
         });
         break;
       default:
-        setMostrarHistorico(false);
         setFilters(defaultFilters);
         break;
     }
@@ -1158,7 +1196,9 @@ export default function GestaoAsos() {
             Visão geral dos ASOs, cobertura e alertas prioritários.
           </p>
         </div>
-        {renderActions()}
+        <div className="flex items-center gap-2">
+          {renderActions()}
+        </div>
       </div>
 
       {colaboradores.length === 0 && (
@@ -1174,6 +1214,32 @@ export default function GestaoAsos() {
                   Não há colaboradores cadastrados no sistema. Os dados de cobertura não podem ser calculados. 
                   Cadastre colaboradores na página de <strong>Colaboradores</strong> para começar a gerenciar ASOs.
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {dashboardError && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-red-900">
+                  Erro ao carregar dashboard
+                </p>
+                <p className="text-xs text-red-800 mt-1">
+                  {dashboardError.message || "Não foi possível carregar os dados do dashboard."}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => refetchDashboard()}
+                >
+                  Tentar novamente
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -1670,11 +1736,6 @@ export default function GestaoAsos() {
   );
 
   const renderLista = () => {
-    const asosSemColaborador = asosParaTabela.filter((aso: any) => {
-      const colaborador = colaboradores.find((c: any) => c.id === aso.colaboradorId);
-      return !colaborador;
-    });
-
     return (
       <div className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1685,18 +1746,6 @@ export default function GestaoAsos() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
-              <label htmlFor="toggle-historico" className="font-medium">
-                Mostrar histórico completo
-              </label>
-              <input
-                id="toggle-historico"
-                type="checkbox"
-                checked={mostrarHistorico}
-                onChange={(e) => setMostrarHistorico(e.target.checked)}
-                className="h-4 w-4"
-              />
-            </div>
             {renderActions()}
           </div>
         </div>
@@ -1720,23 +1769,6 @@ export default function GestaoAsos() {
           </Card>
         )}
 
-        {colaboradores.length > 0 && asosSemColaborador.length > 0 && (
-          <Card className="border-orange-200 bg-orange-50">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-orange-900">
-                    {asosSemColaborador.length} ASO(s) sem colaborador vinculado
-                  </p>
-                  <p className="text-xs text-orange-800 mt-1">
-                    Alguns ASOs estão vinculados a colaboradores que foram excluídos. Estes registros aparecerão com "Colaborador excluído" na lista.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         <Card className={dashboardCardClass}>
         <CardHeader>
@@ -1912,7 +1944,6 @@ export default function GestaoAsos() {
         <CardHeader>
           <CardTitle>
             Lista de ASOs ({asosParaTabela.length})
-            {!mostrarHistorico && <span className="ml-2 text-xs text-muted-foreground">(mostrando o registro mais recente por colaborador)</span>}
           </CardTitle>
         </CardHeader>
         <CardContent>

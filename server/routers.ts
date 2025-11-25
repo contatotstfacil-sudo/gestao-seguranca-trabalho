@@ -421,8 +421,19 @@ export const appRouter = router({
       .input(z.object({
         razaoSocial: z.string(),
         cnpj: z.string(),
+        grauRisco: z.string().optional(),
+        cnae: z.string().optional(),
+        descricaoAtividade: z.string().optional(),
         responsavelTecnico: z.string().optional(),
         emailContato: z.union([z.string().email(), z.literal('')]).optional(),
+        tipoLogradouro: z.string().optional(),
+        nomeLogradouro: z.string().optional(),
+        numeroEndereco: z.string().optional(),
+        complementoEndereco: z.string().optional(),
+        bairroEndereco: z.union([z.string(), z.literal("")]).optional(),
+        cidadeEndereco: z.string().optional(),
+        estadoEndereco: z.string().optional(),
+        cep: z.string().optional(),
         status: z.enum(["ativa", "inativa"]).default("ativa"),
       }))
       .mutation(async ({ input }) => {
@@ -433,12 +444,25 @@ export const appRouter = router({
         id: z.number(),
         razaoSocial: z.string().optional(),
         cnpj: z.string().optional(),
+        grauRisco: z.string().optional(),
+        cnae: z.string().optional(),
+        descricaoAtividade: z.string().optional(),
         responsavelTecnico: z.string().optional(),
         emailContato: z.union([z.string().email(), z.literal('')]).optional(),
+        tipoLogradouro: z.string().optional(),
+        nomeLogradouro: z.string().optional(),
+        numeroEndereco: z.string().optional(),
+        complementoEndereco: z.string().optional(),
+        bairroEndereco: z.union([z.string(), z.literal("")]).optional(),
+        cidadeEndereco: z.string().optional(),
+        estadoEndereco: z.string().optional(),
+        cep: z.string().optional(),
         status: z.enum(["ativa", "inativa"]).optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
+        console.log("📥 Recebendo dados para atualizar:", data);
+        console.log("📥 Bairro recebido:", data.bairroEndereco);
         return db.updateEmpresa(id, data);
       }),
     delete: protectedProcedure
@@ -470,7 +494,6 @@ export const appRouter = router({
         searchTerm: z.string().optional(),
         dataAdmissaoInicio: z.string().optional(),
         dataAdmissaoFim: z.string().optional(),
-        funcao: z.string().optional(),
         empresaId: z.number().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
@@ -492,7 +515,6 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         nomeCompleto: z.string(),
-        funcao: z.string().optional(),
         cargoId: z.number().optional(),
         setorId: z.number().optional(),
         empresaId: z.number(),
@@ -535,7 +557,6 @@ export const appRouter = router({
       .input(z.object({
         id: z.number(),
         nomeCompleto: z.string().optional(),
-        funcao: z.string().optional(),
         cargoId: z.number().optional(),
         setorId: z.number().optional(),
         empresaId: z.number().optional(),
@@ -616,7 +637,7 @@ export const appRouter = router({
         nomeLogradouro: z.string().optional(),
         numeroEndereco: z.string().optional(),
         complementoEndereco: z.string().optional(),
-        bairroEndereco: z.string().optional(),
+        bairroEndereco: z.union([z.string(), z.literal("")]).optional(),
         cidadeEndereco: z.string().optional(),
         estadoEndereco: z.string().optional(),
         cepEndereco: z.string().optional(),
@@ -648,7 +669,7 @@ export const appRouter = router({
         nomeLogradouro: z.string().optional(),
         numeroEndereco: z.string().optional(),
         complementoEndereco: z.string().optional(),
-        bairroEndereco: z.string().optional(),
+        bairroEndereco: z.union([z.string(), z.literal("")]).optional(),
         cidadeEndereco: z.string().optional(),
         estadoEndereco: z.string().optional(),
         cepEndereco: z.string().optional(),
@@ -983,6 +1004,56 @@ export const appRouter = router({
           empresaId = ctx.user.empresaId || null;
         }
         return db.getRelatorioCargosPorEmpresaESetor(empresaId);
+      }),
+  }),
+
+  cargosCbo: router({
+    list: protectedProcedure
+      .input(z.object({ searchTerm: z.string().optional() }).optional())
+      .query(async ({ input }) => {
+        try {
+          // Primeiro tenta buscar do banco local
+          const cargosLocal = await db.getAllCargosCbo(input?.searchTerm);
+          
+          // Se encontrar no banco local, retorna
+          if (cargosLocal.length > 0) {
+            return cargosLocal;
+          }
+          
+          // Se não encontrar no banco local e tiver termo de busca, tenta na API externa
+          if (input?.searchTerm && input.searchTerm.trim().length >= 2) {
+            console.log(`[CBO] Nenhum resultado no banco local, tentando API externa para: "${input.searchTerm}"`);
+            const cargosApi = await db.buscarCboNaApi(input.searchTerm);
+            if (cargosApi.length > 0) {
+              return cargosApi;
+            }
+          }
+          
+          // Se não encontrou nada, retornar array vazio
+          return [];
+        } catch (error: any) {
+          console.error("[CBO] Erro ao buscar cargos CBO:", error);
+          // Em caso de erro, retornar array vazio
+          return [];
+        }
+      }),
+    buscarNaApi: protectedProcedure
+      .input(z.object({ codigoOuNome: z.string().optional() }))
+      .query(async ({ input }) => {
+        return await db.buscarCboNaApi(input.codigoOuNome);
+      }),
+    getByCodigo: protectedProcedure
+      .input(z.object({ codigoCbo: z.string() }))
+      .query(async ({ input }) => {
+        // Primeiro busca no banco local
+        const cargoLocal = await db.getCargoCboByCodigo(input.codigoCbo);
+        if (cargoLocal) {
+          return cargoLocal;
+        }
+        
+        // Se não encontrar, busca na API
+        const cargosApi = await db.buscarCboNaApi(input.codigoCbo);
+        return cargosApi.find(c => c.codigoCbo === input.codigoCbo) || null;
       }),
   }),
 
@@ -1430,7 +1501,6 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         nomeCompleto: z.string().min(1),
-        funcao: z.string().optional().nullable(),
         registroProfissional: z.string().optional().nullable(),
         empresaId: z.number().optional().nullable(),
         status: z.enum(["ativo", "inativo"]).default("ativo"),
@@ -1443,9 +1513,6 @@ export const appRouter = router({
         };
         
         // Adicionar campos opcionais apenas se tiverem valor (não vazio)
-        if (input.funcao !== undefined && input.funcao !== null && input.funcao.trim() !== "") {
-          data.funcao = input.funcao.trim();
-        }
         if (input.registroProfissional !== undefined && input.registroProfissional !== null && input.registroProfissional.trim() !== "") {
           data.registroProfissional = input.registroProfissional.trim();
         }

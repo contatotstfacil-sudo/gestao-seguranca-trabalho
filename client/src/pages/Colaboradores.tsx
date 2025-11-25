@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import { Plus, Pencil, Trash2, Search, Download } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -33,7 +33,6 @@ export default function Colaboradores() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [formData, setFormData] = useState({
     nomeCompleto: "",
-    funcao: "",
     cargoId: "",
     setorId: "",
     empresaId: "",
@@ -67,7 +66,6 @@ export default function Colaboradores() {
     searchTerm: "",
     dataAdmissaoInicio: "",
     dataAdmissaoFim: "",
-    funcao: "",
     empresaId: "",
   });
 
@@ -76,12 +74,30 @@ export default function Colaboradores() {
     searchTerm: filters.searchTerm || undefined,
     dataAdmissaoInicio: filters.dataAdmissaoInicio || undefined,
     dataAdmissaoFim: filters.dataAdmissaoFim || undefined,
-    funcao: filters.funcao || undefined,
     empresaId: filters.empresaId ? parseInt(filters.empresaId) : undefined,
   });
   const { data: empresas } = trpc.empresas.list.useQuery();
-  const { data: cargos } = trpc.cargos.list.useQuery();
-  const { data: setores } = trpc.setores.list.useQuery();
+  const { data: todosCargos } = trpc.cargos.list.useQuery();
+  const { data: todosSetores } = trpc.setores.list.useQuery();
+  
+  // Filtrar cargos e setores pela empresa selecionada
+  const cargos = useMemo(() => {
+    if (!todosCargos) return [];
+    if (!formData.empresaId) return todosCargos;
+    // Mostrar apenas cargos vinculados à empresa selecionada
+    return todosCargos.filter((cargo: any) => 
+      cargo.empresaId && cargo.empresaId.toString() === formData.empresaId
+    );
+  }, [todosCargos, formData.empresaId]);
+  
+  const setores = useMemo(() => {
+    if (!todosSetores) return [];
+    if (!formData.empresaId) return todosSetores;
+    // Mostrar apenas setores vinculados à empresa selecionada
+    return todosSetores.filter((setor: any) => 
+      setor.empresaId && setor.empresaId.toString() === formData.empresaId
+    );
+  }, [todosSetores, formData.empresaId]);
   const { data: treinamentosCargo } = trpc.cargoTreinamentos.getByCargo.useQuery(
     { cargoId: formData.cargoId ? parseInt(formData.cargoId) : 0 },
     { enabled: !!formData.cargoId }
@@ -137,7 +153,6 @@ export default function Colaboradores() {
     setSelectedTrainings(new Set());
     setFormData({
       nomeCompleto: "",
-      funcao: "",
       cargoId: "",
       setorId: "",
       empresaId: "",
@@ -249,7 +264,6 @@ export default function Colaboradores() {
     setFotoPreview(colaborador.fotoUrl || null);
     setFormData({
       nomeCompleto: colaborador.nomeCompleto,
-      funcao: colaborador.funcao || "",
       cargoId: colaborador.cargoId ? colaborador.cargoId.toString() : "",
       setorId: colaborador.setorId ? colaborador.setorId.toString() : "",
       empresaId: colaborador.empresaId.toString(),
@@ -391,9 +405,8 @@ export default function Colaboradores() {
 
         addSection("INFORMACOES PROFISSIONAIS");
         addField("Empresa", getEmpresaName(colaborador.empresaId));
-        addField("Cargo", colaborador.nomeCargo || colaborador.funcao || "-");
+        addField("Cargo", colaborador.nomeCargo || "-");
         addField("Setor", colaborador.nomeSetor || "-");
-        addField("Funcao", colaborador.funcao || "-");
         addField("Data de Admissao", formatDate(colaborador.dataAdmissao));
         addField("Data Primeiro ASO", formatDate(colaborador.dataPrimeiroAso));
         addField("Validade do ASO", formatDate(colaborador.validadeAso));
@@ -579,7 +592,9 @@ export default function Colaboradores() {
                       <Label htmlFor="empresaId">Empresa *</Label>
                       <Select
                         value={formData.empresaId}
-                        onValueChange={(value) => setFormData({ ...formData, empresaId: value })}
+                        onValueChange={(value) => {
+                          setFormData({ ...formData, empresaId: value, cargoId: "", setorId: "" });
+                        }}
                         required
                       >
                         <SelectTrigger>
@@ -594,6 +609,8 @@ export default function Colaboradores() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                     <div>
                       <Label htmlFor="cargoId">Cargo</Label>
                       <Select
@@ -633,14 +650,6 @@ export default function Colaboradores() {
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="funcao">Função</Label>
-                      <Input
-                        id="funcao"
-                        value={formData.funcao}
-                        onChange={(e) => setFormData({ ...formData, funcao: e.target.value })}
-                      />
                     </div>
                     <div>
                       <Label htmlFor="dataAdmissao">Data de Admissão</Label>
@@ -937,15 +946,6 @@ export default function Colaboradores() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
-                <Label htmlFor="funcao">Função</Label>
-                <Input
-                  id="funcao"
-                  placeholder="Digite a função..."
-                  value={filters.funcao}
-                  onChange={(e) => setFilters({ ...filters, funcao: e.target.value })}
-                />
-              </div>
-              <div>
                 <Label htmlFor="empresaId">Empresa</Label>
                 <Select
                   value={filters.empresaId || "all"}
@@ -1038,7 +1038,7 @@ export default function Colaboradores() {
                           />
                         </TableCell>
                         <TableCell className="font-medium">{colaborador.nomeCompleto}</TableCell>
-                        <TableCell>{colaborador.nomeCargo || colaborador.funcao || "-"}</TableCell>
+                        <TableCell>{colaborador.nomeCargo || "-"}</TableCell>
                         <TableCell>{colaborador.nomeSetor || "-"}</TableCell>
                         <TableCell>{getEmpresaName(colaborador.empresaId)}</TableCell>
                         <TableCell>{formatDate(colaborador.dataAdmissao)}</TableCell>
