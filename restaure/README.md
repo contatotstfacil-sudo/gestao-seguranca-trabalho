@@ -2,6 +2,16 @@
 
 Esta pasta contém os pontos de restauração do sistema.
 
+## Formato dos Arquivos
+
+Os arquivos de restauração seguem o padrão:
+- **Nome**: `restauracao`
+- **Data**: `dia-mes-ano` (exemplo: 26-11-2025)
+- **Horário**: `HH:MM` (exemplo: 12:00)
+- **Formato completo**: `restauracao_dia-mes-ano_HH-MM.txt`
+
+Exemplo: `restauracao_26-11-2025_12-00.txt`
+
 ## Como usar
 
 Cada ponto de restauração é um commit do Git com uma descrição do que foi implementado.
@@ -16,4 +26,3 @@ Cada ponto de restauração é um commit do Git com uma descrição do que foi i
   - Busca automática da descrição do cargo do banco de dados
   - Preenchimento dinâmico de cargo, setor e descrição
   - Estrutura completa de tabela de inventário de riscos para cada cargo
-
