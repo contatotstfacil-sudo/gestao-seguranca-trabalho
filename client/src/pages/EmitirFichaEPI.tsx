@@ -136,7 +136,11 @@ export default function EmitirFichaEPI({ showLayout = true }: { showLayout?: boo
         link.download = ficha.nomeArquivo || `ficha_epi_${ficha.id}.pdf`;
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
+        setTimeout(() => {
+          if (link.parentNode) {
+            document.body.removeChild(link);
+          }
+        }, 100);
         sucesso++;
       } else {
         erros++;

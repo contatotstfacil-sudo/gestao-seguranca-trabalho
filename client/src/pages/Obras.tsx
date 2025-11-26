@@ -331,7 +331,10 @@ export default function Obras() {
   };
 
   useEffect(() => {
-    setSelectedIds([]);
+    // Reset selected IDs when obras data changes
+    if (obras) {
+      setSelectedIds([]);
+    }
   }, [obras]);
 
   if (isLoading) return <div>Carregando...</div>;

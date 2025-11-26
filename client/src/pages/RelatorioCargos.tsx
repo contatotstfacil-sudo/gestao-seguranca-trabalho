@@ -45,7 +45,13 @@ export default function RelatorioCargos({ showLayout = true }: { showLayout?: bo
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    setTimeout(() => {
+      if (link.parentNode) {
+        document.body.removeChild(link);
+      }
+      URL.revokeObjectURL(url);
+    }, 100);
+    URL.revokeObjectURL(url);
   };
 
   const totalCargos = relatorioPorEmpresa.reduce((sum: number, item: any) => sum + (Number(item.quantidade) || 0), 0);

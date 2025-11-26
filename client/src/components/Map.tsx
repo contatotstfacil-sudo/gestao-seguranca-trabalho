@@ -72,38 +72,12 @@ export function MapView({
   const map = useRef<any>(null);
 
   useEffect(() => {
-    if (!window.google) {
-      const scriptUrl = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&libraries=places,drawing,geometry,visualization,marker`;
-      
-      fetch(scriptUrl, {
-        method: 'GET',
-        headers: { 'Origin': window.location.origin },
-      })
-        .then(response => {
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          return response.text();
-        })
-        .then(scriptContent => {
-          const script = document.createElement('script');
-          script.textContent = scriptContent;
-          document.head.appendChild(script);
-          
-          const checkGoogle = setInterval(() => {
-            if (window.google && window.google.maps) {
-              clearInterval(checkGoogle);
-              initMap();
-            }
-          }, 100);
-          
-          setTimeout(() => clearInterval(checkGoogle), 10000);
-        })
-        .catch(error => console.error('Failed to fetch Google Maps script:', error));
-    } else {
-      initMap();
-    }
+    let checkGoogleInterval: NodeJS.Timeout | null = null;
+    let scriptElement: HTMLScriptElement | null = null;
+    let isMounted = true;
 
     function initMap() {
-      if (!mapContainer.current || !window.google || map.current) return;
+      if (!isMounted || !mapContainer.current || !window.google || map.current) return;
 
       map.current = new window.google.maps.Map(mapContainer.current, {
         zoom,
@@ -118,10 +92,63 @@ export function MapView({
       // TODO: Initialize services here if needed (e.g., new google.maps.Marker({ map: map.current, ... }))
       // TODO: Add event listeners (e.g., map.current.addListener('click', ...))
       
-      if (onMapReady) {
+      if (onMapReady && isMounted) {
         onMapReady(map.current);
       }
     }
+
+    if (!window.google) {
+      const scriptUrl = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&libraries=places,drawing,geometry,visualization,marker`;
+      
+      fetch(scriptUrl, {
+        method: 'GET',
+        headers: { 'Origin': window.location.origin },
+      })
+        .then(response => {
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          return response.text();
+        })
+        .then(scriptContent => {
+          if (!isMounted) return;
+          
+          scriptElement = document.createElement('script');
+          scriptElement.textContent = scriptContent;
+          document.head.appendChild(scriptElement);
+          
+          checkGoogleInterval = setInterval(() => {
+            if (window.google && window.google.maps && isMounted) {
+              if (checkGoogleInterval) clearInterval(checkGoogleInterval);
+              initMap();
+            }
+          }, 100);
+          
+          setTimeout(() => {
+            if (checkGoogleInterval) {
+              clearInterval(checkGoogleInterval);
+              checkGoogleInterval = null;
+            }
+          }, 10000);
+        })
+        .catch(error => {
+          if (isMounted) {
+            console.error('Failed to fetch Google Maps script:', error);
+          }
+        });
+    } else {
+      initMap();
+    }
+
+    return () => {
+      isMounted = false;
+      if (checkGoogleInterval) {
+        clearInterval(checkGoogleInterval);
+      }
+      // Não removemos o script do head pois pode ser usado por outros componentes
+      // O React vai cuidar da limpeza do mapContainer
+      if (map.current) {
+        map.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {

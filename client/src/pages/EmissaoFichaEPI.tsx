@@ -328,7 +328,11 @@ export default function EmissaoFichaEPI({ open, onOpenChange }: EmissaoFichaEPIP
       link.download = nomeArquivo;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      setTimeout(() => {
+        if (link.parentNode) {
+          document.body.removeChild(link);
+        }
+      }, 100);
     }
   };
 

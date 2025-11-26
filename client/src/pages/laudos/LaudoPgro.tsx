@@ -181,6 +181,7 @@ export default function LaudoPgro() {
   const [cargosPlano, setCargosPlano] = useState<CargoPlanoItem[]>(() => [createEmptyCargoItem()]);
   const [emissaoEditandoId, setEmissaoEditandoId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [gerandoWord, setGerandoWord] = useState(false);
   const [emissoesSelecionadas, setEmissoesSelecionadas] = useState<string[]>([]);
   const [emissoes, setEmissoes] = useState<EmissaoPgro[]>(() => {
     if (typeof window === "undefined") return [];
@@ -1716,6 +1717,12 @@ export default function LaudoPgro() {
   }, [gerarTemplatePGROPadrao]);
 
   const gerarWord = useCallback(async (emissao: EmissaoPgro) => {
+    if (gerandoWord) {
+      toast.info("Já existe uma geração em andamento. Aguarde...");
+      return;
+    }
+    
+    setGerandoWord(true);
     try {
       // Buscar dados da empresa
       const empresa = empresas.find((e) => e.id === emissao.empresaId);
@@ -5232,7 +5239,7 @@ export default function LaudoPgro() {
                     new TableRow({
                       children: [
                         new TableCell({
-                          columnSpan: 3,
+                          columnSpan: 8,
                           children: [
                             new Paragraph({
                               children: [
@@ -5240,7 +5247,7 @@ export default function LaudoPgro() {
                                   text: "8.1 QUADRO DE INVENTARIO DE RISCOS", 
                                   font: "Calibri Light", 
                                   bold: true,
-                                  size: 24, // 12pt
+                                  size: 18, // 9pt
                                   color: "000000", // Preto
                                 }),
                               ],
@@ -5265,18 +5272,24 @@ export default function LaudoPgro() {
                     new TableRow({
                       children: [
                         new TableCell({
+                          columnSpan: 4,
                           width: { size: 50, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "Cargos:", 
+                                  text: "Cargos: ", 
                                   font: "Calibri Light", 
                                   bold: true,
-                                  size: 24, // 12pt
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({ 
+                                  text: "Analista de RH", 
+                                  font: "Calibri Light", 
+                                  size: 18, // 9pt
                                 }),
                               ],
-                              alignment: AlignmentType.LEFT,
+                              alignment: AlignmentType.JUSTIFIED,
                             }),
                           ],
                           borders: {
@@ -5288,18 +5301,24 @@ export default function LaudoPgro() {
                           verticalAlign: VerticalAlign.CENTER,
                         }),
                         new TableCell({
+                          columnSpan: 2,
                           width: { size: 25, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "Setor:", 
+                                  text: "Setor: ", 
                                   font: "Calibri Light", 
                                   bold: true,
-                                  size: 24, // 12pt
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({ 
+                                  text: "-", 
+                                  font: "Calibri Light", 
+                                  size: 18, // 9pt
                                 }),
                               ],
-                              alignment: AlignmentType.LEFT,
+                              alignment: AlignmentType.JUSTIFIED,
                             }),
                           ],
                           borders: {
@@ -5311,18 +5330,24 @@ export default function LaudoPgro() {
                           verticalAlign: VerticalAlign.CENTER,
                         }),
                         new TableCell({
+                          columnSpan: 2,
                           width: { size: 25, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "Planilha:", 
+                                  text: "Planilha: ", 
                                   font: "Calibri Light", 
                                   bold: true,
-                                  size: 24, // 12pt
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({ 
+                                  text: "-", 
+                                  font: "Calibri Light", 
+                                  size: 18, // 9pt
                                 }),
                               ],
-                              alignment: AlignmentType.LEFT,
+                              alignment: AlignmentType.JUSTIFIED,
                             }),
                           ],
                           borders: {
@@ -5339,18 +5364,1163 @@ export default function LaudoPgro() {
                     new TableRow({
                       children: [
                         new TableCell({
-                          columnSpan: 3,
+                          columnSpan: 8,
                           children: [
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "Descrição do Cargo:", 
+                                  text: "Descrição do Cargo: ", 
                                   font: "Calibri Light", 
                                   bold: true,
-                                  size: 24, // 12pt
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({ 
+                                  text: "Profissional responsável por analisar processos de recursos humanos, recrutamento, seleção, treinamento e desenvolvimento de pessoal, além de auxiliar na gestão de políticas e procedimentos relacionados ao capital humano da organização.", 
+                                  font: "Calibri Light", 
+                                  size: 18, // 9pt
                                 }),
                               ],
-                              alignment: AlignmentType.LEFT,
+                              alignment: AlignmentType.JUSTIFIED,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.TOP,
+                        }),
+                      ],
+                    }),
+                    // Quarta linha com fundo verde
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          columnSpan: 8,
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "AGENTES FÍSICOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "00B050", // Verde
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Quinta linha com 8 colunas
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "FONTE GERADORA", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "TIPO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE PROPAGAÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE CONTATO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "POSSIVEIS DANOS A SAÚDE", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Tipo Análise", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({
+                                  text: "\nQualitativa / Quantitativa",
+                                  font: "Calibri Light",
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EFEITOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EXPOSIÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                    // AGENTES QUÍMICOS (fundo vermelho)
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          columnSpan: 8,
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "AGENTES QUÍMICOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "FF0000", // Vermelho
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha com 8 colunas para AGENTES QUÍMICOS
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "FONTE GERADORA", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "TIPO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE PROPAGAÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE CONTATO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "POSSIVEIS DANOS A SAÚDE", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Tipo Análise", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({
+                                  text: "\nQualitativa / Quantitativa",
+                                  font: "Calibri Light",
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EFEITOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EXPOSIÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                    // AGENTES BIOLÓGICOS (fundo marrom)
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          columnSpan: 8,
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "AGENTES BIOLÓGICOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "8B4513", // Marrom
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha com 8 colunas para AGENTES BIOLÓGICOS
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "FONTE GERADORA", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "TIPO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE PROPAGAÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE CONTATO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "POSSIVEIS DANOS A SAÚDE", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Tipo Análise", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({
+                                  text: "\nQualitativa / Quantitativa",
+                                  font: "Calibri Light",
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EFEITOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EXPOSIÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                    // AGENTES ERGONÔMICO (fundo amarelo)
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          columnSpan: 8,
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "AGENTES ERGONÔMICO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "FFC000", // Amarelo
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha com 8 colunas para AGENTES ERGONÔMICO
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "FONTE GERADORA", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "TIPO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE PROPAGAÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE CONTATO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "POSSIVEIS DANOS A SAÚDE", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Tipo Análise", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({
+                                  text: "\nQualitativa / Quantitativa",
+                                  font: "Calibri Light",
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EFEITOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EXPOSIÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                    // AGENTES ACIDENTES / MECANICOS (fundo azul claro)
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          columnSpan: 8,
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "AGENTES ACIDENTES / MECANICOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                  color: "000000", // Preto
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          shading: {
+                            fill: "4FC3F7", // Azul claro
+                            type: "clear",
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Linha com 8 colunas para AGENTES ACIDENTES / MECANICOS
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "FONTE GERADORA", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "TIPO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE PROPAGAÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "MEIO DE CONTATO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "POSSIVEIS DANOS A SAÚDE", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Tipo Análise", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                                new TextRun({
+                                  text: "\nQualitativa / Quantitativa",
+                                  font: "Calibri Light",
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EFEITOS", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 12.5, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "*GRADAÇÃO EXPOSIÇÃO", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 18, // 9pt
+                                }),
+                              ],
+                              alignment: AlignmentType.CENTER,
                             }),
                           ],
                           borders: {
@@ -5385,8 +6555,10 @@ export default function LaudoPgro() {
       console.error("Erro ao gerar Word:", error);
       console.error("Stack trace:", error?.stack);
       toast.error(`Erro ao gerar documento Word: ${error?.message || "Erro desconhecido"}`);
+    } finally {
+      setGerandoWord(false);
     }
-  }, [empresas, utils]);
+  }, [empresas, utils, gerandoWord]);
 
   const handleEditarEmissao = useCallback(
     (emissao: EmissaoPgro) => {
@@ -6161,9 +7333,20 @@ export default function LaudoPgro() {
                                 <FileText className="mr-2 h-4 w-4" />
                                 Gerar PDF
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => gerarWord(emissao)}>
+                              <DropdownMenuItem 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  if (!gerandoWord) {
+                                    gerarWord(emissao).catch((error) => {
+                                      console.error("Erro ao gerar Word:", error);
+                                    });
+                                  }
+                                }}
+                                disabled={gerandoWord}
+                              >
                                 <File className="mr-2 h-4 w-4" />
-                                Gerar Word
+                                {gerandoWord ? "Gerando..." : "Gerar Word"}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
