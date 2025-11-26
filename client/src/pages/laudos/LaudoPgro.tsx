@@ -5220,11 +5220,19 @@ export default function LaudoPgro() {
                 // Título com fundo cinza (usando tabela)
                 new Table({
                   width: { size: 100, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                  },
                   rows: [
                     new TableRow({
                       children: [
                         new TableCell({
-                          width: { size: 100, type: WidthType.PERCENTAGE },
+                          columnSpan: 3,
                           children: [
                             new Paragraph({
                               children: [
@@ -5244,45 +5252,118 @@ export default function LaudoPgro() {
                             type: "clear",
                           },
                           verticalAlign: VerticalAlign.CENTER,
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                        }),
+                      ],
+                    }),
+                    // Segunda linha com três colunas
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 50, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Cargos:", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Setor:", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                        new TableCell({
+                          width: { size: 25, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Planilha:", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
+                        }),
+                      ],
+                    }),
+                    // Terceira linha com uma única coluna
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          columnSpan: 3,
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: "Descrição do Cargo:", 
+                                  font: "Calibri Light", 
+                                  bold: true,
+                                  size: 24, // 12pt
+                                }),
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            }),
+                          ],
+                          borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                            right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          },
+                          verticalAlign: VerticalAlign.CENTER,
                         }),
                       ],
                     }),
                   ],
-                }),
-                new Paragraph({ text: "", spacing: { after: 200 } }),
-                // Total de Cargos e Setores
-                new Paragraph({
-                  children: [
-                    new TextRun({ 
-                      text: "Total de Cargos: ", 
-                      font: "Calibri Light", 
-                      bold: true,
-                      size: 24, // 12pt
-                    }),
-                    new TextRun({ 
-                      text: `${emissao.cargos?.length || 0}`, 
-                      font: "Calibri Light", 
-                      size: 24, // 12pt
-                    }),
-                    new TextRun({ 
-                      text: "    ", 
-                      font: "Calibri Light", 
-                      size: 24, // 12pt
-                    }),
-                    new TextRun({ 
-                      text: "Total de Setores: ", 
-                      font: "Calibri Light", 
-                      bold: true,
-                      size: 24, // 12pt
-                    }),
-                    new TextRun({ 
-                      text: `${new Set(emissao.cargos?.map(c => c.setorNome).filter(s => s) || []).size}`, 
-                      font: "Calibri Light", 
-                      size: 24, // 12pt
-                    }),
-                  ],
-                  spacing: { after: 400 },
-                  alignment: AlignmentType.LEFT,
                 }),
               ];
               return page12Content;
