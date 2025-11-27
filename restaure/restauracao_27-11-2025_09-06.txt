@@ -1,0 +1,7 @@
+Ponto de Restauração
+Data: 27/11/2025
+Hora: 09:06
+
+Descrição: Remoção de código solto no arquivo LaudoPgro.tsx
+
+Commit: b60c563 Ponto de restauração: 27-11-2025_09-06
