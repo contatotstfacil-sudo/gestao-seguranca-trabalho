@@ -57,6 +57,37 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+// Lista de estados brasileiros
+const ESTADOS_BRASIL = [
+  { sigla: "AC", nome: "Acre" },
+  { sigla: "AL", nome: "Alagoas" },
+  { sigla: "AP", nome: "Amapá" },
+  { sigla: "AM", nome: "Amazonas" },
+  { sigla: "BA", nome: "Bahia" },
+  { sigla: "CE", nome: "Ceará" },
+  { sigla: "DF", nome: "Distrito Federal" },
+  { sigla: "ES", nome: "Espírito Santo" },
+  { sigla: "GO", nome: "Goiás" },
+  { sigla: "MA", nome: "Maranhão" },
+  { sigla: "MT", nome: "Mato Grosso" },
+  { sigla: "MS", nome: "Mato Grosso do Sul" },
+  { sigla: "MG", nome: "Minas Gerais" },
+  { sigla: "PA", nome: "Pará" },
+  { sigla: "PB", nome: "Paraíba" },
+  { sigla: "PR", nome: "Paraná" },
+  { sigla: "PE", nome: "Pernambuco" },
+  { sigla: "PI", nome: "Piauí" },
+  { sigla: "RJ", nome: "Rio de Janeiro" },
+  { sigla: "RN", nome: "Rio Grande do Norte" },
+  { sigla: "RS", nome: "Rio Grande do Sul" },
+  { sigla: "RO", nome: "Rondônia" },
+  { sigla: "RR", nome: "Roraima" },
+  { sigla: "SC", nome: "Santa Catarina" },
+  { sigla: "SP", nome: "São Paulo" },
+  { sigla: "SE", nome: "Sergipe" },
+  { sigla: "TO", nome: "Tocantins" },
+];
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -128,6 +159,16 @@ type EmissaoPgroCargo = {
   cbo: string;
 };
 
+type CronogramaAcao = {
+  id: string;
+  descricao: string;
+  metaDiaria: boolean;
+  metaMensal: boolean;
+  metaTrimestral: boolean;
+  metaAnual: boolean;
+  estrategiaMetodologia: string;
+};
+
 type EmissaoPgro = {
   id: string;
   empresaId: string;
@@ -140,6 +181,10 @@ type EmissaoPgro = {
   vigenciaFim: string;
   observacoes: string;
   cargos: EmissaoPgroCargo[];
+  cronogramaAcoes?: CronogramaAcao[];
+  cidadeEmissao?: string;
+  estadoEmissao?: string;
+  dataEmissao?: string;
   criadoEm: string;
   atualizadoEm: string;
 };
@@ -179,6 +224,10 @@ export default function LaudoPgro() {
     useState<ResponsavelResumo | null>(null);
   const [observacoes, setObservacoes] = useState("");
   const [cargosPlano, setCargosPlano] = useState<CargoPlanoItem[]>(() => [createEmptyCargoItem()]);
+  const [cronogramaAcoes, setCronogramaAcoes] = useState<CronogramaAcao[]>([]);
+  const [cidadeEmissao, setCidadeEmissao] = useState<string>("");
+  const [estadoEmissao, setEstadoEmissao] = useState<string>("");
+  const [dataEmissao, setDataEmissao] = useState<string>("");
   const [emissaoEditandoId, setEmissaoEditandoId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [gerandoWord, setGerandoWord] = useState(false);
@@ -372,7 +421,11 @@ export default function LaudoPgro() {
     setResponsavelSearch("");
     setResponsavelSelecionado(null);
     setObservacoes("");
+    setCronogramaAcoes([]);
     setCargosPlano([createEmptyCargoItem()]);
+    setCidadeEmissao("");
+    setEstadoEmissao("");
+    setDataEmissao("");
     setEmissaoEditandoId(null);
     setSalvando(false);
   }, [createEmptyCargoItem]);
@@ -380,13 +433,14 @@ export default function LaudoPgro() {
   const handleDialogToggle = useCallback(
     (open: boolean) => {
       setDialogOpen(open);
-      if (!open) {
+      if (!open && !emissaoEditandoId) {
+        // Só resetar se não estiver editando
         setTimeout(() => {
           resetDialogState();
         }, 100);
       }
     },
-    [resetDialogState]
+    [resetDialogState, emissaoEditandoId]
   );
 
   const handleDialogClose = useCallback(() => {
@@ -617,6 +671,20 @@ export default function LaudoPgro() {
       setEmissoesSelecionadas(emissoesFiltradas.map((emissao) => emissao.id));
     }
   }, [emissoesFiltradas, emissoesSelecionadas.length]);
+
+
+  // Garantir que os valores de emissão sejam carregados quando o diálogo abrir
+  useEffect(() => {
+    if (dialogOpen && emissaoEditandoId) {
+      const emissao = emissoes.find((e) => e.id === emissaoEditandoId);
+      if (emissao) {
+        // Forçar atualização dos valores
+        setCidadeEmissao(emissao.cidadeEmissao || "");
+        setEstadoEmissao(emissao.estadoEmissao || "");
+        setDataEmissao(emissao.dataEmissao || "");
+      }
+    }
+  }, [dialogOpen, emissaoEditandoId, emissoes]);
 
   const salvarEmissoesLocal = useCallback(
     (lista: EmissaoPgro[]) => {
@@ -1724,6 +1792,13 @@ export default function LaudoPgro() {
     
     setGerandoWord(true);
     try {
+      // Debug: verificar data de emissão antes de gerar
+      console.log("=== DEBUG GERAR WORD - DATA ===");
+      console.log("Data de Emissão RAW:", emissao.dataEmissao);
+      console.log("Tipo:", typeof emissao.dataEmissao);
+      console.log("Valor após trim:", emissao.dataEmissao ? String(emissao.dataEmissao).trim() : "VAZIO");
+      console.log("===============================");
+      
       // Buscar dados da empresa
       const empresa = empresas.find((e) => e.id === emissao.empresaId);
       const empresaCnpj = empresa?.cnpj || '';
@@ -3523,8 +3598,8 @@ export default function LaudoPgro() {
         }
       }
 
-      // Calcular total de páginas (11 páginas fixas + número de cargos)
-      const totalPages = 11 + (emissao.cargos?.length || 0);
+      // Calcular total de páginas (11 páginas fixas + número de cargos + 1 página de cronograma + 1 página de encerramento)
+      const totalPages = 11 + (emissao.cargos?.length || 0) + 2;
 
       // Preparar páginas dinâmicas para cada cargo
       const totalCargos = emissao.cargos?.length || 0;
@@ -6762,6 +6837,639 @@ export default function LaudoPgro() {
           },
           // Páginas dinâmicas para cada cargo (começando na página 12)
           ...paginasCargos,
+          // Página de Cronograma de Ações
+          {
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait" as const,
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(12 + totalCargos, totalPages)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: [
+              new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                borders: {
+                  top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                  bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                  left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                  right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                  insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                  insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                },
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        columnSpan: 3,
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "9. CRONOGRAMA DE AÇÕES",
+                                font: "Calibri Light",
+                                bold: true,
+                                size: 24, // 12pt
+                                color: "000000", // Preto
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: {
+                          fill: "808080", // Cinza
+                          type: "clear",
+                        },
+                        verticalAlign: VerticalAlign.CENTER,
+                        borders: {
+                          top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                        },
+                      }),
+                    ],
+                  }),
+                  // Linha de cabeçalho das colunas
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        width: { size: 25, type: WidthType.PERCENTAGE },
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Descrição da Ação",
+                                font: "Calibri Light",
+                                bold: true,
+                                size: 18, // 9pt
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: {
+                          fill: "D3D3D3", // Cinza claro
+                          type: "clear",
+                        },
+                        verticalAlign: VerticalAlign.CENTER,
+                        borders: {
+                          top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                        },
+                      }),
+                      new TableCell({
+                        width: { size: 20, type: WidthType.PERCENTAGE },
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Meta",
+                                font: "Calibri Light",
+                                bold: true,
+                                size: 18, // 9pt
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: {
+                          fill: "D3D3D3", // Cinza claro
+                          type: "clear",
+                        },
+                        verticalAlign: VerticalAlign.CENTER,
+                        borders: {
+                          top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                        },
+                      }),
+                      new TableCell({
+                        width: { size: 55, type: WidthType.PERCENTAGE },
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Estratégia da Metodologia",
+                                font: "Calibri Light",
+                                bold: true,
+                                size: 18, // 9pt
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: {
+                          fill: "D3D3D3", // Cinza claro
+                          type: "clear",
+                        },
+                        verticalAlign: VerticalAlign.CENTER,
+                        borders: {
+                          top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                        },
+                      }),
+                    ],
+                  }),
+                  // Linhas dinâmicas baseadas nas ações do cronograma
+                  ...(emissao.cronogramaAcoes && emissao.cronogramaAcoes.length > 0
+                    ? emissao.cronogramaAcoes.map((acao) => (
+                        new TableRow({
+                          children: [
+                            // Descrição da Ação
+                            new TableCell({
+                              width: { size: 25, type: WidthType.PERCENTAGE },
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: acao.descricao || "",
+                                      font: "Calibri Light",
+                                      size: 18, // 9pt
+                                    }),
+                                  ],
+                                  alignment: AlignmentType.LEFT,
+                                }),
+                              ],
+                              borders: {
+                                top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                              },
+                              verticalAlign: VerticalAlign.TOP,
+                            }),
+                            // Meta (preenchida automaticamente)
+                            new TableCell({
+                              width: { size: 20, type: WidthType.PERCENTAGE },
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: (() => {
+                                        if (acao.metaDiaria) return "Diária";
+                                        if (acao.metaMensal) return "Mensal";
+                                        if (acao.metaTrimestral) return "Trimestral";
+                                        if (acao.metaAnual) return "Anual";
+                                        return "";
+                                      })(),
+                                      font: "Calibri Light",
+                                      size: 18, // 9pt
+                                    }),
+                                  ],
+                                  alignment: AlignmentType.CENTER,
+                                }),
+                              ],
+                              borders: {
+                                top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                              },
+                              verticalAlign: VerticalAlign.CENTER,
+                            }),
+                            // Estratégia da Metodologia
+                            new TableCell({
+                              width: { size: 55, type: WidthType.PERCENTAGE },
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: acao.estrategiaMetodologia || "",
+                                      font: "Calibri Light",
+                                      size: 18, // 9pt
+                                    }),
+                                  ],
+                                  alignment: AlignmentType.LEFT,
+                                }),
+                              ],
+                              borders: {
+                                top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                              },
+                              verticalAlign: VerticalAlign.TOP,
+                            }),
+                          ],
+                        })
+                      ))
+                    : [
+                        // Linha vazia se não houver ações
+                        new TableRow({
+                          children: [
+                            new TableCell({
+                              width: { size: 25, type: WidthType.PERCENTAGE },
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: "",
+                                      font: "Calibri Light",
+                                      size: 18, // 9pt
+                                    }),
+                                  ],
+                                  alignment: AlignmentType.LEFT,
+                                }),
+                              ],
+                              borders: {
+                                top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                              },
+                              verticalAlign: VerticalAlign.TOP,
+                            }),
+                            new TableCell({
+                              width: { size: 20, type: WidthType.PERCENTAGE },
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: "",
+                                      font: "Calibri Light",
+                                      size: 18, // 9pt
+                                    }),
+                                  ],
+                                  alignment: AlignmentType.CENTER,
+                                }),
+                              ],
+                              borders: {
+                                top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                              },
+                              verticalAlign: VerticalAlign.CENTER,
+                            }),
+                            new TableCell({
+                              width: { size: 55, type: WidthType.PERCENTAGE },
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({
+                                      text: "",
+                                      font: "Calibri Light",
+                                      size: 18, // 9pt
+                                    }),
+                                  ],
+                                  alignment: AlignmentType.LEFT,
+                                }),
+                              ],
+                              borders: {
+                                top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                                right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                              },
+                              verticalAlign: VerticalAlign.TOP,
+                            }),
+                          ],
+                        }),
+                      ]
+                  ),
+                ],
+              }),
+            ],
+          },
+          // Página de Encerramento
+          {
+            properties: {
+              page: {
+                size: {
+                  orientation: "portrait" as const,
+                },
+                margin: {
+                  top: 720,
+                  right: 720,
+                  bottom: 720,
+                  left: 720,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [criarHeaderTable(12 + totalCargos + 1, totalPages)],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: criarFooter(),
+              }),
+            },
+            children: [
+              new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "10. ENCERRAMENTO",
+                                font: "Calibri Light",
+                                bold: true,
+                                size: 24, // 12pt
+                                color: "000000", // Preto
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: {
+                          fill: "808080", // Cinza
+                          type: "clear",
+                        },
+                        verticalAlign: VerticalAlign.CENTER,
+                        borders: {
+                          top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                          right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                        },
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              new Paragraph({ text: "", spacing: { after: 400 } }),
+              // Primeiro parágrafo
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Atendendo solicitação da empresa ",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                  }),
+                  new TextRun({
+                    text: empresa?.razaoSocial || emissao.empresaNome || "[NOME DA EMPRESA]",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                  new TextRun({
+                    text: ", e baseado em levantamento \"in loco\" realizado na dependência do cliente, foi elaborado o Programa de Prevenção de Riscos Ambientais.",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                  }),
+                ],
+                spacing: { after: 400 },
+                alignment: AlignmentType.JUSTIFIED,
+                indent: { firstLine: 720 }, // Indentação de primeira linha (1.27cm)
+              }),
+              // Segundo parágrafo
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "O presente documento será submetido a Análise Global e Anual, visando avaliar o seu desenvolvimento, implementar os ajustes necessários e estabelecer novas metas e prioridades.",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                  }),
+                ],
+                spacing: { after: 400 },
+                alignment: AlignmentType.JUSTIFIED,
+                indent: { firstLine: 720 }, // Indentação de primeira linha (1.27cm)
+              }),
+              // Terceiro parágrafo
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "As medidas propostas devem estar vinculadas ao PCMSO, a fim de identificar o nexo causal de possíveis problemas ocupacionais, devendo as medidas de proteção dos trabalhadores serem imediatamente revistas.",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                  }),
+                ],
+                spacing: { after: 400 },
+                alignment: AlignmentType.JUSTIFIED,
+                indent: { firstLine: 720 }, // Indentação de primeira linha (1.27cm)
+              }),
+              // Quarto parágrafo
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "O programa contempla planilha de reconhecimento de riscos, sendo anexado complemento ergonômico.",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                  }),
+                ],
+                spacing: { after: 400 },
+                alignment: AlignmentType.JUSTIFIED,
+                indent: { firstLine: 720 }, // Indentação de primeira linha (1.27cm)
+              }),
+              // Quinto parágrafo
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "O programa é formalizado através de assinatura abaixo e é composto de ",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                  }),
+                  new TextRun({
+                    text: `${totalPages} páginas totais`,
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                  new TextRun({
+                    text: " (da capa até seus anexos).",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                  }),
+                ],
+                spacing: { after: 400 },
+                alignment: AlignmentType.JUSTIFIED,
+                indent: { firstLine: 720 }, // Indentação de primeira linha (1.27cm)
+              }),
+              // Uma linha de espaçamento apenas
+              new Paragraph({ text: "", spacing: { after: 400 } }),
+              // Cidade, Estado e Data inicial formatada - alinhada à direita
+              (() => {
+                // Buscar dados da empresa
+                const empresaEncontrada = empresas.find((e) => e.id === emissao.empresaId);
+                const cidade = empresaEncontrada?.cidadeEndereco || "";
+                const estado = empresaEncontrada?.estadoEndereco || "";
+                
+                // Formatar data para "dia DD de mês de YYYY"
+                const formatarDataCompleta = (dataString: string) => {
+                  if (!dataString) return "";
+                  try {
+                    let data: Date;
+                    // Se está no formato YYYY-MM-DD
+                    if (dataString.match(/^\d{4}-\d{2}-\d{2}/)) {
+                      const [ano, mes, dia] = dataString.split('-').map(Number);
+                      data = new Date(ano, mes - 1, dia);
+                    } else {
+                      data = new Date(dataString);
+                    }
+                    // Formatar: "dia DD de mês de YYYY"
+                    return format(data, "'dia' dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+                  } catch {
+                    return "";
+                  }
+                };
+                
+                const dataFormatada = formatarDataCompleta(emissao.vigenciaInicio);
+                
+                // Montar texto completo: "Cidade - Estado, dia DD de mês de YYYY."
+                let textoCompleto = "";
+                if (cidade && estado) {
+                  textoCompleto = `${cidade} - ${estado}, ${dataFormatada}.`;
+                } else if (cidade) {
+                  textoCompleto = `${cidade}, ${dataFormatada}.`;
+                } else if (estado) {
+                  textoCompleto = `${estado}, ${dataFormatada}.`;
+                } else {
+                  textoCompleto = dataFormatada ? `${dataFormatada}.` : "";
+                }
+                
+                return new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: textoCompleto,
+                      font: "Calibri Light",
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                  alignment: AlignmentType.RIGHT,
+                });
+              })(),
+              // Espaçamento antes da assinatura do responsável técnico
+              new Paragraph({ text: "", spacing: { after: 300 } }),
+              // Linha de assinatura do responsável técnico
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "_________________________________",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                ],
+                spacing: { after: 0 },
+                alignment: AlignmentType.CENTER,
+              }),
+              // Nome do responsável técnico
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: emissao.responsavelNome || "[Nome do Responsável]",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                ],
+                spacing: { after: 0 },
+                alignment: AlignmentType.CENTER,
+              }),
+              // Função do responsável técnico
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: emissao.responsavelFuncao || "Técnico de Segurança do Trabalho",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                ],
+                spacing: { after: 0 },
+                alignment: AlignmentType.CENTER,
+              }),
+              // Registro MTE do responsável técnico
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `MTE: ${emissao.responsavelRegistro || "50002/SP"}`,
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                ],
+                spacing: { after: 0 },
+                alignment: AlignmentType.CENTER,
+              }),
+              // Texto "Responsável Técnico Pela Elaboração"
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Responsável Técnico Pela Elaboração",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                ],
+                spacing: { after: 300 },
+                alignment: AlignmentType.CENTER,
+              }),
+              // Espaçamento antes da assinatura da empresa
+              new Paragraph({ text: "", spacing: { after: 300 } }),
+              // Linha de assinatura da empresa
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "_________________________________",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                ],
+                spacing: { after: 0 },
+                alignment: AlignmentType.CENTER,
+              }),
+              // Razão social da empresa
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: empresa?.razaoSocial || emissao.empresaNome || "[Razão Social da Empresa]",
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                ],
+                spacing: { after: 0 },
+                alignment: AlignmentType.CENTER,
+              }),
+              // CNPJ da empresa
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `CNPJ: ${empresa?.cnpj || "[CNPJ da Empresa]"}`,
+                    font: "Calibri Light",
+                    size: 24, // 12pt
+                    bold: true,
+                  }),
+                ],
+                spacing: { after: 0 },
+                alignment: AlignmentType.CENTER,
+              }),
+            ],
+          },
         ],
       });
 
@@ -6813,6 +7521,10 @@ export default function LaudoPgro() {
           cbo: cargo.cbo,
         }))
       );
+      setCronogramaAcoes(emissao.cronogramaAcoes || []);
+      setCidadeEmissao(emissao.cidadeEmissao || "");
+      setEstadoEmissao(emissao.estadoEmissao || "");
+      setDataEmissao(emissao.dataEmissao || "");
       setDialogOpen(true);
     },
     []
@@ -6840,8 +7552,8 @@ export default function LaudoPgro() {
             setorId: item.setorId,
             cbo: item.cbo,
           })),
+        cronogramaAcoes: cronogramaAcoes,
       };
-      console.log("Dados para salvar PGRO", payload);
 
       const novaEmissao: EmissaoPgro = {
         id: emissaoEditandoId || (window.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10)),
@@ -6864,11 +7576,26 @@ export default function LaudoPgro() {
             setorNome: item.setorNome,
             cbo: item.cbo,
           })),
+        cronogramaAcoes: cronogramaAcoes,
+        cidadeEmissao: cidadeEmissao?.trim() || "",
+        estadoEmissao: estadoEmissao?.trim() || "",
+        dataEmissao: dataEmissao?.trim() || "",
         criadoEm: emissaoEditandoId
           ? emissoes.find((emissao) => emissao.id === emissaoEditandoId)?.criadoEm || new Date().toISOString()
           : new Date().toISOString(),
         atualizadoEm: new Date().toISOString(),
       };
+      
+      // DEBUG - Verificar valores antes de salvar
+      console.log("=== SALVANDO EMISSÃO ===");
+      console.log("cidadeEmissao STATE:", cidadeEmissao);
+      console.log("estadoEmissao STATE:", estadoEmissao);
+      console.log("dataEmissao STATE:", dataEmissao);
+      console.log("cidadeEmissao SALVO:", novaEmissao.cidadeEmissao);
+      console.log("estadoEmissao SALVO:", novaEmissao.estadoEmissao);
+      console.log("dataEmissao SALVO:", novaEmissao.dataEmissao);
+      console.log("Nova emissão completa:", JSON.stringify(novaEmissao, null, 2));
+      console.log("========================");
 
       const listaAtualizada = emissaoEditandoId
         ? emissoes.map((emissao) => (emissao.id === emissaoEditandoId ? novaEmissao : emissao))
@@ -6884,7 +7611,7 @@ export default function LaudoPgro() {
     } finally {
       setSalvando(false);
     }
-  }, [cargosPlano, vigenciaFim, vigenciaInicio, observacoes, responsavelSelecionado?.id, selectedEmpresa?.id, formularioValido, handleDialogClose, emissaoEditandoId, emissoes, salvarEmissoesLocal]);
+  }, [cargosPlano, vigenciaFim, vigenciaInicio, observacoes, cronogramaAcoes, responsavelSelecionado?.id, selectedEmpresa?.id, formularioValido, handleDialogClose, emissaoEditandoId, emissoes, salvarEmissoesLocal]);
 
   const handleRemoverCargoPlano = useCallback((itemId: string) => {
     setCargosPlano((prev) => (prev.length > 1 ? prev.filter((item) => item.id !== itemId) : prev));
@@ -6907,7 +7634,10 @@ export default function LaudoPgro() {
                 Emitir PGRO
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-full max-w-[95vw] sm:max-w-[95vw] lg:max-w-[1200px] max-h-[90vh] !flex !flex-col !p-0 gap-0">
+            <DialogContent 
+              key={emissaoEditandoId || "new"} 
+              className="w-full max-w-[95vw] sm:max-w-[95vw] lg:max-w-[1200px] max-h-[90vh] !flex !flex-col !p-0 gap-0"
+            >
               <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0 border-b">
                 <DialogTitle>Emitir PGRO</DialogTitle>
                 <DialogDescription>
@@ -7354,16 +8084,162 @@ export default function LaudoPgro() {
                 </section>
 
                 <section className="space-y-4">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                    Observações iniciais
-                  </h3>
-                  <Textarea
-                    placeholder="Resumo do escopo, particularidades do ambiente, próximos passos..."
-                    value={observacoes}
-                    onChange={(event) => setObservacoes(event.target.value)}
-                    rows={4}
-                  />
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                      Cronograma de Ações
+                    </h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const novaAcao: CronogramaAcao = {
+                          id: Math.random().toString(36).slice(2, 10),
+                          descricao: "",
+                          metaDiaria: false,
+                          metaMensal: false,
+                          metaTrimestral: false,
+                          metaAnual: false,
+                          estrategiaMetodologia: "",
+                        };
+                        setCronogramaAcoes([...cronogramaAcoes, novaAcao]);
+                      }}
+                    >
+                      + Adicionar Ação
+                    </Button>
+                  </div>
+                  
+                  {cronogramaAcoes.length === 0 ? (
+                    <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center text-sm text-muted-foreground">
+                      Nenhuma ação adicionada. Clique em "+ Adicionar Ação" para começar.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {cronogramaAcoes.map((acao, index) => (
+                        <Card key={acao.id}>
+                          <CardContent className="pt-6">
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm font-semibold">Ação {index + 1}</Label>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setCronogramaAcoes(cronogramaAcoes.filter((a) => a.id !== acao.id));
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label htmlFor={`descricao-${acao.id}`}>Descrição da Ação</Label>
+                                <Textarea
+                                  id={`descricao-${acao.id}`}
+                                  placeholder="Descreva a ação a ser realizada..."
+                                  value={acao.descricao}
+                                  onChange={(e) => {
+                                    const novasAcoes = [...cronogramaAcoes];
+                                    novasAcoes[index].descricao = e.target.value;
+                                    setCronogramaAcoes(novasAcoes);
+                                  }}
+                                  rows={2}
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>Meta Pré-estabelecida</Label>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`diaria-${acao.id}`}
+                                      checked={acao.metaDiaria}
+                                      onChange={(e) => {
+                                        const novasAcoes = [...cronogramaAcoes];
+                                        novasAcoes[index].metaDiaria = e.target.checked;
+                                        setCronogramaAcoes(novasAcoes);
+                                      }}
+                                      className="h-4 w-4"
+                                    />
+                                    <Label htmlFor={`diaria-${acao.id}`} className="font-normal cursor-pointer">
+                                      Diária
+                                    </Label>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`mensal-${acao.id}`}
+                                      checked={acao.metaMensal}
+                                      onChange={(e) => {
+                                        const novasAcoes = [...cronogramaAcoes];
+                                        novasAcoes[index].metaMensal = e.target.checked;
+                                        setCronogramaAcoes(novasAcoes);
+                                      }}
+                                      className="h-4 w-4"
+                                    />
+                                    <Label htmlFor={`mensal-${acao.id}`} className="font-normal cursor-pointer">
+                                      Mensal
+                                    </Label>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`trimestral-${acao.id}`}
+                                      checked={acao.metaTrimestral}
+                                      onChange={(e) => {
+                                        const novasAcoes = [...cronogramaAcoes];
+                                        novasAcoes[index].metaTrimestral = e.target.checked;
+                                        setCronogramaAcoes(novasAcoes);
+                                      }}
+                                      className="h-4 w-4"
+                                    />
+                                    <Label htmlFor={`trimestral-${acao.id}`} className="font-normal cursor-pointer">
+                                      Trimestral
+                                    </Label>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`anual-${acao.id}`}
+                                      checked={acao.metaAnual}
+                                      onChange={(e) => {
+                                        const novasAcoes = [...cronogramaAcoes];
+                                        novasAcoes[index].metaAnual = e.target.checked;
+                                        setCronogramaAcoes(novasAcoes);
+                                      }}
+                                      className="h-4 w-4"
+                                    />
+                                    <Label htmlFor={`anual-${acao.id}`} className="font-normal cursor-pointer">
+                                      Anual
+                                    </Label>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label htmlFor={`estrategia-${acao.id}`}>Estratégia da Metodologia</Label>
+                                <Textarea
+                                  id={`estrategia-${acao.id}`}
+                                  placeholder="Descreva a estratégia e metodologia a ser utilizada..."
+                                  value={acao.estrategiaMetodologia}
+                                  onChange={(e) => {
+                                    const novasAcoes = [...cronogramaAcoes];
+                                    novasAcoes[index].estrategiaMetodologia = e.target.value;
+                                    setCronogramaAcoes(novasAcoes);
+                                  }}
+                                  rows={2}
+                                />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </section>
+
               </div>
 
               <DialogFooter className="sm:flex-row sm:justify-between sm:items-center px-6 pb-6 pt-4 flex-shrink-0 border-t bg-background">
@@ -7561,7 +8437,13 @@ export default function LaudoPgro() {
                                   e.stopPropagation();
                                   e.preventDefault();
                                   if (!gerandoWord) {
-                                    gerarWord(emissao).catch((error) => {
+                                    // FORÇAR BUSCAR EMISSÃO ATUALIZADA DA LISTA - GARANTIR DATA
+                                    const emissaoAtualizada = emissoes.find((e) => e.id === emissao.id) || emissao;
+                                    console.log("=== GERAR WORD - DATA ===");
+                                    console.log("Data na emissão original:", emissao.dataEmissao);
+                                    console.log("Data na emissão atualizada:", emissaoAtualizada.dataEmissao);
+                                    console.log("Data será usada:", emissaoAtualizada.dataEmissao || "VAZIA");
+                                    gerarWord(emissaoAtualizada).catch((error) => {
                                       console.error("Erro ao gerar Word:", error);
                                     });
                                   }
