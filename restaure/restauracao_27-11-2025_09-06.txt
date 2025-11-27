@@ -1,7 +1,11 @@
 Ponto de Restauração
 Data: 27/11/2025
-Hora: 09:06
+Hora: 10:23
 
-Descrição: Remoção de código solto no arquivo LaudoPgro.tsx
+Descrição: 
+- Remoção de código solto no arquivo LaudoPgro.tsx
+- Adicionadas tabelas de gradação (Efeitos à Saúde e Exposição) lado a lado
+- Implementada numeração de planilhas (ex: "Planilha: 01 de 20")
+- Corrigida numeração de páginas em todo o documento (usando totalPages dinâmico)
 
-Commit: b60c563 Ponto de restauração: 27-11-2025_09-06
+Commit: fc1810f Corrige numeração de páginas e adiciona numeração de planilhas
