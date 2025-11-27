@@ -21,6 +21,12 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -168,6 +174,44 @@ type CronogramaAcao = {
   metaAnual: boolean;
   estrategiaMetodologia: string;
 };
+
+// Componente para buscar e exibir total de cargos da empresa
+function TotalCargosEmpresa({ empresaId }: { empresaId?: string }) {
+  const utils = trpc.useUtils();
+  const [total, setTotal] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (empresaId) {
+      const empresaIdNumber = parseInt(empresaId);
+      if (!isNaN(empresaIdNumber)) {
+        setLoading(true);
+        utils.colaboradores.list.fetch({ empresaId: empresaIdNumber })
+          .then((colaboradores: any[]) => {
+            const cargosUnicos = new Set(
+              colaboradores
+                .filter((c: any) => c.cargoId && c.status === 'ativo')
+                .map((c: any) => c.cargoId)
+            );
+            setTotal(cargosUnicos.size);
+            setLoading(false);
+          })
+          .catch(() => {
+            setTotal(null);
+            setLoading(false);
+          });
+      } else {
+        setLoading(false);
+      }
+    } else {
+      setLoading(false);
+    }
+  }, [empresaId, utils]);
+
+  if (loading) return <span className="text-lg">...</span>;
+  if (total === null) return <span className="text-lg">—</span>;
+  return <span>{total}</span>;
+}
 
 type EmissaoPgro = {
   id: string;
@@ -7618,9 +7662,9 @@ export default function LaudoPgro() {
   }, []);
 
   return (
-    <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-12rem)] pr-2">
+    <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-12rem)] pr-2">
       <Card>
-        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6">
           <div>
             <CardTitle className="text-2xl font-semibold">PGRO / PPRA</CardTitle>
             <p className="text-muted-foreground mt-2">
@@ -8273,8 +8317,8 @@ export default function LaudoPgro() {
             </DialogContent>
           </Dialog>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-lg border border-dashed p-6 text-muted-foreground">
+        <CardContent className="space-y-3 p-4">
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
             Utilize o botão "Emitir PGRO" para iniciar um novo plano. O fluxo completo de geração, checklist de requisitos e anexos técnicos será liberado nas próximas etapas do desenvolvimento.
           </div>
         </CardContent>
@@ -8376,54 +8420,57 @@ export default function LaudoPgro() {
               Nenhum registro de PGRO encontrado. Emita um novo plano para começar a controlar as revisões.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {emissoesFiltradas.map((emissao) => {
                 const selecionado = emissoesSelecionadas.includes(emissao.id);
+                const empresaEncontrada = empresas.find((e) => e.id === emissao.empresaId);
+                const totalCargosPGRO = emissao.cargos?.length || 0;
+                
                 return (
-                  <Card key={emissao.id} className={cn(selecionado && "border-primary")}
+                  <Card 
+                    key={emissao.id} 
+                    className={cn(
+                      "transition-all hover:shadow-md",
+                      selecionado && "border-primary border-2 shadow-md"
+                    )}
                     onClick={() => handleToggleSelecionado(emissao.id)}
                   >
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-semibold">{emissao.empresaNome}</h3>
-                            <Badge variant={selecionado ? "default" : "secondary"}>
-                              Vigência: {format(new Date(emissao.vigenciaInicio), "dd/MM/yyyy")} – {format(new Date(emissao.vigenciaFim), "dd/MM/yyyy")}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Responsável técnico: <span className="font-medium">{emissao.responsavelNome}</span>
-                            {emissao.responsavelRegistro && ` • Registro ${emissao.responsavelRegistro}`}
-                          </p>
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Cargos abrangidos</p>
-                            <ul className="space-y-1 text-sm">
-                              {emissao.cargos.map((cargo) => (
-                                <li key={cargo.id} className="flex flex-wrap gap-2">
-                                  <span className="font-medium">{cargo.cargoNome}</span>
-                                  <Badge variant="outline">Setor {cargo.setorNome || "-"}</Badge>
-                                  {cargo.cbo && <Badge variant="secondary">CBO {cargo.cbo}</Badge>}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          {emissao.observacoes && (
-                            <p className="text-sm text-muted-foreground">
-                              {emissao.observacoes}
-                            </p>
-                          )}
-                          <p className="text-xs text-muted-foreground">
-                            Criado em {format(new Date(emissao.criadoEm), "dd/MM/yyyy HH:mm")} • Atualizado em {format(new Date(emissao.atualizadoEm), "dd/MM/yyyy HH:mm")}
-                          </p>
+                    <CardContent className="p-6">
+                      {/* Cabeçalho com empresa e vigência */}
+                      <div className="flex flex-col gap-4 mb-4 pb-4 border-b">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="text-xl font-bold text-gray-900">{emissao.empresaNome}</h3>
+                          <Badge 
+                            variant={selecionado ? "default" : "secondary"}
+                            className="text-xs font-semibold px-3 py-1"
+                          >
+                            Vigência: {format(new Date(emissao.vigenciaInicio), "dd/MM/yyyy")} – {format(new Date(emissao.vigenciaFim), "dd/MM/yyyy")}
+                          </Badge>
                         </div>
-                        <div className="flex flex-col gap-2">
-                          <Button variant="outline" size="sm" className="gap-2" onClick={(event) => { event.stopPropagation(); handleEditarEmissao(emissao); }}>
+                        <p className="text-sm text-gray-600">
+                          <span className="font-semibold">Responsável técnico:</span>{" "}
+                          <span className="font-medium text-gray-900">{emissao.responsavelNome}</span>
+                          {emissao.responsavelRegistro && (
+                            <span className="text-gray-500"> • Registro {emissao.responsavelRegistro}</span>
+                          )}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="gap-2" 
+                            onClick={(event) => { event.stopPropagation(); handleEditarEmissao(emissao); }}
+                          >
                             <Edit className="h-4 w-4" /> Editar
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="outline" size="sm" className="gap-2" onClick={(e) => e.stopPropagation()}>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="gap-2" 
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <FileDown className="h-4 w-4" /> Gerar <ChevronDown className="h-3 w-3" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -8437,12 +8484,7 @@ export default function LaudoPgro() {
                                   e.stopPropagation();
                                   e.preventDefault();
                                   if (!gerandoWord) {
-                                    // FORÇAR BUSCAR EMISSÃO ATUALIZADA DA LISTA - GARANTIR DATA
                                     const emissaoAtualizada = emissoes.find((e) => e.id === emissao.id) || emissao;
-                                    console.log("=== GERAR WORD - DATA ===");
-                                    console.log("Data na emissão original:", emissao.dataEmissao);
-                                    console.log("Data na emissão atualizada:", emissaoAtualizada.dataEmissao);
-                                    console.log("Data será usada:", emissaoAtualizada.dataEmissao || "VAZIA");
                                     gerarWord(emissaoAtualizada).catch((error) => {
                                       console.error("Erro ao gerar Word:", error);
                                     });
@@ -8455,9 +8497,111 @@ export default function LaudoPgro() {
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                          <Button variant="outline" size="sm" className="gap-2 text-destructive" onClick={(event) => { event.stopPropagation(); handleExcluirEmissao(emissao.id); }}>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="gap-2 text-destructive hover:text-destructive" 
+                            onClick={(event) => { event.stopPropagation(); handleExcluirEmissao(emissao.id); }}
+                          >
                             <Trash2 className="h-4 w-4" /> Excluir
                           </Button>
+                        </div>
+                      </div>
+
+                      {/* Accordion abrangendo tudo */}
+                      <Accordion type="single" collapsible className="w-full" defaultValue="cargos">
+                        <AccordionItem value="cargos" className="border-0">
+                          <AccordionTrigger 
+                            className="py-2 hover:no-underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-between w-full pr-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-700">
+                                  Cargos Abrangidos
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  • Clique para ver detalhes e estatísticas
+                                </span>
+                              </div>
+                              <Badge variant="outline" className="text-xs">
+                                {totalCargosPGRO} {totalCargosPGRO === 1 ? "cargo" : "cargos"}
+                              </Badge>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent onClick={(e) => e.stopPropagation()}>
+                            {/* Estatísticas de cargos */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">
+                                  Total de Cargos no PGRO
+                                </p>
+                                <p className="text-2xl font-bold text-blue-900">{totalCargosPGRO}</p>
+                                <p className="text-xs text-blue-600 mt-1">Cargos incluídos neste documento</p>
+                              </div>
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">
+                                  Total de Cargos da Empresa
+                                </p>
+                                <p className="text-2xl font-bold text-green-900">
+                                  {empresaEncontrada ? (
+                                    <TotalCargosEmpresa empresaId={empresaEncontrada.id} />
+                                  ) : (
+                                    "—"
+                                  )}
+                                </p>
+                                <p className="text-xs text-green-600 mt-1">Cargos cadastrados na empresa</p>
+                              </div>
+                            </div>
+
+                            {/* Lista de cargos */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {emissao.cargos.map((cargo) => (
+                                <div 
+                                  key={cargo.id} 
+                                  className="flex items-start gap-2 p-2 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors"
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm text-gray-900 truncate">
+                                      {cargo.cargoNome}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {cargo.setorNome && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {cargo.setorNome}
+                                        </Badge>
+                                      )}
+                                      {cargo.cbo && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          CBO: {cargo.cbo}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+
+                      {/* Rodapé com informações adicionais */}
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs text-gray-500">
+                          <div className="flex items-center gap-4">
+                            <span>
+                              Criado em {format(new Date(emissao.criadoEm), "dd/MM/yyyy HH:mm")}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Atualizado em {format(new Date(emissao.atualizadoEm), "dd/MM/yyyy HH:mm")}
+                            </span>
+                          </div>
+                          {emissao.observacoes && (
+                            <p className="text-xs text-gray-600 italic truncate max-w-md">
+                              {emissao.observacoes}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -8466,22 +8610,8 @@ export default function LaudoPgro() {
               })}
             </div>
           )}
-
-          {emissoesSelecionadas.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              <span>{emissoesSelecionadas.length} emissão(ões) selecionada(s).</span>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => setEmissoesSelecionadas([])}>
-                  Limpar seleção
-                </Button>
-                <Button variant="destructive" size="sm" className="gap-2" onClick={handleExcluirSelecionados}>
-                  <Trash2 className="h-4 w-4" /> Excluir selecionadas
-                </Button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>
   );
-}
+} 

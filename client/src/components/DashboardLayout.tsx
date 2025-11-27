@@ -44,9 +44,9 @@ const menuItems = [
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
-const DEFAULT_WIDTH = 280;
-const MIN_WIDTH = 200;
-const MAX_WIDTH = 480;
+const DEFAULT_WIDTH = 220;
+const MIN_WIDTH = 160;
+const MAX_WIDTH = 380;
 
 export default function DashboardLayout({
   children,
@@ -180,39 +180,39 @@ function DashboardLayoutContent({
           className="border-r-0"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
-            <div className="flex items-center gap-3 pl-2 group-data-[collapsible=icon]:px-0 transition-all w-full">
+          <SidebarHeader className="h-12 justify-center">
+            <div className="flex items-center gap-2 pl-1.5 group-data-[collapsible=icon]:px-0 transition-all w-full">
               {isCollapsed ? (
-                <div className="relative h-8 w-8 shrink-0 group">
+                <div className="relative h-6 w-6 shrink-0 group">
                   <img
                     src={APP_LOGO}
-                    className="h-8 w-8 rounded-md object-cover ring-1 ring-border"
+                    className="h-6 w-6 rounded-md object-cover ring-1 ring-border"
                     alt="Logo"
                   />
                   <button
                     onClick={toggleSidebar}
                     className="absolute inset-0 flex items-center justify-center bg-accent rounded-md ring-1 ring-border opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <PanelLeft className="h-4 w-4 text-foreground" />
+                    <PanelLeft className="h-3 w-3 text-foreground" />
                   </button>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
                     <img
                       src={APP_LOGO}
-                      className="h-8 w-8 rounded-md object-cover ring-1 ring-border shrink-0"
+                      className="h-6 w-6 rounded-md object-cover ring-1 ring-border shrink-0"
                       alt="Logo"
                     />
-                    <span className="font-semibold tracking-tight truncate">
+                    <span className="text-sm font-semibold tracking-tight truncate">
                       {APP_TITLE}
                     </span>
                   </div>
                   <button
                     onClick={toggleSidebar}
-                    className="ml-auto h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                    className="ml-auto h-6 w-6 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                   >
-                    <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                    <PanelLeft className="h-3 w-3 text-muted-foreground" />
                   </button>
                 </>
               )}
@@ -220,7 +220,7 @@ function DashboardLayoutContent({
           </SidebarHeader>
 
           <SidebarContent className="gap-0">
-            <SidebarMenu className="px-2 py-1">
+            <SidebarMenu className="px-1.5 py-0.5">
               {menuItems.map(item => {
                 const isActive = location === item.path;
                 return (
@@ -229,12 +229,12 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className={`h-8 transition-all font-normal text-sm`}
                     >
                       <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                        className={`h-3.5 w-3.5 ${isActive ? "text-primary" : ""}`}
                       />
-                      <span>{item.label}</span>
+                      <span className="text-xs">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -243,7 +243,7 @@ function DashboardLayoutContent({
           </SidebarContent>
           
           {/* Separador e Botão de Sair - Fora do SidebarContent para ficar fixo no final */}
-          <div className="border-t px-2 py-1">
+          <div className="border-t px-1.5 py-0.5">
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
@@ -277,29 +277,29 @@ function DashboardLayoutContent({
                     }
                   }}
                   tooltip="Sair do Sistema"
-                  className="h-10 transition-all font-normal text-destructive hover:text-destructive hover:bg-destructive/10 group-data-[collapsible=icon]:text-destructive"
+                  className="h-8 transition-all font-normal text-sm text-destructive hover:text-destructive hover:bg-destructive/10 group-data-[collapsible=icon]:text-destructive"
                 >
-                  <LogOut className="h-4 w-4" />
-                  <span>Sair do Sistema</span>
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span className="text-xs">Sair do Sistema</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </div>
 
-          <SidebarFooter className="p-3">
+          <SidebarFooter className="p-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0">
-                    <AvatarFallback className="text-xs font-medium">
+                <button className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <Avatar className="h-7 w-7 border shrink-0">
+                    <AvatarFallback className="text-[10px] font-medium">
                       {user?.name?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none">
+                    <p className="text-xs font-medium truncate leading-none">
                       {user?.name || "-"}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate mt-1.5">
+                    <p className="text-[10px] text-muted-foreground truncate mt-1">
                       {user?.email || "-"}
                     </p>
                   </div>
@@ -310,8 +310,8 @@ function DashboardLayoutContent({
                   onClick={logout}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <LogOut className="mr-2 h-3.5 w-3.5" />
+                  <span className="text-sm">Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -342,7 +342,7 @@ function DashboardLayoutContent({
             </div>
           </div>
         )}
-        <main className="flex-1 p-4">{children}</main>
+        <main className="flex-1 p-4" style={{ transform: 'scale(0.80)', transformOrigin: 'top left', width: '125%' }}>{children}</main>
       </SidebarInset>
     </>
   );
