@@ -2411,12 +2411,16 @@ export default function LaudoPgro() {
       };
 
       // Função auxiliar para criar tabela de inventário de riscos para um cargo
-      const criarTabelaInventarioRiscos = async (cargo: any, pageNumber: number, totalPages: number, cargosCompletosMap: { [key: string]: any }) => {
+      const criarTabelaInventarioRiscos = async (cargo: any, pageNumber: number, totalPages: number, cargosCompletosMap: { [key: string]: any }, cargoIndex: number, totalCargos: number) => {
         const cargoNome = cargo.cargoNome || "-";
         const setorNome = cargo.setorNome || "-";
         // Buscar descrição do cargo completo
         const cargoCompleto = cargosCompletosMap[cargo.cargoId];
         const descricaoCargo = cargoCompleto?.descricao || cargo.descricao || cargo.descricaoCargo || "-";
+        
+        // Calcular número da planilha (começa em 01)
+        const numeroPlanilha = (cargoIndex + 1).toString().padStart(2, '0');
+        const textoPlanilha = `${numeroPlanilha} de ${totalCargos.toString().padStart(2, '0')}`;
 
         // Buscar riscos do cargo
         let riscosDoCargo: any[] = [];
@@ -2617,7 +2621,7 @@ export default function LaudoPgro() {
                             size: 18, // 9pt
                           }),
                           new TextRun({ 
-                            text: "-", 
+                            text: textoPlanilha, 
                             font: "Calibri Light", 
                             size: 18, // 9pt
                           }),
@@ -2865,6 +2869,638 @@ export default function LaudoPgro() {
               ),
             ],
           }),
+          // Espaçamento antes das tabelas de gradação
+          new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
+          // Tabela de Gradação Efeitos à Saúde e Gradação Qualitativa de Exposição (lado a lado)
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+            },
+            rows: [
+              // Linha de cabeçalho com 4 colunas
+              new TableRow({
+                children: [
+                  // Coluna 1: Categoria (Efeitos à Saúde)
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Categoria",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                            color: "FFFFFF", // Branco
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    shading: {
+                      fill: "808080", // Cinza escuro
+                      type: "clear",
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                  }),
+                  // Coluna 2: Gradação Efeitos à Saúde
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "*Gradação Efeitos à Saúde",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                            color: "000000", // Preto
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    shading: {
+                      fill: "D3D3D3", // Cinza claro
+                      type: "clear",
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                  }),
+                  // Coluna 3: Categoria (Exposição)
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Categoria",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                            color: "FFFFFF", // Branco
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    shading: {
+                      fill: "808080", // Cinza escuro
+                      type: "clear",
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                  }),
+                  // Coluna 4: Gradação Qualitativa de Exposição
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "*Gradação Qualitativa de Exposição",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                            color: "000000", // Preto
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    shading: {
+                      fill: "D3D3D3", // Cinza claro
+                      type: "clear",
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                  }),
+                ],
+              }),
+              // Linha 00 - Efeitos à Saúde e Exposição
+              new TableRow({
+                children: [
+                  // Categoria 00 - Efeitos
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "00",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 00 - Efeitos
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Efeitos reversíveis e pequenos",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Categoria 00 - Exposição
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "00",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 00 - Exposição
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Nenhum contato com o agente ou desprezível",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                ],
+              }),
+              // Linha 01 - Efeitos à Saúde e Exposição
+              new TableRow({
+                children: [
+                  // Categoria 01 - Efeitos
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "01",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 01 - Efeitos
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Efeitos reversíveis à saúde, preocupante.",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Categoria 01 - Exposição
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "01",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 01 - Exposição
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Contatos esporádicos com o agente",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                ],
+              }),
+              // Linha 02 - Efeitos à Saúde e Exposição
+              new TableRow({
+                children: [
+                  // Categoria 02 - Efeitos
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "02",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 02 - Efeitos
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Efeitos severos à saúde, preocupante.",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Categoria 02 - Exposição
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "02",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 02 - Exposição
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Contato frequente c/ o agente à baixa concentração",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                ],
+              }),
+              // Linha 03 - Efeitos à Saúde e Exposição
+              new TableRow({
+                children: [
+                  // Categoria 03 - Efeitos
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "03",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 03 - Efeitos
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Efeitos irreversíveis à saúde, preocupante.",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Categoria 03 - Exposição
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "03",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 03 - Exposição
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Contato frequente c/ o agente a altas concentrações",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                ],
+              }),
+              // Linha 04 - Efeitos à Saúde e Exposição
+              new TableRow({
+                children: [
+                  // Categoria 04 - Efeitos
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "04",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 04 - Efeitos
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Ameaça à vida, lesão incapacitante ocupacional.",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Categoria 04 - Exposição
+                  new TableCell({
+                    width: { size: 10, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "04",
+                            font: "Calibri Light",
+                            bold: true,
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                  // Descrição 04 - Exposição
+                  new TableCell({
+                    width: { size: 40, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Contato frequente à altíssima concentração",
+                            font: "Calibri Light",
+                            size: 18, // 9pt
+                          }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                      }),
+                    ],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    },
+                    verticalAlign: VerticalAlign.CENTER,
+                  }),
+                ],
+              }),
+            ],
+          }),
         ];
       };
 
@@ -2891,10 +3527,11 @@ export default function LaudoPgro() {
       const totalPages = 11 + (emissao.cargos?.length || 0);
 
       // Preparar páginas dinâmicas para cada cargo
+      const totalCargos = emissao.cargos?.length || 0;
       const paginasCargos = await Promise.all(
         (emissao.cargos || []).map(async (cargo: any, index: number) => {
           const pageNumber = 12 + index; // Começa na página 12
-          const tabelaContent = await criarTabelaInventarioRiscos(cargo, pageNumber, totalPages, cargosCompletos);
+          const tabelaContent = await criarTabelaInventarioRiscos(cargo, pageNumber, totalPages, cargosCompletos, index, totalCargos);
           return {
             properties: {
               page: {
@@ -2943,7 +3580,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(1, 12)],
+                children: [criarHeaderTable(1, totalPages)],
               }),
             },
             footers: {
@@ -2970,7 +3607,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(2, 12)],
+                children: [criarHeaderTable(2, totalPages)],
               }),
             },
             footers: {
@@ -3108,7 +3745,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(3, 12)],
+                children: [criarHeaderTable(3, totalPages)],
               }),
             },
             footers: {
@@ -3205,7 +3842,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(4, 12)],
+                children: [criarHeaderTable(4, totalPages)],
               }),
             },
             footers: {
@@ -3303,7 +3940,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(5, 12)],
+                children: [criarHeaderTable(5, totalPages)],
               }),
             },
             footers: {
@@ -3401,7 +4038,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(6, 12)],
+                children: [criarHeaderTable(6, totalPages)],
               }),
             },
             footers: {
@@ -3499,7 +4136,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(7, 12)],
+                children: [criarHeaderTable(7, totalPages)],
               }),
             },
             footers: {
@@ -3597,7 +4234,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(8, 12)],
+                children: [criarHeaderTable(8, totalPages)],
               }),
             },
             footers: {
@@ -3735,7 +4372,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(9, 12)],
+                children: [criarHeaderTable(9, totalPages)],
               }),
             },
             footers: {
@@ -5737,7 +6374,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(10, 12)],
+                children: [criarHeaderTable(10, totalPages)],
               }),
             },
             footers: {
@@ -5861,7 +6498,7 @@ export default function LaudoPgro() {
             },
             headers: {
               default: new Header({
-                children: [criarHeaderTable(11, 12)],
+                children: [criarHeaderTable(11, totalPages)],
               }),
             },
             footers: {
