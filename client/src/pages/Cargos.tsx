@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, Check, X, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, Check, X, Search, Copy } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -47,6 +47,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedCargo, setExpandedCargo] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedRiscosIds, setSelectedRiscosIds] = useState<number[]>([]);
   const [formData, setFormData] = useState<CargoFormData>({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
   const [treinamentoForm, setTreinamentoForm] = useState({
     cargoId: 0,
@@ -419,8 +420,10 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   });
 
   const deleteRiscoMutation = trpc.cargoRiscos.delete.useMutation({
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast.success("Risco ocupacional removido com sucesso!");
+      // Remover o risco da lista de selecionados se estiver lá
+      setSelectedRiscosIds((prev) => prev.filter(id => id !== variables.id));
       refetchRiscos();
     },
     onError: (error: any) => {
@@ -797,6 +800,119 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   const handleDeleteRisco = (id: number) => {
     if (confirm("Tem certeza que deseja remover este risco ocupacional?")) {
       deleteRiscoMutation.mutate({ id });
+    }
+  };
+
+  const handleToggleSelectRisco = (riscoId: number) => {
+    setSelectedRiscosIds((prev) => 
+      prev.includes(riscoId) 
+        ? prev.filter(id => id !== riscoId)
+        : [...prev, riscoId]
+    );
+  };
+
+  const handleSelectAllRiscos = () => {
+    if (selectedRiscosIds.length === riscosByCargo.length) {
+      setSelectedRiscosIds([]);
+    } else {
+      setSelectedRiscosIds(riscosByCargo.map((r: any) => r.id));
+    }
+  };
+
+  const handleDeleteRiscosEmMassa = async () => {
+    if (selectedRiscosIds.length === 0) {
+      toast.warning("Selecione pelo menos um risco para excluir");
+      return;
+    }
+
+    if (!confirm(`Tem certeza que deseja remover ${selectedRiscosIds.length} risco(s) ocupacional(is)?`)) {
+      return;
+    }
+
+    try {
+      // Excluir todos os riscos selecionados
+      const deletePromises = selectedRiscosIds.map(id => 
+        deleteRiscoMutation.mutateAsync({ id })
+      );
+      
+      await Promise.all(deletePromises);
+      toast.success(`${selectedRiscosIds.length} risco(s) removido(s) com sucesso!`);
+      setSelectedRiscosIds([]);
+      refetchRiscos();
+    } catch (error: any) {
+      console.error("Erro ao excluir riscos em massa:", error);
+      toast.error("Erro ao excluir alguns riscos. Tente novamente.");
+    }
+  };
+
+  const handleDuplicateRisco = async (risco: any) => {
+    try {
+      // Buscar ou criar risco ocupacional baseado no tipo de agente
+      const tipoRiscoMap: { [key: string]: "fisico" | "quimico" | "biologico" | "ergonomico" | "mecanico" } = {
+        "Físico": "fisico",
+        "Químico": "quimico",
+        "Biológico": "biologico",
+        "Ergonômico": "ergonomico",
+        "Agentes Mecânicos": "mecanico",
+      };
+
+      // Buscar risco ocupacional existente
+      let riscoOcupacionalId = risco.riscoOcupacionalId;
+      
+      // Se não tiver riscoOcupacionalId, buscar ou criar
+      if (!riscoOcupacionalId) {
+        const tipoAgente = risco.tipoAgente || risco.nomeRisco;
+        const riscoExistente = riscosOcupacionais.find((r: any) => r.nomeRisco === tipoAgente);
+        
+        if (riscoExistente) {
+          riscoOcupacionalId = riscoExistente.id;
+        } else if (tipoAgente) {
+          // Criar novo risco ocupacional se não existir
+          const novoRisco = await createRiscoOcupacionalMutation.mutateAsync({
+            nomeRisco: tipoAgente,
+            tipoRisco: tipoRiscoMap[tipoAgente] || "fisico",
+            status: "ativo" as const,
+          });
+          riscoOcupacionalId = novoRisco?.id;
+        }
+      }
+
+      if (!riscoOcupacionalId || riscoOcupacionalId <= 0) {
+        toast.error("Não foi possível identificar o risco ocupacional para duplicar");
+        return;
+      }
+
+      // Preparar dados do risco duplicado
+      const dataToSave = {
+        cargoId: risco.cargoId || currentCargoId,
+        riscoOcupacionalId: Number(riscoOcupacionalId),
+        tipoAgente: risco.tipoAgente?.trim() || null,
+        descricaoRiscos: risco.descricaoRiscos?.trim() || null,
+        fonteGeradora: risco.fonteGeradora?.trim() || null,
+        tipo: risco.tipo?.trim() || null,
+        meioPropagacao: risco.meioPropagacao?.trim() || null,
+        meioContato: risco.meioContato?.trim() || null,
+        possiveisDanosSaude: risco.possiveisDanosSaude?.trim() || null,
+        tipoAnalise: risco.tipoAnalise?.trim() || null,
+        valorAnaliseQuantitativa: risco.valorAnaliseQuantitativa?.trim() || null,
+        gradacaoEfeitos: risco.gradacaoEfeitos?.trim() || null,
+        gradacaoExposicao: risco.gradacaoExposicao?.trim() || null,
+      };
+
+      // Remover campos null/undefined
+      Object.keys(dataToSave).forEach(key => {
+        if (dataToSave[key as keyof typeof dataToSave] === null || dataToSave[key as keyof typeof dataToSave] === undefined) {
+          delete dataToSave[key as keyof typeof dataToSave];
+        }
+      });
+
+      // Criar o risco duplicado
+      await createRiscoMutation.mutateAsync(dataToSave);
+      toast.success("Risco duplicado com sucesso!");
+      refetchRiscos();
+    } catch (error: any) {
+      console.error("Erro ao duplicar risco:", error);
+      toast.error(error?.message || "Erro ao duplicar risco. Tente novamente.");
     }
   };
 
@@ -1883,11 +1999,34 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                         </div>
 
                         {Array.isArray(riscosByCargo) && riscosByCargo.length > 0 ? (
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="min-w-[120px]">AGENTES</TableHead>
+                          <div className="space-y-4">
+                            {selectedRiscosIds.length > 0 && (
+                              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                                <span className="text-sm font-medium">
+                                  {selectedRiscosIds.length} risco(s) selecionado(s)
+                                </span>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={handleDeleteRiscosEmMassa}
+                                  disabled={deleteRiscoMutation.isPending}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir selecionados
+                                </Button>
+                              </div>
+                            )}
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="w-[50px]">
+                                      <Checkbox
+                                        checked={riscosByCargo.length > 0 && selectedRiscosIds.length === riscosByCargo.length}
+                                        onCheckedChange={handleSelectAllRiscos}
+                                      />
+                                    </TableHead>
+                                    <TableHead className="min-w-[120px]">AGENTES</TableHead>
                                   <TableHead className="min-w-[150px]">FONTE GERADORA</TableHead>
                                   <TableHead className="min-w-[100px]">TIPO</TableHead>
                                   <TableHead className="min-w-[150px]">MEIO DE PROPAGAÇÃO</TableHead>
@@ -1905,6 +2044,13 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                   <TableRow key={r.id}>
                                     {editingRiscoId === r.id ? (
                                       <>
+                                        <TableCell>
+                                          <Checkbox
+                                            checked={selectedRiscosIds.includes(r.id)}
+                                            onCheckedChange={() => handleToggleSelectRisco(r.id)}
+                                            disabled
+                                          />
+                                        </TableCell>
                                         <TableCell>
                                           <select
                                             value={editRiscoForm.tipoAgente}
@@ -2028,6 +2174,12 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                       </>
                                     ) : (
                                       <>
+                                        <TableCell>
+                                          <Checkbox
+                                            checked={selectedRiscosIds.includes(r.id)}
+                                            onCheckedChange={() => handleToggleSelectRisco(r.id)}
+                                          />
+                                        </TableCell>
                                         <TableCell className="font-medium">{r.tipoAgente || r.nomeRisco || "-"}</TableCell>
                                         <TableCell className="max-w-[150px]">
                                           <div className="truncate" title={r.fonteGeradora}>
@@ -2064,13 +2216,24 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                               variant="ghost"
                                               size="sm"
                                               onClick={() => handleEditRisco(r)}
+                                              title="Editar risco"
                                             >
                                               <Pencil className="h-4 w-4" />
                                             </Button>
                                             <Button
                                               variant="ghost"
                                               size="sm"
+                                              onClick={() => handleDuplicateRisco(r)}
+                                              title="Duplicar risco"
+                                              disabled={createRiscoMutation.isPending}
+                                            >
+                                              <Copy className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
                                               onClick={() => handleDeleteRisco(r.id)}
+                                              title="Excluir risco"
                                             >
                                               <Trash2 className="h-4 w-4" />
                                             </Button>
@@ -2082,6 +2245,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                 ))}
                               </TableBody>
                             </Table>
+                          </div>
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum risco ocupacional cadastrado</p>
