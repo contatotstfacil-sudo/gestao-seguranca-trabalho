@@ -1,4 +1,4 @@
-Ponto de Restauracao criado em: 28/11/2025 17:00:00
+Ponto de Restauracao criado em: 28/11/2025 17:29:59
 
 Descricao: Otimizacoes de performance na pagina de colaboradores e dashboard
 - Debounce no campo de busca (300ms) para reduzir requisicoes
