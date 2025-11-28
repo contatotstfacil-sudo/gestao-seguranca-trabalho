@@ -9,3 +9,4 @@ ALTER TABLE `cargoRiscos` ADD COLUMN `valorAnaliseQuantitativa` varchar(200);
 
 
 
+

@@ -7,13 +7,16 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import Empresas from "./pages/Empresas";
+import DashboardEmpresas from "./pages/DashboardEmpresas";
+import EmpresasMenu from "./pages/EmpresasMenu";
 import Colaboradores from "./pages/Colaboradores";
+import ColaboradoresMenu from "./pages/ColaboradoresMenu";
+import DashboardColaboradores from "./pages/DashboardColaboradores";
 import Obras from "./pages/Obras";
 import Cargos from "./pages/Cargos";
 import TiposTreinamentos from "./pages/TiposTreinamentos";
 import TreinamentosPainel from "./pages/TreinamentosPainel";
 import Epis from "./pages/Epis";
-import DashboardColaboradores from "./pages/DashboardColaboradores";
 import EmissaoCertificados from "./pages/EmissaoCertificados";
 import Certificados from "./pages/Certificados";
 import OrdemServico from "./pages/OrdemServico";
@@ -37,11 +40,23 @@ function Router() {
       <Route path="/">
         <Home />
       </Route>
+      <Route path="/empresas/dashboard">
+        <EmpresasMenu />
+      </Route>
+      <Route path="/empresas/cadastrar">
+        <EmpresasMenu />
+      </Route>
       <Route path="/empresas">
-        <Empresas />
+        <EmpresasMenu />
+      </Route>
+      <Route path="/colaboradores/dashboard">
+        <DashboardColaboradores />
+      </Route>
+      <Route path="/colaboradores/cadastrar">
+        <ColaboradoresMenu />
       </Route>
       <Route path="/colaboradores">
-        <Colaboradores />
+        <ColaboradoresMenu />
       </Route>
       <Route path="/obras">
         <Obras />
@@ -148,9 +163,6 @@ function Router() {
       </Route>
       <Route path="/laudos-ocupacionais">
         <LaudosOcupacionais />
-      </Route>
-      <Route path="/dashboard-colaboradores">
-        <DashboardColaboradores />
       </Route>
       <Route path="/configuracoes/modelos-certificados">
         <Configuracoes />

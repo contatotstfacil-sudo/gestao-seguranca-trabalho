@@ -40,7 +40,7 @@ const cargosEFuncoesSections: CargosEFuncoesSection[] = [
   },
 ];
 
-export default function CargosEFuncoes() {
+export default function CargosEFuncoes({ showLayout = true }: { showLayout?: boolean }) {
   const [location, setLocation] = useLocation();
   
   // Redirecionar rota antiga /setores para /cargos-e-funcoes/setores
@@ -51,17 +51,17 @@ export default function CargosEFuncoes() {
   }, [location, setLocation]);
   
   // Determinar qual seção está ativa baseado na rota
+  // Ajustar para funcionar tanto com /cargos-e-funcoes quanto com /empresas/cargos-e-setores
   const activeSection = cargosEFuncoesSections.find(section => {
-    const isExactMatch = location === section.path;
-    const isStartsWith = location.startsWith(section.path + "/");
+    const isExactMatch = location === section.path || location === `/empresas/cargos-e-setores${section.path.replace('/cargos-e-funcoes', '')}`;
+    const isStartsWith = location.startsWith(section.path + "/") || location.startsWith(`/empresas/cargos-e-setores${section.path.replace('/cargos-e-funcoes', '')}/`);
     return isExactMatch || isStartsWith;
   }) || null;
   
   // Se não há seção ativa, mostrar o menu principal
-  const showMenu = !activeSection || location === "/cargos-e-funcoes";
+  const showMenu = !activeSection || location === "/cargos-e-funcoes" || location === "/empresas/cargos-e-setores";
 
-  return (
-    <DashboardLayout>
+  const content = (
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Cargos e Setores</h1>
@@ -127,11 +127,16 @@ export default function CargosEFuncoes() {
                     
                     {cargosEFuncoesSections.map((section) => {
                       const Icon = section.icon;
-                      const isActive = location === section.path;
+                      // Ajustar path baseado na localização atual
+                      const currentPath = location.startsWith("/empresas/cargos-e-setores") 
+                        ? section.path.replace("/cargos-e-funcoes", "/empresas/cargos-e-setores")
+                        : section.path;
+                      const isActive = location === section.path || location === currentPath || 
+                                      location.startsWith(section.path + "/") || location.startsWith(currentPath + "/");
                       return (
                         <button
                           key={section.id}
-                          onClick={() => setLocation(section.path)}
+                          onClick={() => setLocation(currentPath)}
                           className={cn(
                             "w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-left transition-colors",
                             isActive
@@ -166,6 +171,15 @@ export default function CargosEFuncoes() {
           </div>
         )}
       </div>
+  );
+
+  if (!showLayout) {
+    return content;
+  }
+
+  return (
+    <DashboardLayout>
+      {content}
     </DashboardLayout>
   );
 }

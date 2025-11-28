@@ -29,12 +29,11 @@ import { Button } from "./ui/button";
 
 const menuItems = [
   { icon: HomeIcon, label: "Home", path: "/" },
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Building2, label: "Empresas", path: "/empresas" },
-  { icon: Users, label: "Colaboradores", path: "/colaboradores" },
-  { icon: Users, label: "Dashboard Colaboradores", path: "/dashboard-colaboradores" },
-  { icon: HardHat, label: "Obras", path: "/obras" },
+  { icon: Building2, label: "Cadastrar Empresas", path: "/empresas" },
   { icon: Briefcase, label: "Cargos e Setores", path: "/cargos-e-funcoes" },
+  { icon: Users, label: "Cadastrar Colaboradores", path: "/colaboradores" },
+  { icon: BarChart3, label: "Dashboard de Colaboradores", path: "/colaboradores/dashboard" },
+  { icon: HardHat, label: "Obras", path: "/obras" },
   { icon: ClipboardList, label: "Ordem de Serviço - SST", path: "/ordem-servico" },
   { icon: ShieldCheck, label: "EPIs", path: "/epis" },
   { icon: GraduationCap, label: "Treinamentos", path: "/treinamentos" },

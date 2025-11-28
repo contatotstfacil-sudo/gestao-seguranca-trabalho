@@ -1,4 +1,3 @@
-import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -10,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import { Plus, Pencil, Trash2, Search, Download } from "lucide-react";
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useCallback, useEffect } from "react";
+import { memo } from "react";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -25,6 +25,76 @@ const TIPOS_LOGRADOURO = [
   "Rua", "Avenida", "Travessa", "Praça", "Alameda", "Estrada",
   "Rodovia", "Largo", "Passagem", "Viela", "Beco", "Caminho"
 ];
+
+// Componente memoizado para linha da tabela - evita re-renderizações desnecessárias
+const ColaboradorRow = memo(({ 
+  colaborador, 
+  isSelected, 
+  empresaNome, 
+  dataFormatada, 
+  onToggleSelection, 
+  onEdit, 
+  onDelete 
+}: {
+  colaborador: any;
+  isSelected: boolean;
+  empresaNome: string;
+  dataFormatada: string;
+  onToggleSelection: (id: number) => void;
+  onEdit: (colaborador: any) => void;
+  onDelete: (id: number) => void;
+}) => {
+  const isAtivo = colaborador.status === "ativo";
+  
+  return (
+    <TableRow>
+      <TableCell>
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={() => onToggleSelection(colaborador.id)}
+        />
+      </TableCell>
+      <TableCell className="font-medium">{colaborador.nomeCompleto}</TableCell>
+      <TableCell>{colaborador.nomeCargo || "-"}</TableCell>
+      <TableCell>{colaborador.nomeSetor || "-"}</TableCell>
+      <TableCell>{empresaNome}</TableCell>
+      <TableCell>{dataFormatada}</TableCell>
+      <TableCell>
+        <span
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            isAtivo
+              ? "bg-green-100 text-green-800"
+              : "bg-gray-100 text-gray-800"
+          }`}
+        >
+          {isAtivo ? "Ativo" : "Inativo"}
+        </span>
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(colaborador)}
+            title="Editar colaborador"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onDelete(colaborador.id)}
+            title="Excluir colaborador"
+          >
+            <Trash2 className="h-4 w-4 text-red-600" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+ColaboradorRow.displayName = "ColaboradorRow";
 
 export default function Colaboradores() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -69,16 +139,49 @@ export default function Colaboradores() {
     empresaId: "",
   });
 
+  // Debounce para searchTerm - evita requisições a cada tecla
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(filters.searchTerm);
+  const [isDebouncing, setIsDebouncing] = useState(false);
+  
+  useEffect(() => {
+    if (filters.searchTerm !== debouncedSearchTerm) {
+      setIsDebouncing(true);
+    }
+    
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(filters.searchTerm);
+      setIsDebouncing(false);
+    }, 300); // 300ms de delay
+    
+    return () => clearTimeout(timer);
+  }, [filters.searchTerm, debouncedSearchTerm]);
+
   const utils = trpc.useUtils();
+  
+  // Otimizar query com cache e staleTime
   const { data: colaboradores, isLoading } = trpc.colaboradores.list.useQuery({
-    searchTerm: filters.searchTerm || undefined,
+    searchTerm: debouncedSearchTerm || undefined,
     dataAdmissaoInicio: filters.dataAdmissaoInicio || undefined,
     dataAdmissaoFim: filters.dataAdmissaoFim || undefined,
     empresaId: filters.empresaId ? parseInt(filters.empresaId) : undefined,
+  }, {
+    staleTime: 30000, // 30 segundos - dados considerados frescos
+    gcTime: 5 * 60 * 1000, // 5 minutos de cache
+    refetchOnWindowFocus: false, // Não refazer query ao focar na janela
   });
-  const { data: empresas } = trpc.empresas.list.useQuery();
-  const { data: todosCargos } = trpc.cargos.list.useQuery();
-  const { data: todosSetores } = trpc.setores.list.useQuery();
+  // Otimizar queries com cache
+  const { data: empresas } = trpc.empresas.list.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000, // 5 minutos
+    gcTime: 10 * 60 * 1000, // 10 minutos
+  });
+  const { data: todosCargos } = trpc.cargos.list.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+  const { data: todosSetores } = trpc.setores.list.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
   
   // Filtrar cargos e setores pela empresa selecionada
   const cargos = useMemo(() => {
@@ -259,7 +362,8 @@ export default function Colaboradores() {
     }
   };
 
-  const handleEdit = (colaborador: any) => {
+  // Memoizar funções de manipulação
+  const handleEdit = useCallback((colaborador: any) => {
     setEditingId(colaborador.id);
     setFotoPreview(colaborador.fotoUrl || null);
     setFormData({
@@ -289,36 +393,38 @@ export default function Colaboradores() {
       nomePessoaRecado: colaborador.nomePessoaRecado || "",
       grauParentesco: colaborador.grauParentesco || "",
       observacoes: colaborador.observacoes || "",
-      status: colaborador.status,
+      status: colaborador.status || "ativo",
     });
-    // Carregar treinamentos do colaborador se existirem
-    setSelectedTrainings(new Set());
+    setSelectedTrainings(new Set(colaborador.treinamentos?.map((t: any) => t.id) || []));
     setDialogOpen(true);
-  };
+  }, []);
 
-  const handleDelete = (id: number): void => {
+  const handleDelete = useCallback((id: number): void => {
     if (confirm("Tem certeza que deseja excluir este colaborador?")) {
       deleteMutation.mutate({ id });
     }
-  };
+  }, [deleteMutation]);
 
-  const toggleSelection = (id: number) => {
-    const newSelected = new Set(selectedIds);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedIds(newSelected);
-  };
+  const toggleSelection = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const newSelected = new Set(prev);
+      if (newSelected.has(id)) {
+        newSelected.delete(id);
+      } else {
+        newSelected.add(id);
+      }
+      return newSelected;
+    });
+  }, []);
 
-  const toggleSelectAll = () => {
-    if (selectedIds.size === colaboradores?.length) {
+  const toggleSelectAll = useCallback(() => {
+    if (!colaboradores) return;
+    if (selectedIds.size === colaboradores.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(colaboradores?.map((c: any) => c.id) || []));
+      setSelectedIds(new Set(colaboradores.map((c: any) => c.id)));
     }
-  };
+  }, [colaboradores, selectedIds.size]);
 
   const handleDeleteMany = () => {
     if (selectedIds.size === 0) {
@@ -455,42 +561,52 @@ export default function Colaboradores() {
     }
   };
 
-  const formatDate = (date: any) => {
+  // Memoizar função de formatação de data
+  const formatDate = useCallback((date: any) => {
     if (!date) return "-";
     return new Date(date).toLocaleDateString("pt-BR");
-  };
+  }, []);
 
-  const getEmpresaName = (empresaId: number) => {
-    const empresa = empresas?.find((e: any) => e.id === empresaId);
-    return empresa?.razaoSocial || "-";
-  };
+  // Memoizar mapa de empresas para busca O(1) em vez de O(n)
+  const empresasMap = useMemo(() => {
+    if (!empresas) return new Map();
+    const map = new Map();
+    empresas.forEach((empresa: any) => {
+      map.set(empresa.id, empresa.razaoSocial);
+    });
+    return map;
+  }, [empresas]);
+
+  // Função otimizada para buscar nome da empresa
+  const getEmpresaName = useCallback((empresaId: number) => {
+    return empresasMap.get(empresaId) || "-";
+  }, [empresasMap]);
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Colaboradores</h1>
-            <p className="text-gray-600 mt-1">Gerencie os colaboradores com ficha completa</p>
-          </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => resetForm()}>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Colaborador
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingId ? "Editar Colaborador" : "Novo Colaborador"}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Seção 1: Foto */}
-                <div className="border-b pb-4">
-                  <h3 className="text-lg font-semibold mb-4">Foto</h3>
-                  <div className="flex items-center gap-4">
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Cadastrar Colaboradores</h2>
+          <p className="text-gray-600 mt-1">Gerencie os colaboradores com ficha completa</p>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => resetForm()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Colaborador
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {editingId ? "Editar Colaborador" : "Novo Colaborador"}
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Seção 1: Foto */}
+              <div className="border-b pb-4">
+                <h3 className="text-lg font-semibold mb-4">Foto</h3>
+                <div className="flex items-center gap-4">
                     {fotoPreview && (
                       <img src={fotoPreview} alt="Preview" className="w-24 h-24 rounded-lg object-cover" />
                     )}
@@ -505,13 +621,13 @@ export default function Colaboradores() {
                       />
                       <p className="text-sm text-gray-500 mt-1">Máximo 5MB. Formatos: JPG, PNG</p>
                     </div>
-                  </div>
                 </div>
+              </div>
 
-                {/* Seção 2: Informações Pessoais */}
-                <div className="border-b pb-4">
-                  <h3 className="text-lg font-semibold mb-4">Informações Pessoais</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Seção 2: Informações Pessoais */}
+              <div className="border-b pb-4">
+                <h3 className="text-lg font-semibold mb-4">Informações Pessoais</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
                       <Label htmlFor="nomeCompleto">Nome Completo *</Label>
                       <Input
@@ -581,13 +697,13 @@ export default function Colaboradores() {
                         placeholder="Ex: 123.45678.90-1"
                       />
                     </div>
-                  </div>
                 </div>
+              </div>
 
-                {/* Seção 3: Informações Profissionais */}
-                <div className="border-b pb-4">
-                  <h3 className="text-lg font-semibold mb-4">Informações Profissionais</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Seção 3: Informações Profissionais */}
+              <div className="border-b pb-4">
+                <h3 className="text-lg font-semibold mb-4">Informações Profissionais</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="empresaId">Empresa *</Label>
                       <Select
@@ -609,8 +725,8 @@ export default function Colaboradores() {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                     <div>
                       <Label htmlFor="cargoId">Cargo</Label>
                       <Select
@@ -678,13 +794,13 @@ export default function Colaboradores() {
                         onChange={(e) => setFormData({ ...formData, validadeAso: e.target.value })}
                       />
                     </div>
-                  </div>
                 </div>
+              </div>
 
-                {/* Seção 4: Endereço */}
-                <div className="border-b pb-4">
-                  <h3 className="text-lg font-semibold mb-4">Endereço</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Seção 4: Endereço */}
+              <div className="border-b pb-4">
+                <h3 className="text-lg font-semibold mb-4">Endereço</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="tipoLogradouro">Tipo de Logradouro</Label>
                       <Select
@@ -759,13 +875,13 @@ export default function Colaboradores() {
                         placeholder="Ex: 12345-678"
                       />
                     </div>
-                  </div>
                 </div>
+              </div>
 
-                {/* Seção 5: Contatos */}
-                <div className="border-b pb-4">
-                  <h3 className="text-lg font-semibold mb-4">Contatos</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Seção 5: Contatos */}
+              <div className="border-b pb-4">
+                <h3 className="text-lg font-semibold mb-4">Contatos</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="telefonePrincipal">Telefone Principal</Label>
                       <Input
@@ -784,13 +900,13 @@ export default function Colaboradores() {
                         placeholder="(xxxx) x xxxx-xxxx"
                       />
                     </div>
-                  </div>
                 </div>
+              </div>
 
-                {/* Seção 6: Contato de Emergência */}
-                <div className="border-b pb-4">
-                  <h3 className="text-lg font-semibold mb-4">Contato de Emergência</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Seção 6: Contato de Emergência */}
+              <div className="border-b pb-4">
+                <h3 className="text-lg font-semibold mb-4">Contato de Emergência</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="nomePessoaRecado">Nome da Pessoa de Recado</Label>
                       <Input
@@ -822,15 +938,15 @@ export default function Colaboradores() {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
                 </div>
+              </div>
 
-                {/* Seção 7: Treinamentos Obrigatórios */}
-                {treinamentosCargo && treinamentosCargo.length > 0 && (
-                  <div className="border-b pb-4">
-                    <h3 className="text-lg font-semibold mb-4">Treinamentos Obrigatórios</h3>
-                    <p className="text-sm text-gray-600 mb-4">Selecione os treinamentos que este colaborador já realizou:</p>
-                    <div className="space-y-3">
+              {/* Seção 7: Treinamentos Obrigatórios */}
+              {treinamentosCargo && treinamentosCargo.length > 0 && (
+                <div className="border-b pb-4">
+                  <h3 className="text-lg font-semibold mb-4">Treinamentos Obrigatórios</h3>
+                  <p className="text-sm text-gray-600 mb-4">Selecione os treinamentos que este colaborador já realizou:</p>
+                  <div className="space-y-3">
                       {treinamentosCargo.map((treinamento: any) => (
                         <div key={treinamento.id} className="flex items-center space-x-3">
                           <Checkbox
@@ -854,14 +970,14 @@ export default function Colaboradores() {
                           </Label>
                         </div>
                       ))}
-                    </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Seção 8: Observações */}
-                <div className="border-b pb-4">
-                  <h3 className="text-lg font-semibold mb-4">Observações</h3>
-                  <div>
+              {/* Seção 8: Observações */}
+              <div className="border-b pb-4">
+                <h3 className="text-lg font-semibold mb-4">Observações</h3>
+                <div>
                     <Label htmlFor="observacoes">Observações Adicionais</Label>
                     <Textarea
                       id="observacoes"
@@ -870,13 +986,13 @@ export default function Colaboradores() {
                       placeholder="Adicione qualquer observação relevante"
                       rows={3}
                     />
-                  </div>
                 </div>
+              </div>
 
-                {/* Seção 9: Status */}
+              {/* Seção 9: Status */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Status</h3>
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Status</h3>
-                  <div>
                     <Label htmlFor="status">Status</Label>
                     <Select
                       value={formData.status}
@@ -890,100 +1006,105 @@ export default function Colaboradores() {
                         <SelectItem value="inativo">Inativo</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
                 </div>
+              </div>
 
-                <div className="flex gap-2 pt-4 border-t">
-                  <Button type="submit" className="flex-1">
-                    {editingId ? "Atualizar" : "Cadastrar"}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={resetForm}>
-                    Cancelar
-                  </Button>
-                </div>
-              </form>
+              <div className="flex gap-2 pt-4 border-t">
+                <Button type="submit" className="flex-1">
+                  {editingId ? "Atualizar" : "Cadastrar"}
+                </Button>
+                <Button type="button" variant="outline" onClick={resetForm}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
             </DialogContent>
           </Dialog>
-        </div>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Filtros de Pesquisa</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="search">Buscar por Nome</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="search"
-                    placeholder="Digite o nome..."
-                    value={filters.searchTerm}
-                    onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="dataAdmissaoInicio">Data Admissão - De</Label>
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtros de Pesquisa</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="search">Buscar por Nome</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
-                  id="dataAdmissaoInicio"
-                  type="date"
-                  value={filters.dataAdmissaoInicio}
-                  onChange={(e) => setFilters({ ...filters, dataAdmissaoInicio: e.target.value })}
+                  id="search"
+                  placeholder="Digite o nome..."
+                  value={filters.searchTerm}
+                  onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
+                  className="pl-10"
                 />
-              </div>
-              <div>
-                <Label htmlFor="dataAdmissaoFim">Data Admissão - Até</Label>
-                <Input
-                  id="dataAdmissaoFim"
-                  type="date"
-                  value={filters.dataAdmissaoFim}
-                  onChange={(e) => setFilters({ ...filters, dataAdmissaoFim: e.target.value })}
-                />
+                {isDebouncing && (
+                  <div className="absolute right-3 top-3">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div>
-                <Label htmlFor="empresaId">Empresa</Label>
-                <Select
-                  value={filters.empresaId || "all"}
-                  onValueChange={(value) => setFilters({ ...filters, empresaId: value === "all" ? "" : value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas as empresas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as empresas</SelectItem>
-                    {empresas?.map((empresa: any) => (
-                      <SelectItem key={empresa.id} value={empresa.id.toString()}>
-                        {empresa.razaoSocial}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label htmlFor="dataAdmissaoInicio">Data Admissão - De</Label>
+              <Input
+                id="dataAdmissaoInicio"
+                type="date"
+                value={filters.dataAdmissaoInicio}
+                onChange={(e) => setFilters({ ...filters, dataAdmissaoInicio: e.target.value })}
+              />
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <Label htmlFor="dataAdmissaoFim">Data Admissão - Até</Label>
+              <Input
+                id="dataAdmissaoFim"
+                type="date"
+                value={filters.dataAdmissaoFim}
+                onChange={(e) => setFilters({ ...filters, dataAdmissaoFim: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div>
+              <Label htmlFor="empresaId">Empresa</Label>
+              <Select
+                value={filters.empresaId || "all"}
+                onValueChange={(value) => setFilters({ ...filters, empresaId: value === "all" ? "" : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  {empresas?.map((empresa: any) => (
+                    <SelectItem key={empresa.id} value={empresa.id.toString()}>
+                      {empresa.razaoSocial}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Lista de Colaboradores</CardTitle>
-              <div className="flex gap-2">
-                {selectedIds.size > 0 && (
-                  <>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleDeleteMany}
-                      disabled={deleteManyMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Excluir {selectedIds.size} selecionado(s)
-                    </Button>
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle>Lista de Colaboradores</CardTitle>
+            <div className="flex gap-2">
+              {selectedIds.size > 0 && (
+                <>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteMany}
+                    disabled={deleteManyMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir {selectedIds.size} selecionado(s)
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -992,25 +1113,25 @@ export default function Colaboradores() {
                     <Download className="h-4 w-4 mr-2" />
                     Exportar Selecionados ({selectedIds.size})
                   </Button>
-                  </>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => exportarColaboradores(true)}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar Todos
-                </Button>
-              </div>
+                </>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportarColaboradores(true)}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Exportar Todos
+              </Button>
             </div>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="text-center py-8">Carregando...</div>
-            ) : colaboradores && colaboradores.length > 0 ? (
-              <div className="overflow-x-auto">
-                <Table>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="text-center py-8">Carregando...</div>
+          ) : colaboradores && colaboradores.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-12">
@@ -1030,62 +1151,27 @@ export default function Colaboradores() {
                   </TableHeader>
                   <TableBody>
                     {colaboradores.map((colaborador: any) => (
-                      <TableRow key={colaborador.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedIds.has(colaborador.id)}
-                            onCheckedChange={() => toggleSelection(colaborador.id)}
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium">{colaborador.nomeCompleto}</TableCell>
-                        <TableCell>{colaborador.nomeCargo || "-"}</TableCell>
-                        <TableCell>{colaborador.nomeSetor || "-"}</TableCell>
-                        <TableCell>{getEmpresaName(colaborador.empresaId)}</TableCell>
-                        <TableCell>{formatDate(colaborador.dataAdmissao)}</TableCell>
-                        <TableCell>
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              colaborador.status === "ativo"
-                                ? "bg-green-100 text-green-800"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {colaborador.status === "ativo" ? "Ativo" : "Inativo"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(colaborador)}
-                              title="Editar colaborador"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(colaborador.id)}
-                              title="Excluir colaborador"
-                            >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <ColaboradorRow
+                        key={colaborador.id}
+                        colaborador={colaborador}
+                        isSelected={selectedIds.has(colaborador.id)}
+                        empresaNome={getEmpresaName(colaborador.empresaId)}
+                        dataFormatada={formatDate(colaborador.dataAdmissao)}
+                        onToggleSelection={toggleSelection}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                      />
                     ))}
                   </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                Nenhum colaborador cadastrado ainda
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </DashboardLayout>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              Nenhum colaborador cadastrado ainda
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

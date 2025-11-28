@@ -480,7 +480,7 @@ export default function LaudoPgro() {
       if (!open && !emissaoEditandoId) {
         // Só resetar se não estiver editando
         setTimeout(() => {
-          resetDialogState();
+        resetDialogState();
         }, 100);
       }
     },
@@ -7730,11 +7730,11 @@ export default function LaudoPgro() {
                                 <CommandGroup>
                                   {empresasFiltradas.length > 0 ? (
                                     empresasFiltradas.map((empresa) => (
-                                      <CommandItem
-                                        key={empresa.id}
+                                    <CommandItem
+                                      key={empresa.id}
                                         value={`${empresa.razaoSocial} ${empresa.nomeFantasia || ""} ${empresa.cnpj || ""}`}
-                                        onSelect={() => handleSelectEmpresa(empresa)}
-                                      >
+                                      onSelect={() => handleSelectEmpresa(empresa)}
+                                    >
                                       <div className="flex items-start gap-3">
                                         <div className="mt-0.5">
                                           <Building2 className="h-4 w-4 text-primary" />
@@ -8129,9 +8129,9 @@ export default function LaudoPgro() {
 
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                       Cronograma de Ações
-                    </h3>
+                  </h3>
                     <Button
                       type="button"
                       variant="outline"
@@ -8179,7 +8179,7 @@ export default function LaudoPgro() {
                               
                               <div className="space-y-2">
                                 <Label htmlFor={`descricao-${acao.id}`}>Descrição da Ação</Label>
-                                <Textarea
+                  <Textarea
                                   id={`descricao-${acao.id}`}
                                   placeholder="Descreva a ação a ser realizada..."
                                   value={acao.descricao}
@@ -8444,9 +8444,9 @@ export default function LaudoPgro() {
                             variant={selecionado ? "default" : "secondary"}
                             className="text-xs font-semibold px-3 py-1"
                           >
-                            Vigência: {format(new Date(emissao.vigenciaInicio), "dd/MM/yyyy")} – {format(new Date(emissao.vigenciaFim), "dd/MM/yyyy")}
-                          </Badge>
-                        </div>
+                              Vigência: {format(new Date(emissao.vigenciaInicio), "dd/MM/yyyy")} – {format(new Date(emissao.vigenciaFim), "dd/MM/yyyy")}
+                            </Badge>
+                          </div>
                         <p className="text-sm text-gray-600">
                           <span className="font-semibold">Responsável técnico:</span>{" "}
                           <span className="font-medium text-gray-900">{emissao.responsavelNome}</span>
@@ -8614,4 +8614,4 @@ export default function LaudoPgro() {
       </Card>
     </div>
   );
-} 
+}

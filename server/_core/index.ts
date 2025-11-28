@@ -72,7 +72,200 @@ async function startServer() {
     fs.mkdirSync(fichasEpiPath, { recursive: true });
   }
   app.use("/uploads", express.static(uploadsPath));
+
+  // Middleware específico para parsear body deste endpoint
+  const parseBodyMiddleware = express.json({ limit: "50mb" });
   
+  // Endpoint REST direto para dashboard de colaboradores (bypass tRPC)
+  // IMPORTANTE: Deve estar ANTES do Vite para não ser interceptado
+  console.log("[Server] ✅ Registrando endpoint REST: /api/dashboard/colaboradores/stats (GET e POST)");
+  
+  // Handler comum para GET e POST
+  const handleStatsRequest = async (req: any, res: any) => {
+    // Log IMEDIATO quando a requisição chega (antes de qualquer processamento)
+    console.log("🔥🔥🔥 [REST API] REQUISIÇÃO CHEGOU - MÉTODO:", req.method, "URL:", req.originalUrl || req.url);
+    try {
+      console.log("═══════════════════════════════════════");
+      console.log("[REST API] 🚀 REQUISIÇÃO RECEBIDA");
+      console.log("[REST API] Método:", req.method);
+      console.log("[REST API] URL:", req.url);
+      console.log("[REST API] Content-Type:", req.headers['content-type']);
+      console.log("[REST API] Body RAW:", req.body);
+      console.log("[REST API] Body tipo:", typeof req.body);
+      console.log("[REST API] Body é objeto?:", typeof req.body === 'object' && req.body !== null);
+      console.log("[REST API] Body é array?:", Array.isArray(req.body));
+      
+      // Se body é string ou undefined, tentar parsear manualmente
+      let bodyParsed: any = req.body;
+      
+      if (req.body === undefined || req.body === null) {
+        console.log("[REST API] ⚠️⚠️⚠️ Body é undefined/null - tentando ler do stream");
+        // Body não foi parseado, pode ser que o middleware não tenha processado
+        bodyParsed = {};
+      } else if (typeof req.body === 'string') {
+        try {
+          bodyParsed = JSON.parse(req.body);
+          console.log("[REST API] ✅ Body parseado de string:", bodyParsed);
+        } catch (e) {
+          console.log("[REST API] ⚠️ Erro ao parsear body:", e);
+          bodyParsed = {};
+        }
+      } else if (typeof req.body === 'object') {
+        bodyParsed = req.body;
+        console.log("[REST API] ✅ Body já é objeto:", bodyParsed);
+      }
+      
+      console.log("[REST API] 🔍 bodyParsed final:", bodyParsed);
+      console.log("[REST API] 🔍 bodyParsed keys:", typeof bodyParsed === 'object' && bodyParsed !== null ? Object.keys(bodyParsed) : 'N/A');
+      
+      // Obter empresaId - tentar do body primeiro (POST), depois da query (GET)
+      let empresaIdParam: any = null;
+      
+      console.log("[REST API] 🔍 INICIANDO EXTRAÇÃO DE empresaId");
+      console.log("[REST API] Método da requisição:", req.method);
+      
+      if (req.method === 'POST') {
+        // POST: empresaId vem no body
+        console.log("[REST API] 🔍 É POST - verificando bodyParsed");
+        console.log("[REST API] bodyParsed existe?", bodyParsed !== null && bodyParsed !== undefined);
+        console.log("[REST API] bodyParsed é objeto?", typeof bodyParsed === 'object');
+        console.log("[REST API] bodyParsed não é array?", !Array.isArray(bodyParsed));
+        
+        if (bodyParsed && typeof bodyParsed === 'object' && bodyParsed !== null && !Array.isArray(bodyParsed)) {
+          console.log("[REST API] 🔍 bodyParsed é válido - verificando 'empresaId'");
+          console.log("[REST API] 'empresaId' in bodyParsed?", 'empresaId' in bodyParsed);
+          console.log("[REST API] bodyParsed.empresaId:", bodyParsed.empresaId);
+          
+          if ('empresaId' in bodyParsed) {
+            empresaIdParam = bodyParsed.empresaId;
+            console.log("[REST API] ✅✅✅✅✅✅✅✅✅ empresaId do BODY (POST):", empresaIdParam, "Tipo:", typeof empresaIdParam);
+            console.log("[REST API] empresaIdParam AGORA:", empresaIdParam);
+          } else {
+            console.log("[REST API] ⚠️⚠️⚠️ 'empresaId' NÃO está em bodyParsed");
+            console.log("[REST API] bodyParsed completo:", JSON.stringify(bodyParsed, null, 2));
+          }
+        } else {
+          console.log("[REST API] ⚠️⚠️⚠️ bodyParsed não é objeto válido");
+        }
+      } else if (req.query.empresaId !== undefined) {
+        // GET: empresaId vem na query string
+        empresaIdParam = req.query.empresaId;
+        console.log("[REST API] ✅ empresaId da QUERY (GET):", empresaIdParam);
+      } else {
+        console.log("[REST API] ⚠️ empresaId não encontrado nem no body nem na query");
+      }
+      
+      console.log("[REST API] ═══════════════════════════════════");
+      console.log("[REST API] empresaIdParam FINAL APÓS EXTRAÇÃO:", empresaIdParam, "Tipo:", typeof empresaIdParam);
+      console.log("[REST API] ═══════════════════════════════════");
+      
+      // Converter para number ou undefined
+      console.log("[REST API] 🔍🔍🔍 ANTES DA CONVERSÃO:");
+      console.log("[REST API] empresaIdParam:", empresaIdParam, "Tipo:", typeof empresaIdParam);
+      console.log("[REST API] empresaIdParam === null?", empresaIdParam === null);
+      console.log("[REST API] empresaIdParam === undefined?", empresaIdParam === undefined);
+      
+      let empresaId: number | undefined = undefined;
+      if (empresaIdParam === null || empresaIdParam === undefined) {
+        empresaId = undefined;
+        console.log("[REST API] ⚠️ empresaIdParam é null/undefined, empresaId = undefined");
+      } else {
+        const parsed = parseInt(String(empresaIdParam), 10);
+        console.log("[REST API] parsed:", parsed, "isNaN?", isNaN(parsed), "> 0?", parsed > 0);
+        if (!isNaN(parsed) && parsed > 0) {
+          empresaId = parsed;
+          console.log("[REST API] ✅✅✅✅✅✅✅ empresaId CONVERTIDO:", empresaId, "Tipo:", typeof empresaId);
+        } else {
+          empresaId = undefined;
+          console.log("[REST API] ⚠️ empresaId inválido após parseInt, parsed:", parsed);
+        }
+      }
+      
+      console.log("[REST API] ═══════════════════════════════════");
+      console.log("[REST API] empresaId APÓS CONVERSÃO:", empresaId, "Tipo:", typeof empresaId);
+      console.log("[REST API] empresaId !== null?", empresaId !== null);
+      console.log("[REST API] empresaId !== undefined?", empresaId !== undefined);
+      console.log("[REST API] ═══════════════════════════════════");
+      
+      // Criar contexto para autenticação
+      const ctx = await createContext({ req, res });
+      
+      if (!ctx.user) {
+        return res.status(401).json({ error: "Não autenticado" });
+      }
+      
+      // Determinar empresaId a ser usado (mesma lógica do tRPC)
+      let empresaIdFinal: number | undefined;
+      
+      console.log("[REST API] 👤 Usuário:", ctx.user.email, "Role:", ctx.user.role);
+      
+      // Admin, super_admin e tenant_admin podem usar o empresaId recebido
+      if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin' || ctx.user.role === 'tenant_admin') {
+        // Admin pode usar o empresaId recebido
+        console.log("[REST API] 🔍 Admin/Tenant Admin - Verificando empresaId:", empresaId);
+        console.log("[REST API] 🔍 empresaId !== null?", empresaId !== null);
+        console.log("[REST API] 🔍 empresaId !== undefined?", empresaId !== undefined);
+        console.log("[REST API] 🔍 !isNaN(empresaId)?", empresaId !== undefined ? !isNaN(empresaId) : 'N/A');
+        console.log("[REST API] 🔍 empresaId > 0?", empresaId !== undefined ? empresaId > 0 : 'N/A');
+        
+        if (empresaId !== null && empresaId !== undefined && !isNaN(empresaId) && empresaId > 0) {
+          empresaIdFinal = empresaId;
+          console.log("[REST API] ✅✅✅✅✅✅✅✅✅ Admin/Tenant Admin - USANDO empresaId recebido:", empresaIdFinal);
+        } else {
+          empresaIdFinal = undefined;
+          console.log("[REST API] ⚠️⚠️⚠️ Admin/Tenant Admin - empresaId inválido, usando undefined (todas empresas)");
+          console.log("[REST API] ⚠️ empresaId era:", empresaId, "Tipo:", typeof empresaId);
+        }
+      } else {
+        // Não-admin só vê sua própria empresa
+        empresaIdFinal = ctx.user.empresaId || undefined;
+        console.log("[REST API] ⚠️ Não-admin - usando empresaId do contexto:", empresaIdFinal);
+      }
+      
+      console.log("[REST API] ═══════════════════════════════════");
+      console.log("[REST API] 🔧🔧🔧 empresaIdFinal DEFINITIVO:", empresaIdFinal);
+      console.log("[REST API] 🔧🔧🔧 Tipo:", typeof empresaIdFinal);
+      console.log("[REST API] 🔧🔧🔧 É número válido?:", typeof empresaIdFinal === 'number' && empresaIdFinal > 0);
+      console.log("[REST API] ═══════════════════════════════════");
+      
+      // Buscar dados diretamente do banco
+      const { getColaboradorStats } = await import("../db");
+      console.log("[REST API] 📊 Chamando getColaboradorStats com empresaIdFinal:", empresaIdFinal);
+      console.log("[REST API] 📊 empresaIdFinal tipo:", typeof empresaIdFinal);
+      console.log("[REST API] 📊 empresaIdFinal é null?:", empresaIdFinal === null);
+      console.log("[REST API] 📊 empresaIdFinal é undefined?:", empresaIdFinal === undefined);
+      
+      const result = await getColaboradorStats(empresaIdFinal, undefined);
+      
+      console.log("[REST API] ✅ RESULTADO:", {
+        total: result?.total,
+        ativos: result?.ativos,
+        inativos: result?.inativos,
+        empresaIdUsado: empresaIdFinal
+      });
+      console.log("═══════════════════════════════════════");
+      
+      // Adicionar empresaId usado na resposta para debug
+      const responseWithDebug = {
+        ...result,
+        _debug: {
+          empresaIdRecebido: empresaId,
+          empresaIdFinal: empresaIdFinal,
+          empresaIdTipo: typeof empresaIdFinal
+        }
+      };
+      
+      res.json(responseWithDebug);
+    } catch (error: any) {
+      console.error("[REST API] ❌ Erro:", error);
+      res.status(500).json({ error: error.message || "Erro interno" });
+    }
+  };
+  
+  // Registrar tanto GET quanto POST com middleware de parsing
+  app.get("/api/dashboard/colaboradores/stats", handleStatsRequest);
+  app.post("/api/dashboard/colaboradores/stats", parseBodyMiddleware, handleStatsRequest);
+
   // development mode uses Vite, production mode uses static files
   // IMPORTANTE: Vite deve ser configurado ANTES do tRPC para servir arquivos estáticos
   if (process.env.NODE_ENV === "development") {
@@ -88,7 +281,7 @@ async function startServer() {
     console.log("[Server] Modo produção - servindo arquivos estáticos");
     serveStatic(app);
   }
-  
+
   // tRPC API - depois do Vite para não interferir no roteamento
   app.use(
     "/api/trpc",

@@ -235,10 +235,17 @@ export const appRouter = router({
 
   // Dashboard
   dashboard: router({
-    stats: protectedProcedure.query(async ({ ctx }) => {
-      const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-      return db.getDashboardStats(empresaId);
-    }),
+    stats: protectedProcedure
+      .input(z.object({
+        empresaId: z.number().optional(),
+      }).optional())
+      .query(async ({ input, ctx }) => {
+        // Se o usuário não for admin, usar empresaId do contexto
+        const empresaId = ctx.user.role === "admin" 
+          ? (input?.empresaId || undefined)
+          : (ctx.user.empresaId || undefined);
+        return db.getDashboardStats(empresaId);
+      }),
   }),
 
   // Permissões
@@ -607,9 +614,54 @@ export const appRouter = router({
         return db.deleteColaboradores(input.ids);
       }),
     stats: protectedProcedure
-      .query(async ({ ctx }) => {
-        const empresaId = ctx.user.role === 'admin' ? undefined : ctx.user.empresaId || undefined;
-        return db.getColaboradorStats(empresaId);
+      .input(z.object({
+        empresaId: z.number().optional(),
+        status: z.enum(['ativo', 'inativo']).optional(),
+        setorId: z.number().optional(),
+        cargoId: z.number().optional(),
+      }).optional())
+      .query(async ({ input, ctx }) => {
+        console.log("═══════════════════════════════════════");
+        console.log("[colaboradores.stats] 🚀 QUERY INICIADA");
+        console.log("[colaboradores.stats] Input recebido:", JSON.stringify(input, null, 2));
+        console.log("[colaboradores.stats] User role:", ctx.user.role);
+        console.log("[colaboradores.stats] User empresaId:", ctx.user.empresaId);
+        
+        // Determinar empresaId a ser usado
+        let empresaId: number | undefined;
+        
+        if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin' || ctx.user.role === 'tenant_admin') {
+          // Admin/Tenant Admin pode usar empresaId do input ou ver todas
+          // Tratar null como undefined
+          empresaId = input?.empresaId !== null && input?.empresaId !== undefined ? input.empresaId : undefined;
+          console.log("[colaboradores.stats] ✅ Admin/Tenant Admin - usando empresaId:", empresaId);
+        } else {
+          // Não-admin só vê sua própria empresa (ignora input.empresaId)
+          empresaId = ctx.user.empresaId || undefined;
+          console.log("[colaboradores.stats] ⚠️ Não-admin - usando empresaId do contexto:", empresaId);
+        }
+        
+        // Criar filtros
+        const filters = input && (
+          input.status !== undefined ||
+          input.setorId !== undefined ||
+          input.cargoId !== undefined
+        ) ? {
+          status: input.status,
+          setorId: input.setorId,
+          cargoId: input.cargoId,
+        } : undefined;
+        
+        console.log("[colaboradores.stats] 📊 Chamando getColaboradorStats com empresaId:", empresaId);
+        const result = await db.getColaboradorStats(empresaId, filters);
+        console.log("[colaboradores.stats] ✅ RESULTADO:", {
+          total: result?.total,
+          ativos: result?.ativos,
+          inativos: result?.inativos
+        });
+        console.log("═══════════════════════════════════════");
+        
+        return result;
       }),
   }),
 

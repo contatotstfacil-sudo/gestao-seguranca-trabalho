@@ -1,10 +1,47 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { Building2, Users, HardHat, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Building2, Users, HardHat, AlertTriangle, ShieldAlert, Filter, X } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
 
 export default function Dashboard() {
-  const { data: stats, isLoading } = trpc.dashboard.stats.useQuery();
+  const [empresaId, setEmpresaId] = useState<number | undefined>(undefined);
+  const utils = trpc.useUtils();
+  
+  // Criar objeto de query estável usando useMemo
+  const queryInput = useMemo(() => {
+    return empresaId ? { empresaId } : undefined;
+  }, [empresaId]);
+  
+  // O tRPC detecta automaticamente mudanças no input e refaz a query
+  const { data: stats, isLoading, refetch } = trpc.dashboard.stats.useQuery(
+    queryInput,
+    {
+      // Garantir que a query seja refeita quando a empresa mudar
+      refetchOnMount: "always",
+      refetchOnWindowFocus: false,
+      enabled: true,
+    }
+  );
+
+  // Forçar atualização quando a empresa mudar
+  useEffect(() => {
+    // Usar um pequeno delay para evitar múltiplas chamadas
+    const timeoutId = setTimeout(async () => {
+      // Invalidar cache para forçar atualização
+      await utils.dashboard.stats.invalidate(queryInput);
+      // Refazer a query imediatamente
+      await refetch();
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId]);
+  
+  const { data: empresas } = trpc.empresas.list.useQuery();
 
   const cards = [
     {
@@ -47,9 +84,44 @@ export default function Dashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1">Visão geral do sistema de gestão de segurança</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 mt-1">Visão geral do sistema de gestão de segurança</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-64">
+              <Label htmlFor="empresaId">Filtrar por Empresa</Label>
+              <Select
+                value={empresaId?.toString() || "all"}
+                onValueChange={(value) => {
+                  setEmpresaId(value === "all" ? undefined : parseInt(value));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  {empresas?.map((empresa: any) => (
+                    <SelectItem key={empresa.id} value={empresa.id.toString()}>
+                      {empresa.razaoSocial}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {empresaId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEmpresaId(undefined)}
+                className="mt-6"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {isLoading ? (

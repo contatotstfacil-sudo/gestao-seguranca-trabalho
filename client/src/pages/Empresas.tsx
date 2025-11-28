@@ -1,4 +1,3 @@
-import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -284,13 +283,12 @@ export default function Empresas() {
   };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Empresas</h1>
-            <p className="text-gray-600 mt-1">Gerencie as empresas cadastradas com informações completas</p>
-          </div>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Cadastrar Empresas</h2>
+          <p className="text-gray-600 mt-1">Gerencie as empresas cadastradas com informações completas</p>
+        </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => resetForm()}>
@@ -666,7 +664,6 @@ export default function Empresas() {
             )}
           </CardContent>
         </Card>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 }

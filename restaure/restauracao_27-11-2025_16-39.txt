@@ -1,0 +1,5 @@
+Ponto de Restauracao criado em: 27/11/2025 16:39:26
+
+Descricao: Ajustes de layout - sidebar compacto, accordion abrangendo estatisticas e cargos, botoes abaixo do responsavel tecnico
+
+Commit: 7011bbd

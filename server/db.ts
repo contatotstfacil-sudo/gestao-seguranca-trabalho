@@ -418,30 +418,70 @@ export async function deleteEmpresa(id: number) {
 
 // === COLABORADORES ===
 
-export async function getAllColaboradores(empresaId: number | null, filters?: { searchTerm?: string }) {
+export async function getAllColaboradores(
+  empresaId: number | null, 
+  filters?: { 
+    searchTerm?: string;
+    dataAdmissaoInicio?: string;
+    dataAdmissaoFim?: string;
+  }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    let query = db.select().from(colaboradores);
-    
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL não configurada");
+    }
+
+    const connection = await mysql.createConnection(process.env.DATABASE_URL);
+
+    // Construir WHERE clause
+    let whereConditions: string[] = [];
+    let params: any[] = [];
+
     if (empresaId) {
-      query = query.where(eq(colaboradores.empresaId, empresaId)) as any;
+      whereConditions.push("c.empresaId = ?");
+      params.push(empresaId);
     }
-    
+
     if (filters?.searchTerm) {
-      const conditions = [
-        sql`${colaboradores.nomeCompleto} LIKE ${`%${filters.searchTerm}%`}`,
-        sql`${colaboradores.cpf} LIKE ${`%${filters.searchTerm}%`}`,
-        sql`${colaboradores.rg} LIKE ${`%${filters.searchTerm}%`}`
-      ];
-      query = query.where(and(
-        empresaId ? eq(colaboradores.empresaId, empresaId) : undefined,
-        or(...conditions)
-      ) as any) as any;
+      whereConditions.push("(c.nomeCompleto LIKE ? OR c.cpf LIKE ? OR c.rg LIKE ?)");
+      const searchPattern = `%${filters.searchTerm}%`;
+      params.push(searchPattern, searchPattern, searchPattern);
     }
-    
-    return await query.orderBy(asc(colaboradores.nomeCompleto));
+
+    if (filters?.dataAdmissaoInicio) {
+      whereConditions.push("c.dataAdmissao >= ?");
+      params.push(filters.dataAdmissaoInicio);
+    }
+
+    if (filters?.dataAdmissaoFim) {
+      whereConditions.push("c.dataAdmissao <= ?");
+      params.push(filters.dataAdmissaoFim);
+    }
+
+    const whereClause = whereConditions.length > 0 
+      ? `WHERE ${whereConditions.join(" AND ")}` 
+      : "";
+
+    // Query com JOIN para buscar nomes de cargos e setores
+    const sqlQuery = `
+      SELECT 
+        c.*,
+        car.nomeCargo,
+        s.nomeSetor
+      FROM colaboradores c
+      LEFT JOIN cargos car ON c.cargoId = car.id
+      LEFT JOIN setores s ON c.setorId = s.id
+      ${whereClause}
+      ORDER BY c.nomeCompleto ASC
+    `;
+
+    const [rows] = await connection.execute(sqlQuery, params);
+    await connection.end();
+
+    return rows as any[];
   } catch (error) {
     console.error("[Database] Erro ao buscar colaboradores:", error);
     throw error;
@@ -557,85 +597,244 @@ export async function deleteColaboradores(ids: number[]) {
   }
 }
 
-export async function getColaboradorStats(empresaId: number | null) {
+export async function getColaboradorStats(
+  empresaId: number | null | undefined,
+  filters?: {
+    status?: 'ativo' | 'inativo';
+    setorId?: number;
+    cargoId?: number;
+  }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    // Estatísticas básicas
-    let baseQuery = db.select({
-      total: sql<number>`COUNT(*)`.as('total'),
-      ativos: sql<number>`SUM(CASE WHEN ${colaboradores.status} = 'ativo' THEN 1 ELSE 0 END)`.as('ativos'),
-      inativos: sql<number>`SUM(CASE WHEN ${colaboradores.status} = 'inativo' THEN 1 ELSE 0 END)`.as('inativos')
-    }).from(colaboradores);
+    // Log detalhado para debug
+    console.log("═══════════════════════════════════════");
+    console.log("[getColaboradorStats] 🗄️ INICIANDO QUERY NO BANCO");
+    console.log("[getColaboradorStats] empresaId recebido:", empresaId, "Tipo:", typeof empresaId);
+    console.log("[getColaboradorStats] filters recebido:", JSON.stringify(filters, null, 2));
     
-    if (empresaId) {
-      baseQuery = baseQuery.where(eq(colaboradores.empresaId, empresaId)) as any;
+    // Usar SQL direto para garantir que o filtro funcione
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL não configurada");
     }
     
-    const [baseStats] = await baseQuery;
+    const connection = await mysql.createConnection(process.env.DATABASE_URL);
     
-    // Estatísticas por sexo
-    let sexoQuery = db.select({
-      sexo: colaboradores.sexo,
-      count: sql<number>`COUNT(*)`.as('count')
-    }).from(colaboradores)
-      .groupBy(colaboradores.sexo);
+    // Construir WHERE clause
+    let whereConditions: string[] = [];
+    let params: any[] = [];
     
-    if (empresaId) {
-      sexoQuery = sexoQuery.where(eq(colaboradores.empresaId, empresaId)) as any;
+    console.log("[getColaboradorStats] 🔍🔍🔍 VERIFICANDO empresaId:");
+    console.log("[getColaboradorStats] empresaId valor:", empresaId);
+    console.log("[getColaboradorStats] empresaId tipo:", typeof empresaId);
+    console.log("[getColaboradorStats] empresaId é null?:", empresaId === null);
+    console.log("[getColaboradorStats] empresaId é undefined?:", empresaId === undefined);
+    console.log("[getColaboradorStats] empresaId é número?:", typeof empresaId === 'number');
+    console.log("[getColaboradorStats] empresaId > 0?:", typeof empresaId === 'number' && empresaId > 0);
+    
+    if (empresaId !== null && empresaId !== undefined && typeof empresaId === 'number' && empresaId > 0) {
+      whereConditions.push("empresaId = ?");
+      params.push(empresaId);
+      console.log("[getColaboradorStats] ✅✅✅ Filtro empresaId ADICIONADO:", empresaId);
+      console.log("[getColaboradorStats] ✅✅✅ WHERE clause será: empresaId = ?");
+      console.log("[getColaboradorStats] ✅✅✅ Parâmetro será:", empresaId);
+    } else {
+      console.log("[getColaboradorStats] ⚠️⚠️⚠️ SEM filtro empresaId - retornando TODOS os colaboradores");
+      console.log("[getColaboradorStats] Razão: empresaId é", empresaId === null ? 'null' : empresaId === undefined ? 'undefined' : 'inválido');
     }
-    const sexoStats = await sexoQuery;
     
-    // Estatísticas por setor (join com setores)
-    let setorQuery = db.select({
-      setor: setores.nomeSetor,
-      count: sql<number>`COUNT(*)`.as('count')
-    })
-      .from(colaboradores)
-      .leftJoin(setores, eq(colaboradores.setorId, setores.id))
-      .groupBy(setores.nomeSetor);
-    
-    if (empresaId) {
-      setorQuery = setorQuery.where(eq(colaboradores.empresaId, empresaId)) as any;
+    if (filters?.status) {
+      whereConditions.push("status = ?");
+      params.push(filters.status);
     }
-    const setorStats = await setorQuery;
     
-    // Estatísticas por função/cargo (join com cargos)
-    let funcaoQuery = db.select({
-      funcao: cargos.nomeCargo, // Usando nomeCargo do cargo vinculado
-      count: sql<number>`COUNT(*)`.as('count')
-    })
-      .from(colaboradores)
-      .leftJoin(cargos, eq(colaboradores.cargoId, cargos.id))
-      .groupBy(cargos.nomeCargo);
-    
-    if (empresaId) {
-      funcaoQuery = funcaoQuery.where(eq(colaboradores.empresaId, empresaId)) as any;
+    if (filters?.setorId) {
+      whereConditions.push("setorId = ?");
+      params.push(filters.setorId);
     }
-    const funcaoStats = await funcaoQuery;
     
-    // Estatísticas por status
-    let statusQuery = db.select({
-      status: colaboradores.status,
-      count: sql<number>`COUNT(*)`.as('count')
-    }).from(colaboradores)
-      .groupBy(colaboradores.status);
-    
-    if (empresaId) {
-      statusQuery = statusQuery.where(eq(colaboradores.empresaId, empresaId)) as any;
+    if (filters?.cargoId) {
+      whereConditions.push("cargoId = ?");
+      params.push(filters.cargoId);
     }
-    const statusStats = await statusQuery;
     
-    return {
-      total: baseStats?.total || 0,
-      ativos: baseStats?.ativos || 0,
-      inativos: baseStats?.inativos || 0,
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
+    
+    console.log("[getColaboradorStats] 📋 WHERE clause SQL:", whereClause);
+    console.log("[getColaboradorStats] 📋 Parâmetros:", params);
+    
+    // Estatísticas básicas usando SQL direto
+    // Total: COUNT(*) WHERE empresaId = ?
+    // Ativos: SUM(CASE WHEN status = 'ativo' THEN 1 ELSE 0 END) WHERE empresaId = ?
+    // Inativos: SUM(CASE WHEN status = 'inativo' THEN 1 ELSE 0 END) WHERE empresaId = ?
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'ativo' THEN 1 ELSE 0 END) as ativos,
+        SUM(CASE WHEN status = 'inativo' THEN 1 ELSE 0 END) as inativos
+      FROM colaboradores
+      ${whereClause}
+    `;
+    
+    console.log("[getColaboradorStats] 🔍 SQL Executado:", statsQuery.trim());
+    console.log("[getColaboradorStats] 🔍 Parâmetros:", params);
+    console.log("[getColaboradorStats] 🔍 empresaId sendo filtrado:", empresaId);
+    console.log("[getColaboradorStats] 🔍 WHERE clause aplicado:", whereClause || "NENHUM (retornando todos)");
+    
+    const [statsRows] = await connection.execute(statsQuery, params);
+    const baseStats = (statsRows as any[])[0] || {};
+    
+    // Converter BigInt para Number
+    const total = Number(baseStats?.total || 0);
+    const ativos = Number(baseStats?.ativos || 0);
+    const inativos = Number(baseStats?.inativos || 0);
+    
+    // Taxa de atividade = (ativos / total) * 100
+    const taxaAtividade = total > 0 ? Math.round((ativos / total) * 100) : 0;
+    
+    console.log("[getColaboradorStats] 📊 Resultado baseStats:", {
+      total,
+      ativos,
+      inativos,
+      taxaAtividade,
+      empresaIdFiltrado: empresaId,
+      whereClauseAplicado: whereClause
+    });
+    
+    // Estatísticas por sexo usando SQL direto
+    const sexoQuery = `
+      SELECT sexo, COUNT(*) as count
+      FROM colaboradores
+      ${whereClause}
+      GROUP BY sexo
+    `;
+    const [sexoRows] = await connection.execute(sexoQuery, params);
+    const sexoStats = (sexoRows as any[]) || [];
+    
+    // Construir WHERE clause com alias c. para queries com JOIN
+    const whereConditionsWithAlias = whereConditions.map(cond => {
+      // Adicionar prefixo c. aos nomes de campos
+      return cond.replace(/^(\w+)\s*=\s*\?$/, "c.$1 = ?");
+    });
+    const whereClauseWithAlias = whereConditionsWithAlias.length > 0 
+      ? `WHERE ${whereConditionsWithAlias.join(" AND ")}` 
+      : "";
+    
+    // Estatísticas por setor usando SQL direto
+    const setorQuery = `
+      SELECT s.nomeSetor as setor, COUNT(*) as count
+      FROM colaboradores c
+      LEFT JOIN setores s ON c.setorId = s.id
+      ${whereClauseWithAlias}
+      GROUP BY s.nomeSetor
+    `;
+    const [setorRows] = await connection.execute(setorQuery, params);
+    const setorStats = (setorRows as any[]) || [];
+    
+    // Estatísticas por função/cargo usando SQL direto
+    const funcaoQuery = `
+      SELECT car.nomeCargo as funcao, COUNT(*) as count
+      FROM colaboradores c
+      LEFT JOIN cargos car ON c.cargoId = car.id
+      ${whereClauseWithAlias}
+      GROUP BY car.nomeCargo
+    `;
+    const [funcaoRows] = await connection.execute(funcaoQuery, params);
+    const funcaoStats = (funcaoRows as any[]) || [];
+    
+    // Estatísticas por status usando SQL direto
+    const statusQuery = `
+      SELECT status, COUNT(*) as count
+      FROM colaboradores
+      ${whereClause}
+      GROUP BY status
+    `;
+    const [statusRows] = await connection.execute(statusQuery, params);
+    const statusStats = (statusRows as any[]) || [];
+    
+    // Colaboradores mais antigos usando SQL direto (top 5)
+    const maisAntigosQuery = `
+      SELECT c.id, c.nomeCompleto as nome, car.nomeCargo as funcao, c.dataAdmissao
+      FROM colaboradores c
+      LEFT JOIN cargos car ON c.cargoId = car.id
+      ${whereClauseWithAlias}
+      ORDER BY c.dataAdmissao ASC
+      LIMIT 5
+    `;
+    const [maisAntigosRows] = await connection.execute(maisAntigosQuery, params);
+    const maisAntigos = (maisAntigosRows as any[]) || [];
+    
+    // Colaboradores mais novos usando SQL direto (top 5)
+    const maisNovosQuery = `
+      SELECT c.id, c.nomeCompleto as nome, car.nomeCargo as funcao, c.dataAdmissao
+      FROM colaboradores c
+      LEFT JOIN cargos car ON c.cargoId = car.id
+      ${whereClauseWithAlias}
+      ORDER BY c.dataAdmissao DESC
+      LIMIT 5
+    `;
+    const [maisNovosRows] = await connection.execute(maisNovosQuery, params);
+    const maisNovos = (maisNovosRows as any[]) || [];
+    
+    await connection.end();
+    
+    // Calcular totais de homens e mulheres
+    const totalHomens = sexoStats.find((s: any) => s.sexo === 'masculino')?.count || 0;
+    const totalMulheres = sexoStats.find((s: any) => s.sexo === 'feminino')?.count || 0;
+    const percentualHomens = total > 0 ? Math.round((Number(totalHomens) / total) * 100) : 0;
+    const percentualMulheres = total > 0 ? Math.round((Number(totalMulheres) / total) * 100) : 0;
+    
+    // Ordenar e limitar top 10
+    const topFuncoes = funcaoStats
+      .map((f: any) => ({ funcao: f.funcao || "Sem função", count: Number(f.count) }))
+      .sort((a: any, b: any) => b.count - a.count)
+      .slice(0, 10);
+    
+    const topSetores = setorStats
+      .map((s: any) => ({ setor: s.setor || "Sem setor", count: Number(s.count) }))
+      .sort((a: any, b: any) => b.count - a.count)
+      .slice(0, 10);
+    
+    const resultado = {
+      total,
+      ativos,
+      inativos,
+      taxa: taxaAtividade,
+      totalHomens: Number(totalHomens),
+      totalMulheres: Number(totalMulheres),
+      percentualHomens,
+      percentualMulheres,
       sexo: sexoStats.map((s: any) => ({ sexo: s.sexo, count: Number(s.count) })),
-      setor: setorStats.map((s: any) => ({ setor: s.setor || "Sem setor", count: Number(s.count) })),
-      funcoes: funcaoStats.map((f: any) => ({ funcao: f.funcao || "Sem função", count: Number(f.count) })),
+      setor: topSetores,
+      funcoes: topFuncoes,
       status: statusStats.map((s: any) => ({ status: s.status, count: Number(s.count) })),
+      maisAntigos: maisAntigos.map((m: any) => ({
+        id: m.id,
+        nome: m.nome,
+        funcao: m.funcao || "Sem função",
+        dataAdmissao: m.dataAdmissao,
+      })),
+      maisNovos: maisNovos.map((m: any) => ({
+        id: m.id,
+        nome: m.nome,
+        funcao: m.funcao || "Sem função",
+        dataAdmissao: m.dataAdmissao,
+      })),
     };
+    
+    console.log("[getColaboradorStats] ✅ RESULTADO FINAL RETORNADO:", {
+      total: resultado.total,
+      ativos: resultado.ativos,
+      inativos: resultado.inativos,
+      taxa: resultado.taxa,
+      empresaIdFiltrado: empresaId,
+      filtroAplicado: empresaId !== null && empresaId !== undefined ? `SIM (empresaId=${empresaId})` : "NÃO (todos)"
+    });
+    console.log("═══════════════════════════════════════");
+    
+    return resultado;
   } catch (error) {
     console.error("[Database] Erro ao buscar estatísticas de colaboradores:", error);
     throw error;

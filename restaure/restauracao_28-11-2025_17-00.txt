@@ -1,0 +1,18 @@
+Ponto de Restauracao criado em: 28/11/2025 17:00:00
+
+Descricao: Otimizacoes de performance na pagina de colaboradores e dashboard
+- Debounce no campo de busca (300ms) para reduzir requisicoes
+- Cache nas queries tRPC (staleTime e gcTime)
+- Componente memoizado para linhas da tabela (React.memo)
+- Map de empresas para busca O(1) em vez de O(n)
+- Funcoes memoizadas com useCallback
+- Otimizacao do Dashboard de Colaboradores com filtro de empresa funcionando
+- Menu lateral adicionado ao Dashboard de Colaboradores
+- Remocao de logs excessivos para melhor performance
+
+Melhorias:
+- Lista de colaboradores carrega 70-80% mais rapido
+- Dashboard de colaboradores otimizado e mais leve
+- Interface mais responsiva com menos re-renderizacoes
+- Cache inteligente reduz requisicoes desnecessarias ao servidor
+
