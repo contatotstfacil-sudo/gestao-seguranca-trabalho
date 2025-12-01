@@ -5,7 +5,6 @@ import { trpc } from "@/lib/trpc";
 import { Users, TrendingUp, User } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useState, useMemo, useEffect, useCallback, memo } from "react";
-import DashboardLayout from "@/components/DashboardLayout";
 
 const COLORS = {
   masculino: "#3b82f6",
@@ -120,82 +119,6 @@ export default function DashboardColaboradores() {
 
   if (isLoading) {
     return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">Dashboard de Colaboradores</h1>
-              <p className="text-gray-600 mt-1">
-                {empresaNome ? `Visão geral - ${empresaNome}` : "Visão geral de todas as empresas"}
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <Label className="text-sm font-medium">Filtrar por Empresa:</Label>
-              <Select
-                value={empresaId?.toString() || "all"}
-                onValueChange={handleEmpresaChange}
-              >
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue placeholder="Todas as empresas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {empresas?.map((empresa: any) => (
-                    <SelectItem key={empresa.id} value={empresa.id.toString()}>
-                      {empresa.razaoSocial}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-gray-600">Carregando...</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">Dashboard de Colaboradores</h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <Label className="text-sm font-medium">Filtrar por Empresa:</Label>
-              <Select
-                value={empresaId?.toString() || "all"}
-                onValueChange={handleEmpresaChange}
-              >
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue placeholder="Todas as empresas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {empresas?.map((empresa: any) => (
-                    <SelectItem key={empresa.id} value={empresa.id.toString()}>
-                      {empresa.razaoSocial}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="text-center py-12 text-red-600">
-            <p>Erro ao carregar dados: {error.message}</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
@@ -224,10 +147,81 @@ export default function DashboardColaboradores() {
             </Select>
           </div>
         </div>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">Dashboard de Colaboradores</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label className="text-sm font-medium">Filtrar por Empresa:</Label>
+            <Select
+              value={empresaId?.toString() || "all"}
+              onValueChange={handleEmpresaChange}
+            >
+              <SelectTrigger className="w-[300px]">
+                <SelectValue placeholder="Todas as empresas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {empresas?.map((empresa: any) => (
+                  <SelectItem key={empresa.id} value={empresa.id.toString()}>
+                    {empresa.razaoSocial}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="text-center py-12 text-red-600">
+          <p>Erro ao carregar dados: {error.message}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+      <div>
+            <h1 className="text-2xl font-bold">Dashboard de Colaboradores</h1>
+            <p className="text-gray-600 mt-1">
+              {empresaNome ? `Visão geral - ${empresaNome}` : "Visão geral de todas as empresas"}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label className="text-sm font-medium">Filtrar por Empresa:</Label>
+            <Select
+              value={empresaId?.toString() || "all"}
+              onValueChange={handleEmpresaChange}
+            >
+              <SelectTrigger className="w-[300px]">
+                <SelectValue placeholder="Todas as empresas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {empresas?.map((empresa: any) => (
+                  <SelectItem key={empresa.id} value={empresa.id.toString()}>
+                    {empresa.razaoSocial}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+      </div>
 
         <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+        <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium text-gray-600">
@@ -235,13 +229,13 @@ export default function DashboardColaboradores() {
                 </CardTitle>
                 <Users className="h-5 w-5 text-blue-500" />
               </div>
-            </CardHeader>
-            <CardContent>
+          </CardHeader>
+          <CardContent>
               <div className="text-3xl font-bold">{statsValues.total}</div>
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
 
-          <Card>
+        <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium text-gray-600">
@@ -249,20 +243,20 @@ export default function DashboardColaboradores() {
                 </CardTitle>
                 <User className="h-5 w-5 text-blue-500" />
               </div>
-            </CardHeader>
-            <CardContent>
+          </CardHeader>
+          <CardContent>
               <div className="text-3xl font-bold text-blue-600">{statsValues.totalHomens}</div>
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
 
-          <Card>
+        <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium text-gray-600">
                   Total de Mulheres
                 </CardTitle>
                 <User className="h-5 w-5 text-pink-500" />
-              </div>
+      </div>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-pink-600">{statsValues.totalMulheres}</div>
@@ -282,15 +276,15 @@ export default function DashboardColaboradores() {
               <div className="text-3xl font-bold">{stats?.taxa ?? 0}%</div>
             </CardContent>
           </Card>
-        </div>
+      </div>
 
         {/* Cards de Porcentagem */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
+            <Card>
+              <CardHeader>
               <CardTitle className="text-lg">Porcentagem de Homens</CardTitle>
-            </CardHeader>
-            <CardContent>
+              </CardHeader>
+              <CardContent>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">Masculino</span>
@@ -325,14 +319,14 @@ export default function DashboardColaboradores() {
               </div>
             </CardContent>
           </Card>
-        </div>
+      </div>
 
         {/* Gráfico de Distribuição por Sexo */}
         {dadosSexo.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader><CardTitle>Distribuição por Sexo</CardTitle></CardHeader>
-              <CardContent>
+            <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={dadosSexo}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -346,10 +340,10 @@ export default function DashboardColaboradores() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            </CardContent>
+          </Card>
 
-            <Card>
+          <Card>
               <CardHeader><CardTitle>Proporção por Sexo</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -375,35 +369,35 @@ export default function DashboardColaboradores() {
               </CardContent>
             </Card>
           </div>
-        )}
+          )}
 
         {/* Top 10 Funções */}
         {statsValues.topFuncoes.length > 0 && (
-          <Card>
-            <CardHeader>
+        <Card>
+          <CardHeader>
               <CardTitle>Top 10 Funções com Mais Colaboradores</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={statsValues.topFuncoes} layout="vertical" margin={{ top: 20, right: 30, left: 200, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="funcao" type="category" width={180} />
                   <Tooltip />
                   <Bar dataKey="count" radius={[0, 8, 8, 0]} fill="#3b82f6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
         {/* Top 10 Setores */}
         {statsValues.topSetores.length > 0 && (
-          <Card>
-            <CardHeader>
+        <Card>
+          <CardHeader>
               <CardTitle>Top 10 Setores com Mais Colaboradores</CardTitle>
-            </CardHeader>
-            <CardContent>
+          </CardHeader>
+          <CardContent>
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={statsValues.topSetores} layout="vertical" margin={{ top: 20, right: 30, left: 200, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -445,17 +439,17 @@ export default function DashboardColaboradores() {
                       </div>
                     </div>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+          </CardContent>
+        </Card>
+      )}
 
           {statsValues.maisNovos.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Top 5 Funcionários Mais Novos</CardTitle>
-              </CardHeader>
-              <CardContent>
+        </CardHeader>
+        <CardContent>
                 <div className="space-y-3">
                   {statsValues.maisNovos.map((colab: any, index: number) => (
                     <div key={colab.id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -477,12 +471,11 @@ export default function DashboardColaboradores() {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+        </CardContent>
+      </Card>
           )}
         </div>
       </div>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 }

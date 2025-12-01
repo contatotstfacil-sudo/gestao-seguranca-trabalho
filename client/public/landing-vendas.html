@@ -53,11 +53,41 @@
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
         "offers": {
-            "@type": "Offer",
-            "price": "97.00",
+            "@type": "AggregateOffer",
+            "offerCount": "4",
+            "lowPrice": "67.90",
+            "highPrice": "199.90",
             "priceCurrency": "BRL",
-            "availability": "https://schema.org/InStock",
-            "priceValidUntil": "2025-12-31"
+            "offers": [
+                {
+                    "@type": "Offer",
+                    "name": "Plano Bronze",
+                    "price": "67.90",
+                    "priceCurrency": "BRL",
+                    "availability": "https://schema.org/InStock"
+                },
+                {
+                    "@type": "Offer",
+                    "name": "Plano Prata",
+                    "price": "97.90",
+                    "priceCurrency": "BRL",
+                    "availability": "https://schema.org/InStock"
+                },
+                {
+                    "@type": "Offer",
+                    "name": "Plano Ouro",
+                    "price": "137.90",
+                    "priceCurrency": "BRL",
+                    "availability": "https://schema.org/InStock"
+                },
+                {
+                    "@type": "Offer",
+                    "name": "Plano Diamante",
+                    "price": "199.90",
+                    "priceCurrency": "BRL",
+                    "availability": "https://schema.org/InStock"
+                }
+            ]
         },
         "aggregateRating": {
             "@type": "AggregateRating",
@@ -108,31 +138,47 @@
     {
         "@context": "https://schema.org",
         "@type": "Product",
-        "name": "TST Fácil - Plano Profissional",
-        "description": "Sistema completo de gestão de SST com empresas e colaboradores ilimitados",
+        "name": "TST Fácil - Planos de Assinatura",
+        "description": "Sistema completo de gestão de SST com 4 planos: Bronze, Prata, Ouro e Diamante",
         "brand": {
             "@type": "Brand",
             "name": "TST Fácil"
         },
-        "offers": {
+            "offers": {
             "@type": "AggregateOffer",
-            "offerCount": "2",
-            "lowPrice": "67.00",
-            "highPrice": "97.00",
+            "offerCount": "4",
+            "lowPrice": "67.90",
+            "highPrice": "199.90",
             "priceCurrency": "BRL",
             "offers": [
                 {
                     "@type": "Offer",
-                    "name": "Plano Básico",
-                    "price": "67.00",
+                    "name": "Plano Bronze",
+                    "price": "67.90",
                     "priceCurrency": "BRL",
                     "availability": "https://schema.org/InStock",
                     "priceValidUntil": "2025-12-31"
                 },
                 {
                     "@type": "Offer",
-                    "name": "Plano Profissional",
-                    "price": "97.00",
+                    "name": "Plano Prata",
+                    "price": "97.90",
+                    "priceCurrency": "BRL",
+                    "availability": "https://schema.org/InStock",
+                    "priceValidUntil": "2025-12-31"
+                },
+                {
+                    "@type": "Offer",
+                    "name": "Plano Ouro",
+                    "price": "137.90",
+                    "priceCurrency": "BRL",
+                    "availability": "https://schema.org/InStock",
+                    "priceValidUntil": "2025-12-31"
+                },
+                {
+                    "@type": "Offer",
+                    "name": "Plano Diamante",
+                    "price": "199.90",
                     "priceCurrency": "BRL",
                     "availability": "https://schema.org/InStock",
                     "priceValidUntil": "2025-12-31"
@@ -809,10 +855,10 @@
 
         .plans-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-            gap: 2.5rem;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.25rem;
             margin-top: 2rem;
-            max-width: 900px;
+            max-width: 1800px;
             margin-left: auto;
             margin-right: auto;
         }
@@ -820,7 +866,7 @@
         .plan-card {
             background: var(--bg-white);
             border-radius: 24px;
-            padding: 3rem 2.5rem;
+            padding: 2.5rem 2rem;
             box-shadow: var(--shadow);
             transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             position: relative;
@@ -1312,6 +1358,12 @@
         }
 
         /* RESPONSIVE */
+        @media (max-width: 1400px) {
+            .plans-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
         @media (max-width: 968px) {
             .plans-grid {
                 grid-template-columns: 1fr;
@@ -1598,26 +1650,26 @@
             </div>
 
             <div class="plans-grid">
-                <!-- PLANO BÁSICO -->
+                <!-- PLANO BRONZE -->
                 <article class="plan-card fade-in" itemscope itemtype="https://schema.org/Offer">
                     <div class="plan-header">
-                        <h3 class="plan-name">Básico</h3>
+                        <h3 class="plan-name">🥉 Bronze</h3>
                         <p class="plan-description">Ideal para começar</p>
                         <div class="plan-price">
                             <span class="plan-currency">R$</span>
-                            <span class="plan-amount" data-base="67">67</span>
+                            <span class="plan-amount" data-base="67.90">67,90</span>
                         </div>
                         <p class="plan-period" data-text-monthly="por mês" data-text-quarterly="a cada 3 meses" data-text-semiannual="a cada 6 meses">por mês</p>
-                        <div class="plan-savings" data-monthly="" data-quarterly="Economize R$ 20" data-semiannual="Economize R$ 60"></div>
+                        <div class="plan-savings" data-monthly="" data-quarterly="Economize R$ 20" data-semiannual="Economize R$ 61"></div>
                     </div>
                     <ul class="plan-features">
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Até 5 empresas</span>
+                            <span>5 empresas</span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Até 50 colaboradores</span>
+                            <span>20 colaboradores por empresa</span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
@@ -1625,7 +1677,7 @@
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Controle de vencimentos</span>
+                            <span>10 PGR por mês</span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
@@ -1637,38 +1689,173 @@
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
+                            <span>Controle de vencimentos</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
                             <span>Suporte por email</span>
                         </li>
                         <li>
                             <span class="x-icon">✗</span>
-                            <span style="color: var(--text-light);">Relatórios avançados</span>
+                            <span style="color: var(--text-light);">Hub de informações</span>
                         </li>
                         <li>
                             <span class="x-icon">✗</span>
-                            <span style="color: var(--text-light);">API de integração</span>
+                            <span style="color: var(--text-light);">Laudos avançados</span>
+                        </li>
+                        <li>
+                            <span class="x-icon">✗</span>
+                            <span style="color: var(--text-light);">IA de segurança</span>
                         </li>
                     </ul>
-                    <a href="/login?plano=basico" class="plan-cta plan-cta-secondary" data-plan="basico" itemprop="url">Começar Teste Grátis</a>
+                    <a href="/login?plano=bronze" class="plan-cta plan-cta-secondary" data-plan="bronze" itemprop="url">Começar Teste Grátis</a>
                     <p class="plan-note">Teste grátis por 14 dias</p>
-                    <meta itemprop="price" content="67.00">
+                    <meta itemprop="price" content="67.90">
                     <meta itemprop="priceCurrency" content="BRL">
                     <meta itemprop="availability" content="https://schema.org/InStock">
                 </article>
 
-                <!-- PLANO PROFISSIONAL (DESTAQUE) -->
+                <!-- PLANO PRATA -->
+                <article class="plan-card fade-in" itemscope itemtype="https://schema.org/Offer">
+                    <div class="plan-header">
+                        <h3 class="plan-name">🥈 Prata</h3>
+                        <p class="plan-description">Para profissionais em crescimento</p>
+                        <div class="plan-price">
+                            <span class="plan-currency">R$</span>
+                            <span class="plan-amount" data-base="97.90">97,90</span>
+                        </div>
+                        <p class="plan-period" data-text-monthly="por mês" data-text-quarterly="a cada 3 meses" data-text-semiannual="a cada 6 meses">por mês</p>
+                        <div class="plan-savings" data-monthly="" data-quarterly="Economize R$ 29" data-semiannual="Economize R$ 88"></div>
+                    </div>
+                    <ul class="plan-features">
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span><strong>Tudo do Plano Bronze</strong></span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>10 empresas</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>30 colaboradores por empresa</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>Hub de informações</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>20 PGR por mês</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>Relatórios avançados</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>Suporte por ticket no site</span>
+                        </li>
+                        <li>
+                            <span class="x-icon">✗</span>
+                            <span style="color: var(--text-light);">Laudos ilimitados</span>
+                        </li>
+                        <li>
+                            <span class="x-icon">✗</span>
+                            <span style="color: var(--text-light);">IA de segurança</span>
+                        </li>
+                    </ul>
+                    <a href="/login?plano=prata" class="plan-cta plan-cta-secondary" data-plan="prata" itemprop="url">Começar Teste Grátis</a>
+                    <p class="plan-note">Teste grátis por 14 dias</p>
+                    <meta itemprop="price" content="97.90">
+                    <meta itemprop="priceCurrency" content="BRL">
+                    <meta itemprop="availability" content="https://schema.org/InStock">
+                </article>
+
+                <!-- PLANO OURO (DESTAQUE) -->
                 <article class="plan-card featured fade-in" itemscope itemtype="https://schema.org/Offer">
                     <div class="plan-badge">Mais Popular</div>
                     <div class="plan-header">
-                        <h3 class="plan-name">Profissional</h3>
-                        <p class="plan-description">Para profissionais que querem crescer</p>
+                        <h3 class="plan-name">🥇 Ouro</h3>
+                        <p class="plan-description">Para profissionais estabelecidos</p>
                         <div class="plan-price">
                             <span class="plan-currency">R$</span>
-                            <span class="plan-amount" data-base="97">97</span>
+                            <span class="plan-amount" data-base="137.90">137,90</span>
                         </div>
                         <p class="plan-period" data-text-monthly="por mês" data-text-quarterly="a cada 3 meses" data-text-semiannual="a cada 6 meses">por mês</p>
-                        <div class="plan-savings" data-monthly="" data-quarterly="Economize R$ 29" data-semiannual="Economize R$ 87"></div>
+                        <div class="plan-savings" data-monthly="" data-quarterly="Economize R$ 41" data-semiannual="Economize R$ 124"></div>
                     </div>
                     <ul class="plan-features">
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span><strong>Tudo do Bronze + Prata</strong></span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>50 empresas</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>100 colaboradores por empresa</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>Hub de informações completo</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span><strong>PGR ilimitado</strong></span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span><strong>Laudos LTcat ilimitados</strong></span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span><strong>Laudos de insalubridade ilimitados</strong></span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span><strong>Laudos de periculosidade ilimitados</strong></span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>API de integração</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>Suporte por chat</span>
+                        </li>
+                        <li>
+                            <span class="x-icon">✗</span>
+                            <span style="color: var(--text-light);">IA de segurança</span>
+                        </li>
+                    </ul>
+                    <a href="/login?plano=ouro" class="plan-cta plan-cta-primary" data-plan="ouro" itemprop="url">Começar Teste Grátis</a>
+                    <p class="plan-note">Teste grátis por 14 dias</p>
+                    <meta itemprop="price" content="137.90">
+                    <meta itemprop="priceCurrency" content="BRL">
+                    <meta itemprop="availability" content="https://schema.org/InStock">
+                </article>
+
+                <!-- PLANO DIAMANTE -->
+                <article class="plan-card fade-in" itemscope itemtype="https://schema.org/Offer" style="border: 3px solid var(--premium); background: linear-gradient(135deg, #FFFFFF 0%, rgba(124, 58, 237, 0.05) 100%);">
+                    <div class="plan-badge" style="background: var(--premium-gradient);">Premium</div>
+                    <div class="plan-header">
+                        <h3 class="plan-name">💎 Diamante</h3>
+                        <p class="plan-description">Solução completa e inteligente</p>
+                        <div class="plan-price">
+                            <span class="plan-currency">R$</span>
+                            <span class="plan-amount" data-base="199.90">199,90</span>
+                        </div>
+                        <p class="plan-period" data-text-monthly="por mês" data-text-quarterly="a cada 3 meses" data-text-semiannual="a cada 6 meses">por mês</p>
+                        <div class="plan-savings" data-monthly="" data-quarterly="Economize R$ 60" data-semiannual="Economize R$ 180"></div>
+                    </div>
+                    <ul class="plan-features">
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span><strong>Tudo do Ouro + Prata + Bronze</strong></span>
+                        </li>
                         <li>
                             <span class="check-icon">✓</span>
                             <span><strong>Empresas ilimitadas</strong></span>
@@ -1679,36 +1866,44 @@
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Todas as funcionalidades</span>
+                            <span><strong>🤖 IA de Segurança do Trabalho</strong></span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Controle completo de vencimentos</span>
+                            <span>Análise inteligente de riscos</span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Dashboard avançado</span>
+                            <span>Recomendações automáticas de EPIs</span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Emissão de certificados e EPIs</span>
+                            <span>Geração automática de documentos</span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Relatórios profissionais</span>
+                            <span>Previsão de vencimentos com IA</span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Suporte prioritário</span>
+                            <span>Consultor virtual de SST</span>
                         </li>
                         <li>
                             <span class="check-icon">✓</span>
-                            <span>Backup automático</span>
+                            <span>Suporte por chat, ticket e WhatsApp</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>Gerente de conta dedicado</span>
+                        </li>
+                        <li>
+                            <span class="check-icon">✓</span>
+                            <span>Treinamentos personalizados</span>
                         </li>
                     </ul>
-                    <a href="/login?plano=profissional" class="plan-cta plan-cta-primary" data-plan="profissional" itemprop="url">Começar Teste Grátis</a>
+                    <a href="/login?plano=diamante" class="plan-cta plan-cta-primary" data-plan="diamante" itemprop="url" style="background: var(--premium-gradient);">Começar Teste Grátis</a>
                     <p class="plan-note">Teste grátis por 14 dias</p>
-                    <meta itemprop="price" content="97.00">
+                    <meta itemprop="price" content="199.90">
                     <meta itemprop="priceCurrency" content="BRL">
                     <meta itemprop="availability" content="https://schema.org/InStock">
                 </article>
@@ -1892,8 +2087,10 @@
 
         // Preços base
         const prices = {
-            basico: { monthly: 67, quarterly: 181, semiannual: 342 },
-            profissional: { monthly: 97, quarterly: 262, semiannual: 495 }
+            bronze: { monthly: 67.90, quarterly: 183, semiannual: 346 },
+            prata: { monthly: 97.90, quarterly: 264, semiannual: 499 },
+            ouro: { monthly: 137.90, quarterly: 372, semiannual: 703 },
+            diamante: { monthly: 199.90, quarterly: 540, semiannual: 1019 }
         };
 
         // Descontos
@@ -1914,18 +2111,18 @@
 
             // Calcular novos preços
             planAmounts.forEach(amountEl => {
-                const basePrice = parseInt(amountEl.dataset.base);
+                const basePrice = parseFloat(amountEl.dataset.base);
                 let newPrice;
                 
                 if (period === 'monthly') {
                     newPrice = basePrice;
                 } else if (period === 'quarterly') {
-                    newPrice = Math.round(basePrice * 3 * (1 - discounts.quarterly));
+                    newPrice = Math.round(basePrice * 3 * (1 - discounts.quarterly) * 100) / 100;
                 } else if (period === 'semiannual') {
-                    newPrice = Math.round(basePrice * 6 * (1 - discounts.semiannual));
+                    newPrice = Math.round(basePrice * 6 * (1 - discounts.semiannual) * 100) / 100;
                 }
                 
-                amountEl.textContent = newPrice;
+                amountEl.textContent = newPrice.toFixed(2).replace('.', ',');
             });
 
             // Atualizar textos de período

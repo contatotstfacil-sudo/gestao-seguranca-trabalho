@@ -1839,12 +1839,22 @@ export const appRouter = router({
   asos: router({
     dashboard: protectedProcedure
       .query(async ({ ctx }) => {
-        const tenantId = (ctx.user as any)?.tenantId;
-        if (!tenantId) {
-          throw new Error("Usuário não associado a um tenant");
-        }
+        // Usar userId como tenantId (sistema atual não usa multi-tenant)
+        // Se o usuário tiver tenantId, usar; senão usar userId
+        const tenantId = (ctx.user as any)?.tenantId || ctx.user.id;
+        console.log("[ASOs Dashboard Router] tenantId usado:", tenantId, "userId:", ctx.user.id);
 
         return db.getAsoDashboard(tenantId);
+      }),
+
+    sync: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        // Sincronizar ASOs dos colaboradores
+        const tenantId = (ctx.user as any)?.tenantId || ctx.user.id;
+        console.log("[ASOs Sync Router] Sincronizando ASOs para tenantId:", tenantId);
+
+        const resultado = await db.syncAsosFromColaboradores(tenantId);
+        return resultado;
       }),
 
     list: protectedProcedure
@@ -1857,10 +1867,10 @@ export const appRouter = router({
         aVencerEmDias: z.number().optional(),
       }).optional())
       .query(async ({ input, ctx }) => {
-        const tenantId = (ctx.user as any)?.tenantId;
-        if (!tenantId) {
-          throw new Error("Usuário não associado a um tenant");
-        }
+        // Usar userId como tenantId (sistema atual não usa multi-tenant)
+        // Se o usuário tiver tenantId, usar; senão usar userId
+        const tenantId = (ctx.user as any)?.tenantId || ctx.user.id;
+        console.log("[ASOs List Router] tenantId usado:", tenantId, "userId:", ctx.user.id);
 
         return db.getAllAsos({ tenantId, ...input });
       }),

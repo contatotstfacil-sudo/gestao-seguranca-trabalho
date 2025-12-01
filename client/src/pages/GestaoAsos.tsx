@@ -227,6 +227,19 @@ export default function GestaoAsos() {
   const isRelatorios = normalizedLocation === "/gestao-asos/relatorios";
 
   const utils = trpc.useUtils();
+  const [syncExecutado, setSyncExecutado] = useState(false);
+  
+  const syncAsosMutation = trpc.asos.sync.useMutation({
+    onSuccess: (result) => {
+      toast.success(`Sincronização concluída: ${result.asosCriados} ASOs criados, ${result.asosJaExistentes} já existentes`);
+      refetchDashboard();
+      setSyncExecutado(true);
+    },
+    onError: (error) => {
+      toast.error(`Erro ao sincronizar ASOs: ${error.message}`);
+    },
+  });
+
   const { data: dashboardData, isLoading: dashboardLoading, refetch: refetchDashboard, error: dashboardError } = trpc.asos.dashboard.useQuery(undefined, {
     refetchInterval: 1000 * 30, // Atualizar a cada 30 segundos automaticamente
     refetchOnWindowFocus: true,
@@ -239,18 +252,33 @@ export default function GestaoAsos() {
         totalVencidos: data?.totalVencidos,
         cobertura: data?.cobertura,
       });
+      // Sincronizar automaticamente apenas uma vez se não houver ASOs e houver colaboradores
+      if (!syncExecutado && data?.totalAsos === 0 && data?.cobertura?.totalColaboradores > 0) {
+        console.log("[ASOs Dashboard] Nenhum ASO encontrado, sincronizando automaticamente...");
+        syncAsosMutation.mutate();
+      }
     },
     onError: (error) => {
       console.error("[ASOs Dashboard] Erro ao carregar:", error);
     },
   });
-  const { data: asosData, isLoading } = trpc.asos.list.useQuery({
+  const { data: asosData, isLoading, error: asosError } = trpc.asos.list.useQuery({
     colaboradorId: filters.colaboradorId !== "all" ? Number(filters.colaboradorId) : undefined,
     empresaId: filters.empresaId !== "all" ? Number(filters.empresaId) : undefined,
     tipoAso: filters.tipoAso !== "all" ? (filters.tipoAso as any) : undefined,
     status: filters.status !== "all" ? (filters.status as any) : undefined,
     vencidos: filters.vencidos ? true : undefined,
     aVencerEmDias: filters.aVencerEmDias ? Number(filters.aVencerEmDias) : undefined,
+  }, {
+    onSuccess: (data) => {
+      console.log("[ASOs List] Dados carregados:", {
+        total: data?.length || 0,
+        sample: data?.[0] || null,
+      });
+    },
+    onError: (error) => {
+      console.error("[ASOs List] Erro ao carregar:", error);
+    },
   });
   
   const { data: colaboradores = [] } = trpc.colaboradores.list.useQuery();
@@ -263,9 +291,13 @@ export default function GestaoAsos() {
   
   const asos = useMemo(() => {
     const todosAsos = (asosData ?? []) as any[];
-    return todosAsos.filter((aso: any) => 
+    console.log("[ASOs List] Total de ASOs recebidos:", todosAsos.length);
+    console.log("[ASOs List] Total de colaboradores disponíveis:", colaboradoresIds.size);
+    const filtrados = todosAsos.filter((aso: any) => 
       colaboradoresIds.has(aso.colaboradorId)
     );
+    console.log("[ASOs List] ASOs após filtrar por colaboradores existentes:", filtrados.length);
+    return filtrados;
   }, [asosData, colaboradoresIds]);
   const { data: empresas = [] } = trpc.empresas.list.useQuery();
 
@@ -322,17 +354,20 @@ export default function GestaoAsos() {
       await utils.asos.list.invalidate();
       await utils.asos.dashboard.invalidate();
       // O refetch será automático devido ao refetchInterval configurado
-      toast.success("Status dos ASOs atualizado!");
+      // Sem mensagem de notificação
+    },
+    onError: () => {
+      // Silencioso - sem notificação de erro também
     },
   });
 
-  const statusSyncTriggered = useRef(false);
-
-  useEffect(() => {
-    if (statusSyncTriggered.current) return;
-    statusSyncTriggered.current = true;
-    atualizarStatusMutation.mutate();
-  }, [atualizarStatusMutation]);
+  // Desabilitado: atualização automática de status ao carregar a página
+  // const statusSyncTriggered = useRef(false);
+  // useEffect(() => {
+  //   if (statusSyncTriggered.current) return;
+  //   statusSyncTriggered.current = true;
+  //   atualizarStatusMutation.mutate();
+  // }, [atualizarStatusMutation]);
 
   useEffect(() => {
     if (normalizedLocation === "/gestao-asos" || normalizedLocation === "/gestao-asos/painel") {
@@ -964,13 +999,21 @@ export default function GestaoAsos() {
   const cardTitleClass = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
   const renderActions = () => (
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogTrigger asChild>
-        <Button onClick={resetForm}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo ASO
-        </Button>
-      </DialogTrigger>
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        onClick={() => syncAsosMutation.mutate()}
+        disabled={syncAsosMutation.isPending}
+      >
+        {syncAsosMutation.isPending ? "Sincronizando..." : "Sincronizar ASOs"}
+      </Button>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogTrigger asChild>
+          <Button onClick={resetForm}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo ASO
+          </Button>
+        </DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editingId ? "Editar ASO" : "Cadastrar Novo ASO"}</DialogTitle>
@@ -1185,6 +1228,7 @@ export default function GestaoAsos() {
         </form>
       </DialogContent>
     </Dialog>
+    </div>
   );
 
   const renderPainel = () => (
@@ -1442,20 +1486,50 @@ export default function GestaoAsos() {
                 {vencimentosPorMes.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum vencimento planejado.</p>
                 ) : (
-                  vencimentosPorMes.map((item) => (
-                    <div key={item.mes} className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>{formatMonthLabel(item.mes)}</span>
-                        <span className="font-semibold">{formatNumber(item.total)}</span>
+                  vencimentosPorMes.map((item) => {
+                    const handleClick = () => {
+                      // Parse do mês (formato: "YYYY-MM")
+                      const [ano, numeroMes] = item.mes.split("-");
+                      const inicioMes = new Date(Number(ano), Number(numeroMes) - 1, 1);
+                      const fimMes = new Date(Number(ano), Number(numeroMes), 0, 23, 59, 59, 999);
+                      
+                      // Formatar datas para o formato do input (YYYY-MM-DD)
+                      const dataInicio = inicioMes.toISOString().split("T")[0];
+                      const dataFim = fimMes.toISOString().split("T")[0];
+                      
+                      // Atualizar filtros e navegar para a lista
+                      setFilters({
+                        ...filters,
+                        dataValidadeInicio: dataInicio,
+                        dataValidadeFim: dataFim,
+                      });
+                      
+                      // Navegar para a lista se não estiver lá
+                      if (normalizedLocation !== "/gestao-asos/lista") {
+                        setLocation("/gestao-asos/lista");
+                      }
+                    };
+                    
+                    return (
+                      <div 
+                        key={item.mes} 
+                        className="space-y-2 cursor-pointer hover:bg-accent/50 rounded-lg p-2 -m-2 transition-colors"
+                        onClick={handleClick}
+                        title={`Clique para ver ASOs que vencem em ${formatMonthLabel(item.mes)}`}
+                      >
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium">{formatMonthLabel(item.mes)}</span>
+                          <span className="font-semibold">{formatNumber(item.total)}</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-blue-500 transition-all hover:bg-blue-600"
+                            style={{ width: `${(item.total / maxVencimentosMes) * 100}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="h-2 w-full rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-blue-500"
-                          style={{ width: `${(item.total / maxVencimentosMes) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </CardContent>
             </Card>
@@ -1471,12 +1545,34 @@ export default function GestaoAsos() {
                 {topEmpresasVencidos.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhuma empresa com ASOs vencidos.</p>
                 ) : (
-                  topEmpresasVencidos.map((empresa) => (
-                    <div key={empresa.empresaId} className="flex items-center justify-between text-sm">
-                      <span>{empresa.empresaNome}</span>
-                      <Badge variant="secondary">{formatNumber(empresa.total)}</Badge>
-                    </div>
-                  ))
+                  topEmpresasVencidos.map((empresa) => {
+                    const handleClick = () => {
+                      // Filtrar por empresa e status vencido
+                      setFilters({
+                        ...filters,
+                        empresaId: String(empresa.empresaId),
+                        status: "vencido",
+                        vencidos: true,
+                      });
+                      
+                      // Navegar para a lista se não estiver lá
+                      if (normalizedLocation !== "/gestao-asos/lista") {
+                        setLocation("/gestao-asos/lista");
+                      }
+                    };
+                    
+                    return (
+                      <div 
+                        key={empresa.empresaId} 
+                        className="flex items-center justify-between text-sm cursor-pointer hover:bg-accent/50 rounded-lg p-2 -m-2 transition-colors"
+                        onClick={handleClick}
+                        title={`Clique para ver ASOs vencidos de ${empresa.empresaNome}`}
+                      >
+                        <span className="font-medium">{empresa.empresaNome}</span>
+                        <Badge variant="secondary">{formatNumber(empresa.total)}</Badge>
+                      </div>
+                    );
+                  })
                 )}
               </CardContent>
             </Card>
@@ -1750,6 +1846,24 @@ export default function GestaoAsos() {
           </div>
         </div>
 
+        {asosError && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-900">
+                    Erro ao carregar lista de ASOs
+                  </p>
+                  <p className="text-xs text-red-800 mt-1">
+                    {asosError.message || "Não foi possível carregar os ASOs. Tente recarregar a página."}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {colaboradores.length === 0 && (
           <Card className="border-amber-200 bg-amber-50">
             <CardContent className="p-4">
@@ -1957,7 +2071,6 @@ export default function GestaoAsos() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
                     <TableHead>Colaborador</TableHead>
                     <TableHead>Empresa</TableHead>
                     <TableHead>Tipo</TableHead>
@@ -1978,7 +2091,6 @@ export default function GestaoAsos() {
                         key={aso.id} 
                         className={!colaboradorExiste && colaboradores.length > 0 ? "bg-orange-50/50" : ""}
                       >
-                        <TableCell className="font-medium">{aso.numeroAso || "N/A"}</TableCell>
                         <TableCell>
                           {!colaboradorExiste && colaboradores.length > 0 ? (
                             <span className="text-orange-600 font-medium">{colaboradorNome}</span>
@@ -2130,67 +2242,51 @@ export default function GestaoAsos() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Gestão de ASOs</h1>
-          <p className="text-gray-600 mt-1">Gerencie os Atestados de Saúde Ocupacional</p>
+        {/* Cabeçalho com título e menu horizontal */}
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-3xl font-bold">Gestão de ASOs</h1>
+            <p className="text-gray-600 mt-1">Gerencie os Atestados de Saúde Ocupacional</p>
+          </div>
+
+          {/* Menu horizontal no cabeçalho */}
+          <div className="border-b">
+            <nav className="flex gap-1">
+              {asoSections.map((section) => {
+                const Icon = section.icon;
+                const isActive =
+                  normalizedLocation === section.path ||
+                  normalizedLocation.startsWith(`${section.path}/`);
+                return (
+                  <button
+                    key={section.id}
+                    onClick={() => setLocation(section.path)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                      isActive
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
+                    )}
+                    style={{ 
+                      transition: 'none',
+                      WebkitTapHighlightColor: 'transparent'
+                    }}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{section.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-1 space-y-4">
-            <Card className="border border-border shadow-sm">
-              <CardContent className="p-2">
-                <nav className="space-y-2">
-                  {asoSections.map((section) => {
-                    const Icon = section.icon;
-                    const isActive =
-                      normalizedLocation === section.path ||
-                      normalizedLocation.startsWith(`${section.path}/`);
-                    return (
-                      <button
-                        key={section.id}
-                        onClick={() => setLocation(section.path)}
-                        className={cn(
-                          "w-full rounded-lg px-3 py-3 text-left transition-all border border-transparent",
-                          isActive
-                            ? "bg-primary text-primary-foreground shadow-sm"
-                            : "hover:bg-accent text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <div className="flex items-start gap-3">
-                          <span
-                            className={cn(
-                              "mt-1 rounded-md p-2",
-                              isActive ? "bg-primary-foreground/20" : "bg-primary/10"
-                            )}
-                          >
-                            <Icon className={cn("h-4 w-4", isActive ? "text-primary-foreground" : "text-primary")} />
-                          </span>
-                          <div>
-                            <div className="font-semibold leading-tight">{section.label}</div>
-                            <p
-                              className={cn(
-                                "text-xs mt-1 leading-snug",
-                                isActive ? "text-primary-foreground/80" : "text-muted-foreground"
-                              )}
-                            >
-                              {section.description}
-                            </p>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </nav>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="lg:col-span-3 space-y-6">
-            {isPainel && renderPainel()}
-            {isLista && renderLista()}
-            {isRelatorios && renderRelatorios()}
-            {!isPainel && !isLista && !isRelatorios && renderPainel()}
-          </div>
+        {/* Conteúdo */}
+        <div>
+          {isPainel && renderPainel()}
+          {isLista && renderLista()}
+          {isRelatorios && renderRelatorios()}
+          {!isPainel && !isLista && !isRelatorios && renderPainel()}
         </div>
       </div>
     </DashboardLayout>

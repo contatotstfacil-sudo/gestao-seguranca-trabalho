@@ -50,7 +50,7 @@ function Router() {
         <EmpresasMenu />
       </Route>
       <Route path="/colaboradores/dashboard">
-        <DashboardColaboradores />
+        <ColaboradoresMenu />
       </Route>
       <Route path="/colaboradores/cadastrar">
         <ColaboradoresMenu />
@@ -59,7 +59,7 @@ function Router() {
         <ColaboradoresMenu />
       </Route>
       <Route path="/obras">
-        <Obras />
+        <EmpresasMenu />
       </Route>
       <Route path="/cargos">
         <Cargos />

@@ -15,25 +15,33 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarProvider,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, HardHat, Briefcase, GraduationCap, ShieldCheck, FolderTree, FileText, FileCheck, Settings, ClipboardList, Stethoscope, Home as HomeIcon, BarChart3 } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, HardHat, Briefcase, GraduationCap, ShieldCheck, FolderTree, FileText, FileCheck, Settings, ClipboardList, Stethoscope, Home as HomeIcon, BarChart3, ChevronRight } from "lucide-react";
+import { CSSProperties, useEffect, useRef, useState, memo, useMemo, useCallback, startTransition } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
-const menuItems = [
+type MenuItem = {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  path: string;
+  subItems?: { label: string; path: string; icon: React.ComponentType<{ className?: string }> }[];
+};
+
+const menuItems: MenuItem[] = [
   { icon: HomeIcon, label: "Home", path: "/" },
   { icon: Building2, label: "Cadastrar Empresas", path: "/empresas" },
   { icon: Briefcase, label: "Cargos e Setores", path: "/cargos-e-funcoes" },
   { icon: Users, label: "Cadastrar Colaboradores", path: "/colaboradores" },
-  { icon: BarChart3, label: "Dashboard de Colaboradores", path: "/colaboradores/dashboard" },
-  { icon: HardHat, label: "Obras", path: "/obras" },
   { icon: ClipboardList, label: "Ordem de Serviço - SST", path: "/ordem-servico" },
   { icon: ShieldCheck, label: "EPIs", path: "/epis" },
   { icon: GraduationCap, label: "Treinamentos", path: "/treinamentos" },
@@ -47,11 +55,142 @@ const DEFAULT_WIDTH = 220;
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 380;
 
+// Componente memoizado para item do menu com submenu - versão otimizada
+const MenuItemWithSubmenu = memo(({ 
+  item, 
+  location, 
+  isExpanded, 
+  onToggle,
+  onSubItemClick
+}: {
+  item: MenuItem;
+  location: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onSubItemClick: (path: string) => void;
+}) => {
+  // Calcular isActive de forma simples
+  const isActive = location === item.path || 
+    (item.subItems?.some(sub => location === sub.path || location.startsWith(sub.path + "/")) ?? false);
+  
+  // Memoizar subitems para evitar recriação
+  const subItems = useMemo(() => item.subItems || [], [item.subItems]);
+  
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isActive}
+        onClick={onToggle}
+        tooltip={item.label}
+        className="h-8 font-normal text-sm"
+      >
+        <item.icon className={`h-3.5 w-3.5 ${isActive ? "text-primary" : ""}`} />
+        <span className="text-xs">{item.label}</span>
+        <ChevronRight 
+          className="h-3.5 w-3.5 ml-auto" 
+          style={{ 
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.1s ease'
+          }} 
+        />
+      </SidebarMenuButton>
+            <SidebarMenuSub
+        style={{ 
+          display: isExpanded ? 'block' : 'none',
+          contain: 'layout style paint',
+          willChange: 'contents'
+        }}
+      >
+        {subItems.map(subItem => {
+          const isSubActive = location === subItem.path || location.startsWith(subItem.path + "/");
+          return (
+            <SidebarMenuSubItem key={subItem.path}>
+              <SidebarMenuSubButton
+                isActive={isSubActive}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.stopImmediatePropagation();
+                  // Navegação ultra-rápida - sem qualquer delay ou processamento
+                  onSubItemClick(subItem.path);
+                }}
+                style={{ 
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'manipulation',
+                  pointerEvents: 'auto'
+                }}
+              >
+                <subItem.icon className="h-3.5 w-3.5" />
+                <span className="text-xs">{subItem.label}</span>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          );
+        })}
+      </SidebarMenuSub>
+    </SidebarMenuItem>
+  );
+}, (prevProps, nextProps) => {
+  // Comparação customizada mais rigorosa
+  if (prevProps.item.path !== nextProps.item.path) return false;
+  if (prevProps.location !== nextProps.location) return false;
+  if (prevProps.isExpanded !== nextProps.isExpanded) return false;
+  return true;
+});
+
+MenuItemWithSubmenu.displayName = "MenuItemWithSubmenu";
+
+// Componente memoizado para item do menu simples - otimizado
+const MenuItemSimple = memo(({ 
+  item, 
+  location, 
+  onClick
+}: {
+  item: MenuItem;
+  location: string;
+  onClick: () => void;
+}) => {
+  const isActive = location === item.path || location.startsWith(item.path + "/");
+  
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isActive}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick();
+        }}
+        tooltip={item.label}
+        className="h-8 font-normal text-sm"
+        style={{ 
+          transition: 'none',
+          WebkitTapHighlightColor: 'transparent'
+        }}
+      >
+        <item.icon className={`h-3.5 w-3.5 ${isActive ? "text-primary" : ""}`} />
+        <span className="text-xs">{item.label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}, (prevProps, nextProps) => {
+  // Comparação customizada
+  return (
+    prevProps.location === nextProps.location &&
+    prevProps.item.path === nextProps.item.path
+  );
+});
+
+MenuItemSimple.displayName = "MenuItemSimple";
+
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Usar objeto em vez de Set para melhor performance
+  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
@@ -109,7 +248,11 @@ export default function DashboardLayout({
         } as CSSProperties
       }
     >
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+      <DashboardLayoutContent 
+        setSidebarWidth={setSidebarWidth}
+        expandedMenus={expandedMenus}
+        setExpandedMenus={setExpandedMenus}
+      >
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>
@@ -124,11 +267,102 @@ type DashboardLayoutContentProps = {
 function DashboardLayoutContent({
   children,
   setSidebarWidth,
-}: DashboardLayoutContentProps) {
+  expandedMenus,
+  setExpandedMenus,
+}: DashboardLayoutContentProps & {
+  expandedMenus: Record<string, boolean>;
+  setExpandedMenus: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+}) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
+  
+  // Calcular qual menu deve estar expandido baseado na rota atual (simplificado)
+  const shouldBeExpanded = useMemo(() => {
+    const result: Record<string, boolean> = {};
+    for (const item of menuItems) {
+      if (item.subItems) {
+        for (const sub of item.subItems) {
+          if (location === sub.path || location.startsWith(sub.path + "/")) {
+            result[item.path] = true;
+            break;
+          }
+        }
+      }
+    }
+    return result;
+  }, [location]);
+  
+  // Auto-expandir menu quando estiver em uma rota de submenu (usando startTransition)
+  useEffect(() => {
+    startTransition(() => {
+      setExpandedMenus(prev => {
+        let needsUpdate = false;
+        const updates: Record<string, boolean> = {};
+        
+        for (const path in shouldBeExpanded) {
+          if (shouldBeExpanded[path] && !prev[path]) {
+            updates[path] = true;
+            needsUpdate = true;
+          }
+        }
+        
+        return needsUpdate ? { ...prev, ...updates } : prev;
+      });
+    });
+  }, [location]); // Apenas quando location mudar
+  
+  // Callback ultra-otimizado para navegação instantânea
+  const handleSubItemClick = useCallback((path: string) => {
+    // Usar window.history diretamente para máxima velocidade (bypass React state)
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', path);
+      // Disparar evento customizado para atualizar o router
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    // Fallback para setLocation caso necessário
+    setLocation(path);
+  }, [setLocation]);
+  
+  // Memoizar todos os handlers de toggle em um objeto - usando startTransition para não bloquear
+  const toggleHandlers = useMemo(() => {
+    const handlers: Record<string, () => void> = {};
+    menuItems.forEach(item => {
+      if (item.subItems) {
+        handlers[item.path] = () => {
+          startTransition(() => {
+            setExpandedMenus(prev => {
+              const currentlyExpanded = prev[item.path];
+              if (currentlyExpanded) {
+                const newState = { ...prev };
+                delete newState[item.path];
+                return newState;
+              } else {
+                const newState = { ...prev, [item.path]: true };
+                if (item.subItems?.[0] && !shouldBeExpanded[item.path]) {
+                  setLocation(item.subItems[0].path);
+                }
+                return newState;
+              }
+            });
+          });
+        };
+      }
+    });
+    return handlers;
+  }, [setExpandedMenus, setLocation, shouldBeExpanded]);
+  
+  // Memoizar todos os handlers de click para itens simples
+  const simpleClickHandlers = useMemo(() => {
+    const handlers: Record<string, () => void> = {};
+    menuItems.forEach(item => {
+      if (!item.subItems) {
+        handlers[item.path] = () => setLocation(item.path);
+      }
+    });
+    return handlers;
+  }, [setLocation]);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem =
@@ -221,21 +455,41 @@ function DashboardLayoutContent({
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-1.5 py-0.5">
               {menuItems.map(item => {
-                const isActive = location === item.path;
+                const hasSubItems = Boolean(item.subItems?.length);
+                
+                if (hasSubItems) {
+                  // isExpanded: se está explicitamente expandido OU se deve estar expandido pela rota
+                  const isExpanded = Boolean(expandedMenus[item.path] || shouldBeExpanded[item.path]);
+                  
+                  return (
+                    <MenuItemWithSubmenu
+                      key={item.path}
+                      item={item}
+                      location={location}
+                      isExpanded={isExpanded}
+                      onToggle={toggleHandlers[item.path]}
+                      onSubItemClick={handleSubItemClick}
+                    />
+                  );
+                }
+                
                 return (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
-                      className={`h-8 transition-all font-normal text-sm`}
-                    >
-                      <item.icon
-                        className={`h-3.5 w-3.5 ${isActive ? "text-primary" : ""}`}
-                      />
-                      <span className="text-xs">{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  <MenuItemSimple
+                    key={item.path}
+                    item={item}
+                    location={location}
+                    onClick={() => {
+                      // Pré-carregar dados se for Colaboradores
+                      if (item.path === "/colaboradores") {
+                        // Usar startTransition para não bloquear
+                        startTransition(() => {
+                          setLocation(item.path);
+                        });
+                      } else {
+                        setLocation(item.path);
+                      }
+                    }}
+                  />
                 );
               })}
             </SidebarMenu>

@@ -45,3 +45,4 @@ O filtro de empresa no Dashboard de Colaboradores não estava atualizando os dad
    - `[colaboradores.stats] Input recebido: {"empresaId":X}` (no servidor)
 5. Os cards devem atualizar com os dados da empresa selecionada
 
+

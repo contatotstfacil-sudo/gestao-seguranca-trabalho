@@ -1031,16 +1031,16 @@ export default function Colaboradores() {
             <div>
               <Label htmlFor="search">Buscar por Nome</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 <Input
                   id="search"
                   placeholder="Digite o nome..."
                   value={filters.searchTerm}
                   onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                 />
                 {isDebouncing && (
-                  <div className="absolute right-3 top-3">
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
                   </div>
                 )}

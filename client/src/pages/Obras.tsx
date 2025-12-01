@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
-import DashboardLayout from "@/components/DashboardLayout";
 import { Plus, Pencil, Trash2, FileText } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -340,8 +339,7 @@ export default function Obras() {
   if (isLoading) return <div>Carregando...</div>;
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Obras</h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -713,7 +711,6 @@ export default function Obras() {
           </div>
         </CardContent>
       </Card>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 }

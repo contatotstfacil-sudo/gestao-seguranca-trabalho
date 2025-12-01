@@ -173,11 +173,11 @@ export async function upsertUser(userData: Partial<InsertUser>) {
 
     // Se não existe, cria novo (só se tiver dados mínimos)
     if (userData.email || userData.cpf || userData.cnpj) {
-      const result = await db.insert(users).values(userData as InsertUser);
-      const insertId = (result as any)[0]?.insertId;
-      if (insertId) {
+    const result = await db.insert(users).values(userData as InsertUser);
+    const insertId = (result as any)[0]?.insertId;
+    if (insertId) {
         return await getUserById(insertId);
-      }
+    }
     }
     
     return null;
@@ -439,12 +439,12 @@ export async function getAllColaboradores(
     // Construir WHERE clause
     let whereConditions: string[] = [];
     let params: any[] = [];
-
+    
     if (empresaId) {
       whereConditions.push("c.empresaId = ?");
       params.push(empresaId);
     }
-
+    
     if (filters?.searchTerm) {
       whereConditions.push("(c.nomeCompleto LIKE ? OR c.cpf LIKE ? OR c.rg LIKE ?)");
       const searchPattern = `%${filters.searchTerm}%`;
@@ -549,7 +549,52 @@ export async function createColaborador(data: InsertColaborador) {
     const result = await db.insert(colaboradores).values(data);
     const insertId = (result as any)[0]?.insertId;
     if (insertId) {
-      return await getColaboradorById(insertId);
+      const colaborador = await getColaboradorById(insertId);
+      
+      // Se o colaborador tem dataPrimeiroAso e validadeAso, criar ASO automaticamente
+      if (colaborador && colaborador.dataPrimeiroAso && colaborador.validadeAso) {
+        try {
+          // Verificar se já existe ASO para este colaborador
+          const asosExistentes = await db
+            .select()
+            .from(asos)
+            .where(eq(asos.colaboradorId, colaborador.id));
+
+          // Se não existe, criar
+          if (asosExistentes.length === 0) {
+            const hoje = new Date();
+            hoje.setHours(0, 0, 0, 0);
+            const dataValidade = new Date(colaborador.validadeAso);
+            dataValidade.setHours(0, 0, 0, 0);
+
+            const asoData: InsertAso = {
+              tenantId: colaborador.tenantId,
+              colaboradorId: colaborador.id,
+              empresaId: colaborador.empresaId,
+              numeroAso: null,
+              tipoAso: "admissional",
+              dataEmissao: colaborador.dataPrimeiroAso,
+              dataValidade: colaborador.validadeAso,
+              medicoResponsavel: null,
+              clinicaMedica: null,
+              crmMedico: null,
+              apto: "sim",
+              restricoes: null,
+              observacoes: "ASO criado automaticamente ao cadastrar colaborador",
+              anexoUrl: null,
+              status: dataValidade < hoje ? "vencido" : "ativo",
+            };
+
+            await db.insert(asos).values(asoData);
+            console.log(`[Database] ASO criado automaticamente para colaborador ${colaborador.id}`);
+          }
+        } catch (asoError) {
+          console.error("[Database] Erro ao criar ASO automaticamente:", asoError);
+          // Não falhar a criação do colaborador se o ASO falhar
+        }
+      }
+      
+      return colaborador;
     }
     return null;
   } catch (error) {
@@ -564,7 +609,66 @@ export async function updateColaborador(id: number, data: Partial<InsertColabora
 
   try {
     await db.update(colaboradores).set({ ...data, updatedAt: new Date() }).where(eq(colaboradores.id, id));
-    return await getColaboradorById(id);
+    const colaborador = await getColaboradorById(id);
+    
+    // Se o colaborador tem dataPrimeiroAso e validadeAso, criar/atualizar ASO automaticamente
+    if (colaborador && colaborador.dataPrimeiroAso && colaborador.validadeAso) {
+      try {
+        // Verificar se já existe ASO para este colaborador
+        const asosExistentes = await db
+          .select()
+          .from(asos)
+          .where(eq(asos.colaboradorId, colaborador.id));
+
+        // Se não existe, criar
+        if (asosExistentes.length === 0) {
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+          const dataValidade = new Date(colaborador.validadeAso);
+          dataValidade.setHours(0, 0, 0, 0);
+
+          const asoData: InsertAso = {
+            tenantId: colaborador.tenantId,
+            colaboradorId: colaborador.id,
+            empresaId: colaborador.empresaId,
+            numeroAso: null,
+            tipoAso: "admissional",
+            dataEmissao: colaborador.dataPrimeiroAso,
+            dataValidade: colaborador.validadeAso,
+            medicoResponsavel: null,
+            clinicaMedica: null,
+            crmMedico: null,
+            apto: "sim",
+            restricoes: null,
+            observacoes: "ASO criado automaticamente ao atualizar colaborador",
+            anexoUrl: null,
+            status: dataValidade < hoje ? "vencido" : "ativo",
+          };
+
+          await db.insert(asos).values(asoData);
+          console.log(`[Database] ASO criado automaticamente para colaborador ${colaborador.id}`);
+        } else {
+          // Se já existe, atualizar o status baseado na validade
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+          const dataValidade = new Date(colaborador.validadeAso);
+          dataValidade.setHours(0, 0, 0, 0);
+          
+          const novoStatus = dataValidade < hoje ? "vencido" : "ativo";
+          
+          // Atualizar todos os ASOs do colaborador
+          await db
+            .update(asos)
+            .set({ status: novoStatus as any, updatedAt: new Date() })
+            .where(eq(asos.colaboradorId, colaborador.id));
+        }
+      } catch (asoError) {
+        console.error("[Database] Erro ao criar/atualizar ASO automaticamente:", asoError);
+        // Não falhar a atualização do colaborador se o ASO falhar
+      }
+    }
+    
+    return colaborador;
   } catch (error) {
     console.error("[Database] Erro ao atualizar colaborador:", error);
     throw error;
@@ -3107,7 +3211,7 @@ export async function getAsoDashboard(tenantId: number) {
   try {
     console.log(`[Dashboard ASOs] Buscando dashboard para tenantId: ${tenantId}`);
     
-    // Buscar colaboradores primeiro
+    // Buscar colaboradores do tenant
     const colaboradoresRows = await db
       .select({ id: colaboradores.id })
       .from(colaboradores)
@@ -3116,7 +3220,7 @@ export async function getAsoDashboard(tenantId: number) {
     const totalColaboradores = colaboradoresRows.length;
     const colaboradoresIds = new Set(colaboradoresRows.map((c) => c.id));
     
-    console.log(`[Dashboard ASOs] Total de colaboradores encontrados: ${totalColaboradores}`);
+    console.log(`[Dashboard ASOs] Total de colaboradores encontrados para tenantId ${tenantId}: ${totalColaboradores}`);
 
     // Se não há colaboradores, retornar dados vazios
     if (totalColaboradores === 0) {
@@ -3142,9 +3246,13 @@ export async function getAsoDashboard(tenantId: number) {
       };
     }
 
-    // Buscar apenas ASOs de colaboradores que ainda existem
-    const todosRegistros = await db.select().from(asos).where(eq(asos.tenantId, tenantId));
-    console.log(`[Dashboard ASOs] Total de ASOs encontrados no banco: ${todosRegistros.length}`);
+    // Buscar ASOs do tenant e que tenham colaboradores existentes
+    const todosRegistros = await db
+      .select()
+      .from(asos)
+      .where(eq(asos.tenantId, tenantId));
+    
+    console.log(`[Dashboard ASOs] Total de ASOs encontrados no banco para tenantId ${tenantId}: ${todosRegistros.length}`);
     
     const registros = todosRegistros.filter((aso) => 
       aso.colaboradorId && colaboradoresIds.has(aso.colaboradorId)
@@ -3328,6 +3436,106 @@ export async function getAsoDashboard(tenantId: number) {
     };
   } catch (error) {
     console.error("[Database] Erro ao carregar dashboard de ASOs:", error);
+    throw error;
+  }
+}
+
+/**
+ * Sincroniza ASOs dos colaboradores - cria ASOs na tabela asos baseado nos dados dos colaboradores
+ * que têm dataPrimeiroAso e validadeAso mas não têm ASO cadastrado
+ */
+export async function syncAsosFromColaboradores(tenantId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    console.log(`[Sync ASOs] Iniciando sincronização para tenantId: ${tenantId}`);
+    
+    // Buscar TODOS os colaboradores que têm dataPrimeiroAso e validadeAso
+    // Não filtrar por tenantId para garantir que todos sejam processados
+    const colaboradoresComAso = await db
+      .select({
+        id: colaboradores.id,
+        tenantId: colaboradores.tenantId,
+        empresaId: colaboradores.empresaId,
+        dataPrimeiroAso: colaboradores.dataPrimeiroAso,
+        validadeAso: colaboradores.validadeAso,
+      })
+      .from(colaboradores)
+      .where(
+        and(
+          sql`${colaboradores.dataPrimeiroAso} IS NOT NULL`,
+          sql`${colaboradores.validadeAso} IS NOT NULL`
+        )
+      );
+
+    console.log(`[Sync ASOs] Encontrados ${colaboradoresComAso.length} colaboradores com dados de ASO`);
+
+    let asosCriados = 0;
+    let asosJaExistentes = 0;
+    let erros = 0;
+
+    // Para cada colaborador, verificar se já tem ASO e criar se não tiver
+    for (const colab of colaboradoresComAso) {
+      try {
+        // Verificar se já existe ASO para este colaborador
+        // Verificar por colaboradorId apenas, não por datas exatas (pode ter múltiplos ASOs)
+        const asosExistentes = await db
+          .select()
+          .from(asos)
+          .where(eq(asos.colaboradorId, colab.id));
+
+        // Se já tem ASO, pular (não criar duplicado)
+        if (asosExistentes.length > 0) {
+          asosJaExistentes++;
+          continue;
+        }
+
+        // Criar ASO baseado nos dados do colaborador
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const dataValidade = new Date(colab.validadeAso);
+        dataValidade.setHours(0, 0, 0, 0);
+
+        const asoData: InsertAso = {
+          tenantId: colab.tenantId || tenantId,
+          colaboradorId: colab.id,
+          empresaId: colab.empresaId,
+          numeroAso: null,
+          tipoAso: "admissional", // Tipo padrão
+          dataEmissao: colab.dataPrimeiroAso,
+          dataValidade: colab.validadeAso,
+          medicoResponsavel: null,
+          clinicaMedica: null,
+          crmMedico: null,
+          apto: "sim", // Padrão
+          restricoes: null,
+          observacoes: "ASO sincronizado automaticamente dos dados do colaborador",
+          anexoUrl: null,
+          status: dataValidade < hoje ? "vencido" : "ativo",
+        };
+
+        await db.insert(asos).values(asoData);
+        asosCriados++;
+
+        // Atualizar snapshot do colaborador
+        await refreshColaboradorAsoSnapshot(colab.tenantId || tenantId, colab.id);
+      } catch (error) {
+        console.error(`[Sync ASOs] Erro ao criar ASO para colaborador ${colab.id}:`, error);
+        erros++;
+      }
+    }
+
+    console.log(`[Sync ASOs] Sincronização concluída: ${asosCriados} criados, ${asosJaExistentes} já existentes, ${erros} erros`);
+
+    return {
+      totalColaboradores: colaboradoresComAso.length,
+      asosCriados,
+      asosJaExistentes,
+      erros,
+    };
+  } catch (error) {
+    console.error("[Database] Erro ao sincronizar ASOs dos colaboradores:", error);
     throw error;
   }
 }
