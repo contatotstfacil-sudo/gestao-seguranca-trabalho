@@ -13,6 +13,7 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import fs from "fs";
+import os from "os";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
@@ -228,14 +229,24 @@ async function startServer() {
       console.log("[REST API] 🔧🔧🔧 É número válido?:", typeof empresaIdFinal === 'number' && empresaIdFinal > 0);
       console.log("[REST API] ═══════════════════════════════════");
       
+      // ISOLAMENTO DE TENANT: Determinar tenantId correto
+      const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+        ? null // Admin pode ver todos os tenants
+        : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+      
+      console.log("[REST API] 🔒 tenantId determinado:", tenantId);
+      console.log("[REST API] 🔒 User role:", ctx.user.role);
+      console.log("[REST API] 🔒 User tenantId:", ctx.user.tenantId);
+      
       // Buscar dados diretamente do banco
       const { getColaboradorStats } = await import("../db");
-      console.log("[REST API] 📊 Chamando getColaboradorStats com empresaIdFinal:", empresaIdFinal);
+      console.log("[REST API] 📊 Chamando getColaboradorStats com tenantId:", tenantId, "empresaIdFinal:", empresaIdFinal);
       console.log("[REST API] 📊 empresaIdFinal tipo:", typeof empresaIdFinal);
       console.log("[REST API] 📊 empresaIdFinal é null?:", empresaIdFinal === null);
       console.log("[REST API] 📊 empresaIdFinal é undefined?:", empresaIdFinal === undefined);
       
-      const result = await getColaboradorStats(empresaIdFinal, undefined);
+      // CORREÇÃO: Passar tenantId primeiro, depois empresaId
+      const result = await getColaboradorStats(tenantId, empresaIdFinal, undefined);
       
       console.log("[REST API] ✅ RESULTADO:", {
         total: result?.total,
@@ -300,10 +311,27 @@ async function startServer() {
   }
 
   server.listen(port, "0.0.0.0", () => {
+    // Descobrir IP local para exibir
+    const networkInterfaces = os.networkInterfaces();
+    let localIP = "localhost";
+    
+    for (const interfaceName in networkInterfaces) {
+      const addresses = networkInterfaces[interfaceName];
+      for (const addr of addresses || []) {
+        if (addr.family === "IPv4" && !addr.internal && !addr.address.startsWith("169.254")) {
+          localIP = addr.address;
+          break;
+        }
+      }
+      if (localIP !== "localhost") break;
+    }
+    
     console.log(`[Server] ✅ Servidor rodando em http://localhost:${port}/`);
+    console.log(`[Server] 🌐 Acesso na rede local: http://${localIP}:${port}/`);
     console.log(`[Server] Ambiente: ${process.env.NODE_ENV || "development"}`);
     console.log(`[Server] Banco: ${process.env.DATABASE_URL ? "Configurado" : "Não configurado"}`);
-    console.log(`[Server] Acesse: http://localhost:${port}/`);
+    console.log(`[Server] ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS || "Não configurado"}`);
+    console.log(`[Server] 💡 Compartilhe este IP com outros técnicos: ${localIP}:${port}`);
   });
 
   server.on("error", (error: any) => {

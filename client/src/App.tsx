@@ -26,6 +26,7 @@ import GestaoAsos from "./pages/GestaoAsos";
 import LaudosOcupacionais from "./pages/LaudosOcupacionais";
 import RelatorioCargos from "./pages/RelatorioCargos";
 import CargosEFuncoes from "./pages/CargosEFuncoes";
+import AdminClientes from "./pages/AdminClientes";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -178,6 +179,9 @@ function Router() {
       </Route>
       <Route path="/configuracoes">
         <Configuracoes />
+      </Route>
+      <Route path="/admin/clientes">
+        <AdminClientes />
       </Route>
       <Route path="/404">
         <NotFound />

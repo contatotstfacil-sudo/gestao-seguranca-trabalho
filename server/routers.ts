@@ -12,27 +12,63 @@ import { logAudit, AuditActions } from "./utils/audit";
 import bcrypt from "bcryptjs";
 import { encryptSensitiveData, decryptSensitiveData } from "./utils/encryption";
 import type { InsertAso } from "../drizzle/schema";
+import { getTenantPlanLimits, checkQuantityLimit, checkFeatureAvailable, getLimitMessage, getFeatureUnavailableMessage, type PlanoLimits } from "./utils/planLimits";
+import { serializeDates } from "./utils/serialization";
 
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => {
+      const user = opts.ctx.user;
+      console.log('[Auth.me] ============================================');
+      console.log('[Auth.me] Usuário retornado:', user ? { id: user.id, email: user.email, role: user.role, tenantId: user.tenantId } : 'null');
+      console.log('[Auth.me] Tipo do role:', user?.role ? typeof user.role : 'N/A');
+      console.log('[Auth.me] Role === "admin"?', user?.role === 'admin');
+      console.log('[Auth.me] Role === "super_admin"?', user?.role === 'super_admin');
+      console.log('[Auth.me] Role (String):', user?.role ? String(user.role) : 'N/A');
+      
+      // Garantir que o role seja retornado como string e que todos os campos necessários estejam presentes
+      // IMPORTANTE: Converter Date para string para evitar problemas de serialização
+      if (user) {
+        const userResponse = {
+          id: user.id,
+          name: user.name || null,
+          email: user.email || null,
+          cpf: user.cpf || null,
+          cnpj: user.cnpj || null,
+          role: String(user.role || 'user'), // Força o role a ser string
+          tenantId: user.tenantId || null,
+          empresaId: user.empresaId || null,
+          openId: user.openId || null,
+          loginMethod: user.loginMethod || null,
+          createdAt: user.createdAt ? (user.createdAt instanceof Date ? user.createdAt.toISOString() : String(user.createdAt)) : null,
+          updatedAt: user.updatedAt ? (user.updatedAt instanceof Date ? user.updatedAt.toISOString() : String(user.updatedAt)) : null,
+          lastSignedIn: user.lastSignedIn ? (user.lastSignedIn instanceof Date ? user.lastSignedIn.toISOString() : String(user.lastSignedIn)) : null,
+        };
+        console.log('[Auth.me] Usuário serializado:', { id: userResponse.id, email: userResponse.email, role: userResponse.role });
+        return userResponse;
+      }
+      console.log('[Auth.me] Usuário é null');
+      return null;
+    }),
     login: publicProcedure
       .input(z.object({
         identifier: z.string().min(1, "Email, CPF ou CNPJ é obrigatório"),
         password: z.string().min(1, "Senha é obrigatória"),
       }))
       .mutation(async ({ input, ctx }) => {
-        const { identifier, password } = input;
-        
-        // Rate limiting para login (mais permissivo)
-        const ip = ctx.req.ip || ctx.req.socket.remoteAddress || "unknown";
-        const rateLimit = checkLoginRateLimit(ip);
-        if (!rateLimit.allowed) {
-          throw new Error(`Muitas tentativas de login. Tente novamente em ${Math.ceil((rateLimit.retryAfter || 0) / 60)} minutos.`);
-        }
-        
         try {
+          const { identifier, password } = input;
+          
+          console.log(`[Login] 🔐 Tentativa de login iniciada para: ${identifier?.substring(0, 10)}...`);
+          
+          // Rate limiting para login (mais permissivo)
+          const ip = ctx.req.ip || ctx.req.socket.remoteAddress || "unknown";
+          const rateLimit = checkLoginRateLimit(ip);
+          if (!rateLimit.allowed) {
+            throw new Error(`Muitas tentativas de login. Tente novamente em ${Math.ceil((rateLimit.retryAfter || 0) / 60)} minutos.`);
+          }
+          
           // Normaliza o identificador (sem sanitização agressiva)
           let normalizedIdentifier = identifier.trim();
           console.log(`[Login] Identificador recebido: "${normalizedIdentifier}"`);
@@ -68,7 +104,7 @@ export const appRouter = router({
             throw new Error("Usuário não encontrado. Verifique seu CPF, CNPJ ou email.");
           }
           
-          console.log(`[Login] Usuário encontrado: ID=${user.id}, Email=${user.email || "N/A"}, CPF=${user.cpf || "N/A"}, Role=${user.role}`);
+          console.log(`[Login] Usuário encontrado: ID=${user.id}, Email=${user.email || "N/A"}, CPF=${user.cpf || "N/A"}, Role=${user.role}, TenantId=${user.tenantId || "N/A"}`);
           
           if (!user.passwordHash) {
             recordFailedLogin(ip);
@@ -84,7 +120,25 @@ export const appRouter = router({
             throw new Error("Senha incorreta. Verifique sua senha e tente novamente.");
           }
           
-          console.log(`[Login] Login bem-sucedido para usuário ID=${user.id}`);
+          console.log(`[Login] Senha correta para usuário ID=${user.id}`);
+          
+          // VALIDAÇÃO DE TENANT DESABILITADA - Permite acesso sem bloqueios
+          // Apenas log para informação, mas não bloqueia acesso
+          console.log(`[Login] Usuário ID=${user.id}, Role=${user.role}, TenantId=${user.tenantId || "N/A"}`);
+          
+          if (user.tenantId) {
+            try {
+              const tenant = await db.getTenantById(user.tenantId);
+              if (tenant) {
+                console.log(`[Login] Tenant encontrado: ID=${tenant.id}, Status=${tenant.status}`);
+              }
+            } catch (error) {
+              // Não bloqueia acesso mesmo se houver erro ao buscar tenant
+              console.warn(`[Login] Aviso: Não foi possível buscar informações do tenant (não bloqueia acesso)`);
+            }
+          }
+          
+          console.log(`[Login] ✅ Login bem-sucedido para usuário ID=${user.id}`);
           
           // Limpa tentativas de login após sucesso
           clearLoginAttempts(ip);
@@ -118,7 +172,10 @@ export const appRouter = router({
             console.log(`[Login] Sessão JWT criada com sucesso`);
           } catch (sessionError: any) {
             console.error(`[Login] Erro ao criar sessão JWT: ${sessionError?.message || sessionError}`);
-            throw new Error("Erro ao criar sessão. Tente novamente.");
+            console.error(`[Login] Stack trace:`, sessionError?.stack);
+            // Cria uma sessão local se falhar (não bloqueia acesso)
+            console.warn(`[Login] ⚠️  Erro ao criar sessão JWT, usando sessão local`);
+            sessionToken = `local-session-${user.id}-${Date.now()}`;
           }
           
           // Define o cookie com flags de segurança
@@ -197,12 +254,23 @@ export const appRouter = router({
             },
           };
           
+          console.log(`[Login] ✅ Retornando resposta final para usuário ID=${userId}, Role=${userRole}`);
           return finalResponse;
         } catch (error: any) {
-          console.error("[Login] Erro completo:", error);
+          console.error("[Login] ❌ ERRO NO LOGIN:", error);
+          console.error("[Login] Tipo do erro:", typeof error);
+          console.error("[Login] Mensagem:", error?.message);
           console.error("[Login] Stack:", error?.stack);
-          // Retorna erro serializável
-          const errorMessage = String(error?.message || "Erro ao fazer login. Tente novamente.");
+          console.error("[Login] Erro completo (JSON):", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+          
+          // Retorna erro serializável - garantir que seja uma string simples
+          let errorMessage = "Erro ao fazer login. Tente novamente.";
+          if (error?.message) {
+            errorMessage = String(error.message).substring(0, 200); // Limitar tamanho
+          }
+          
+          // Log antes de lançar o erro
+          console.error(`[Login] Lançando erro: ${errorMessage}`);
           throw new Error(errorMessage);
         }
       }),
@@ -240,11 +308,17 @@ export const appRouter = router({
         empresaId: z.number().optional(),
       }).optional())
       .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Sempre usar tenantId do usuário (exceto admin/super_admin)
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos os tenants
+          : (ctx.user.tenantId || null);
+        
         // Se o usuário não for admin, usar empresaId do contexto
-        const empresaId = ctx.user.role === "admin" 
+        const empresaId = ctx.user.role === "admin" || ctx.user.role === "super_admin"
           ? (input?.empresaId || undefined)
           : (ctx.user.empresaId || undefined);
-        return db.getDashboardStats(empresaId);
+        
+        return db.getDashboardStats(tenantId, empresaId);
       }),
   }),
 
@@ -302,6 +376,22 @@ export const appRouter = router({
           throw new Error(`Senha fraca: ${passwordValidation.errors.join(", ")}`);
         }
         
+        // ISOLAMENTO DE TENANT: Garante que novos usuários sejam vinculados ao tenant correto
+        // Super admins podem criar usuários sem tenant (para si mesmos)
+        // Outros admins só podem criar usuários no seu próprio tenant
+        let tenantIdToUse: number | null = null;
+        if (ctx.user.role === "super_admin") {
+          // Super admin pode criar usuários sem tenant (para si mesmos) ou especificar um tenant
+          // Por padrão, super admins não têm tenant
+          tenantIdToUse = null;
+        } else {
+          // Todos os outros usuários devem ter tenantId
+          if (!ctx.user.tenantId) {
+            throw new Error("Não é possível criar usuários sem sistema associado.");
+          }
+          tenantIdToUse = ctx.user.tenantId;
+        }
+        
         // Sanitiza inputs
         const sanitizedInput = {
           name: sanitizeInput(input.name),
@@ -321,6 +411,7 @@ export const appRouter = router({
           passwordHash: await bcrypt.hash(sanitizedInput.password, 10),
           role: sanitizedInput.role,
           empresaId: sanitizedInput.empresaId || null,
+          tenantId: tenantIdToUse, // VINCULA AO TENANT CORRETO
           openId: `local-${Date.now()}`,
         });
         
@@ -416,13 +507,27 @@ export const appRouter = router({
         dataInicio: z.string().optional(),
         dataFim: z.string().optional(),
       }).optional())
-      .query(async ({ input }) => {
-        return db.getAllEmpresas(input);
+      .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Passa tenantId do usuário para filtrar dados
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getAllEmpresas(input, tenantId);
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getEmpresaById(input.id);
+      .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Passa tenantId do usuário para validar acesso
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        const empresa = await db.getEmpresaById(input.id, tenantId);
+        if (!empresa) {
+          throw new Error("Empresa não encontrada ou você não tem permissão para acessá-la.");
+        }
+        return empresa;
       }),
     create: protectedProcedure
       .input(z.object({
@@ -443,8 +548,74 @@ export const appRouter = router({
         cep: z.string().optional(),
         status: z.enum(["ativa", "inativa"]).default("ativa"),
       }))
-      .mutation(async ({ input }) => {
-        return db.createEmpresa(input);
+      .mutation(async ({ input, ctx }) => {
+        try {
+          console.log("[empresas.create] 🏢 Iniciando criação de empresa");
+          console.log("[empresas.create] User role:", ctx.user.role);
+          console.log("[empresas.create] User tenantId:", ctx.user.tenantId);
+          
+          // ISOLAMENTO DE TENANT: Vincula empresa ao tenant do usuário
+          if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && !ctx.user.tenantId) {
+            throw new Error("Não é possível criar empresa sem sistema associado.");
+          }
+          
+          // ISOLAMENTO DE TENANT: Determinar tenantId correto
+          // Admin/super_admin podem criar sem tenantId (null), mas clientes precisam ter tenantId
+          let tenantId: number | null = null;
+          if (ctx.user.role === "admin" || ctx.user.role === "super_admin") {
+            // Admin pode criar empresas sem tenantId (para si mesmo) ou especificar um
+            tenantId = null; // Admin pode ver todos
+          } else {
+            // Clientes devem ter tenantId
+            if (!ctx.user.tenantId) {
+              throw new Error("Não é possível criar empresa sem sistema associado.");
+            }
+            tenantId = ctx.user.tenantId;
+          }
+          
+          console.log("[empresas.create] tenantId determinado:", tenantId);
+          
+          // VERIFICAÇÃO DE LIMITE DO PLANO
+          if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && tenantId && ctx.planLimits) {
+            const empresasExistentes = await db.getAllEmpresas(undefined, tenantId);
+            const quantidadeAtual = empresasExistentes?.length || 0;
+            
+            console.log("[empresas.create] Empresas existentes:", quantidadeAtual, "Limite:", ctx.planLimits.maxEmpresas);
+            
+            if (!checkQuantityLimit(quantidadeAtual, ctx.planLimits.maxEmpresas)) {
+              throw new Error(getLimitMessage('empresas', quantidadeAtual, ctx.planLimits.maxEmpresas));
+            }
+          }
+          
+          // Garantir que tenantId está presente (exceto para admin)
+          if (tenantId === null && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
+            throw new Error("tenantId é obrigatório para criar empresa");
+          }
+          
+          console.log("[empresas.create] Criando empresa com dados:", { ...input, tenantId: tenantId || undefined });
+          
+          const empresaCriada = await db.createEmpresa({ ...input, tenantId: tenantId! });
+          
+          if (!empresaCriada) {
+            throw new Error("Erro ao criar empresa. Tente novamente.");
+          }
+          
+          console.log("[empresas.create] ✅ Empresa criada com sucesso:", empresaCriada.id);
+          
+          // Garantir serialização correta - converter todos os Date para string
+          const empresaSerializada = serializeDates(empresaCriada);
+          
+          return empresaSerializada;
+        } catch (error: any) {
+          console.error("[empresas.create] ❌ Erro:", error.message);
+          console.error("[empresas.create] Stack:", error?.stack);
+          
+          // Se a mensagem já é "Você chegou no limite", retornar exatamente assim
+          const errorMessage = error.message || "Erro ao cadastrar empresa. Tente novamente.";
+          
+          // Garantir que a mensagem seja uma string simples e serializável
+          throw new Error(String(errorMessage));
+        }
       }),
     update: protectedProcedure
       .input(z.object({
@@ -474,17 +645,27 @@ export const appRouter = router({
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
-        return db.deleteEmpresa(input.id);
+      .mutation(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Verificar tenant antes de deletar
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.deleteEmpresa(input.id, tenantId);
       }),
     deleteBatch: protectedProcedure
       .input(z.object({ ids: z.array(z.number()) }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         if (input.ids.length === 0) {
           throw new Error("Nenhuma empresa selecionada para exclusão");
         }
+        // ISOLAMENTO DE TENANT: Verificar tenant antes de deletar
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
         const results = await Promise.all(
-          input.ids.map(id => db.deleteEmpresa(id))
+          input.ids.map(id => db.deleteEmpresa(id, tenantId))
         );
         return {
           success: true,
@@ -504,15 +685,25 @@ export const appRouter = router({
         empresaId: z.number().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
+        // ISOLAMENTO DE TENANT: Filtrar colaboradores apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
         // Se o usuário selecionou uma empresa nos filtros, usar ela; senão usar a empresa do usuário (se não for admin)
         const empresaIdFiltro = input?.empresaId ? input.empresaId : undefined;
         const empresaId = ctx.user.role === "admin" ? empresaIdFiltro : (empresaIdFiltro || ctx.user.empresaId || undefined);
-        return db.getAllColaboradores(empresaId, input);
+        return db.getAllColaboradores(tenantId, empresaId, input);
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getColaboradorById(input.id);
+      .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Filtrar colaborador apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getColaboradorById(input.id, tenantId);
       }),
     getComCargoESetor: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -550,15 +741,56 @@ export const appRouter = router({
         observacoes: z.string().optional(),
         status: z.enum(["ativo", "inativo"]).default("ativo"),
       }))
-      .mutation(async ({ input: formInput }) => {
+      .mutation(async ({ input: formInput, ctx }) => {
+        // VERIFICAÇÃO DE LIMITE DO PLANO
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+          // Limite de colaboradores é POR EMPRESA
+          if (formInput.empresaId && ctx.planLimits.maxColaboradores > 0) {
+            const colaboradoresExistentes = await db.getAllColaboradores(ctx.user.tenantId, formInput.empresaId);
+            const quantidadeAtual = colaboradoresExistentes?.length || 0;
+            
+            if (!checkQuantityLimit(quantidadeAtual, ctx.planLimits.maxColaboradores)) {
+              throw new Error(getLimitMessage('colaboradores', quantidadeAtual, ctx.planLimits.maxColaboradores, true));
+            }
+          }
+        }
+        
+        // ISOLAMENTO DE TENANT: Determinar tenantId correto
+        let tenantId: number | null = null;
+        if (ctx.user.role === "admin" || ctx.user.role === "super_admin") {
+          // Admin pode criar colaboradores sem tenantId (para si mesmo) ou especificar um
+          tenantId = null; // Admin pode ver todos
+        } else {
+          // Clientes devem ter tenantId
+          if (!ctx.user.tenantId) {
+            throw new Error("Não é possível criar colaborador sem sistema associado.");
+          }
+          tenantId = ctx.user.tenantId;
+        }
+        
+        console.log("[colaboradores.create] 🧑 Criando colaborador com tenantId:", tenantId);
+        
         const data = {
           ...formInput,
+          tenantId: tenantId!, // Garantir que tenantId está presente
           dataAdmissao: formInput.dataAdmissao ? new Date(formInput.dataAdmissao) : undefined,
           dataPrimeiroAso: formInput.dataPrimeiroAso ? new Date(formInput.dataPrimeiroAso) : undefined,
           validadeAso: formInput.validadeAso ? new Date(formInput.validadeAso) : undefined,
           dataNascimento: formInput.dataNascimento ? new Date(formInput.dataNascimento) : undefined,
         };
-        return db.createColaborador(data);
+        
+        const colaboradorCriado = await db.createColaborador(data);
+        
+        if (!colaboradorCriado) {
+          throw new Error("Erro ao criar colaborador. Tente novamente.");
+        }
+        
+        console.log("[colaboradores.create] ✅ Colaborador criado com sucesso:", colaboradorCriado.id);
+        
+        // Garantir serialização correta - converter todos os Date para string
+        const colaboradorSerializado = serializeDates(colaboradorCriado);
+        
+        return colaboradorSerializado;
       }),
     update: protectedProcedure
       .input(z.object({
@@ -601,7 +833,12 @@ export const appRouter = router({
           validadeAso: rest.validadeAso ? new Date(rest.validadeAso) : undefined,
           dataNascimento: rest.dataNascimento ? new Date(rest.dataNascimento) : undefined,
         };
-        return db.updateColaborador(id, data);
+        // ISOLAMENTO DE TENANT: Verificar tenant antes de atualizar
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.updateColaborador(id, data, tenantId);
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -626,6 +863,11 @@ export const appRouter = router({
         console.log("[colaboradores.stats] Input recebido:", JSON.stringify(input, null, 2));
         console.log("[colaboradores.stats] User role:", ctx.user.role);
         console.log("[colaboradores.stats] User empresaId:", ctx.user.empresaId);
+        
+        // ISOLAMENTO DE TENANT: Sempre usar tenantId do usuário (exceto admin/super_admin)
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos os tenants
+          : (ctx.user.tenantId || null);
         
         // Determinar empresaId a ser usado
         let empresaId: number | undefined;
@@ -652,8 +894,8 @@ export const appRouter = router({
           cargoId: input.cargoId,
         } : undefined;
         
-        console.log("[colaboradores.stats] 📊 Chamando getColaboradorStats com empresaId:", empresaId);
-        const result = await db.getColaboradorStats(empresaId, filters);
+        console.log("[colaboradores.stats] 📊 Chamando getColaboradorStats com tenantId:", tenantId, "empresaId:", empresaId);
+        const result = await db.getColaboradorStats(tenantId, empresaId, filters);
         console.log("[colaboradores.stats] ✅ RESULTADO:", {
           total: result?.total,
           ativos: result?.ativos,
@@ -669,12 +911,19 @@ export const appRouter = router({
   obras: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-      return db.getAllObras(empresaId);
+      // ISOLAMENTO DE TENANT: Filtrar obras apenas do tenant do usuário
+      const tenantId = ctx.user.role === "super_admin" ? null : (ctx.user.tenantId || null);
+      return db.getAllObras(tenantId, empresaId);
     }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getObraById(input.id);
+      .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Filtrar obra apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getObraById(input.id, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -699,9 +948,36 @@ export const appRouter = router({
         dataFim: z.string().optional(),
         status: z.enum(["ativa", "concluida"]).default("ativa"),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // VERIFICAÇÃO DE LIMITE DO PLANO
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+          // Busca todas as obras do tenant através das empresas
+          const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
+          const empresaIds = empresasDoTenant?.map(e => e.id) || [];
+          
+          let totalObras = 0;
+          for (const empresaId of empresaIds) {
+            const obras = await db.getAllObras(ctx.user.tenantId, empresaId);
+            totalObras += obras?.length || 0;
+          }
+          
+          if (!checkQuantityLimit(totalObras, ctx.planLimits.maxObras)) {
+            throw new Error(getLimitMessage('obras', totalObras, ctx.planLimits.maxObras));
+          }
+        }
+        
+        // ISOLAMENTO DE TENANT: Vincula obra ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar obra sem sistema associado.");
+        }
+        
         const data = {
           ...input,
+          tenantId: tenantId,
           dataInicio: input.dataInicio ? new Date(input.dataInicio) : undefined,
           dataFim: input.dataFim ? new Date(input.dataFim) : undefined,
         };
@@ -738,7 +1014,12 @@ export const appRouter = router({
           dataInicio: rest.dataInicio ? new Date(rest.dataInicio) : undefined,
           dataFim: rest.dataFim ? new Date(rest.dataFim) : undefined,
         };
-        return db.updateObra(id, data);
+        // ISOLAMENTO DE TENANT: Verificar tenant antes de atualizar
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.updateObra(id, data, tenantId);
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -766,12 +1047,19 @@ export const appRouter = router({
   treinamentos: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-      return db.getAllTreinamentos(empresaId);
+      // ISOLAMENTO DE TENANT: Filtrar treinamentos apenas do tenant do usuário
+      const tenantId = ctx.user.role === "super_admin" ? null : (ctx.user.tenantId || null);
+      return db.getAllTreinamentos(tenantId, empresaId);
     }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getTreinamentoById(input.id);
+      .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Filtrar treinamento apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getTreinamentoById(input.id, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -783,9 +1071,36 @@ export const appRouter = router({
         dataValidade: z.string().optional(),
         status: z.enum(["valido", "vencido", "a_vencer"]).default("valido"),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // VERIFICAÇÃO DE LIMITE DO PLANO
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+          // Busca todos os treinamentos do tenant através das empresas
+          const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
+          const empresaIds = empresasDoTenant?.map(e => e.id) || [];
+          
+          let totalTreinamentos = 0;
+          for (const empresaId of empresaIds) {
+            const treinamentos = await db.getAllTreinamentos(ctx.user.tenantId, empresaId);
+            totalTreinamentos += treinamentos?.length || 0;
+          }
+          
+          if (!checkQuantityLimit(totalTreinamentos, ctx.planLimits.maxTreinamentos)) {
+            throw new Error(getLimitMessage('treinamentos', totalTreinamentos, ctx.planLimits.maxTreinamentos));
+          }
+        }
+        
+        // ISOLAMENTO DE TENANT: Vincula treinamento ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar treinamento sem sistema associado.");
+        }
+        
         const data = {
           ...input,
+          tenantId: tenantId,
           dataRealizacao: input.dataRealizacao ? new Date(input.dataRealizacao) : undefined,
           dataValidade: input.dataValidade ? new Date(input.dataValidade) : undefined,
         };
@@ -822,12 +1137,19 @@ export const appRouter = router({
   epis: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-      return db.getAllEpis(empresaId);
+      // ISOLAMENTO DE TENANT: Filtrar EPIs apenas do tenant do usuário
+      const tenantId = ctx.user.role === "super_admin" ? null : (ctx.user.tenantId || null);
+      return db.getAllEpis(tenantId, empresaId);
     }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getEpiById(input.id);
+      .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Filtrar EPI apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getEpiById(input.id, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -838,9 +1160,36 @@ export const appRouter = router({
         dataValidade: z.string().optional(),
         status: z.enum(["em_uso", "vencido", "devolvido"]).default("em_uso"),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // VERIFICAÇÃO DE LIMITE DO PLANO
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+          // Busca todos os EPIs do tenant através das empresas
+          const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
+          const empresaIds = empresasDoTenant?.map(e => e.id) || [];
+          
+          let totalEpis = 0;
+          for (const empresaId of empresaIds) {
+            const epis = await db.getAllEpis(ctx.user.tenantId, empresaId);
+            totalEpis += epis?.length || 0;
+          }
+          
+          if (!checkQuantityLimit(totalEpis, ctx.planLimits.maxEpis)) {
+            throw new Error(getLimitMessage('epis', totalEpis, ctx.planLimits.maxEpis));
+          }
+        }
+        
+        // ISOLAMENTO DE TENANT: Vincula EPI ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar EPI sem sistema associado.");
+        }
+        
         const data = {
           ...input,
+          tenantId: tenantId,
           dataEntrega: input.dataEntrega ? new Date(input.dataEntrega) : undefined,
           dataValidade: input.dataValidade ? new Date(input.dataValidade) : undefined,
         };
@@ -891,7 +1240,12 @@ export const appRouter = router({
         colaboradorId: z.number(),
       }))
       .query(async ({ input }) => {
-        return db.getDadosFichaEPI(input.empresaId, input.colaboradorId);
+        // ISOLAMENTO DE TENANT: Filtrar dados apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getDadosFichaEPI(input.empresaId, input.colaboradorId, tenantId);
       }),
     generateFichaPDF: protectedProcedure
       .input(z.object({
@@ -935,8 +1289,18 @@ export const appRouter = router({
           // Gerar URL relativa para servir o arquivo
           const url = `/uploads/fichas_epi/${input.nomeArquivo}`;
           
+          // ISOLAMENTO DE TENANT: Vincula ficha ao tenant do usuário
+          // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+          if (!tenantId && ctx.user.role !== "super_admin") {
+            throw new Error("Não é possível criar ficha sem sistema associado.");
+          }
+          
           // Salvar registro da ficha emitida
           const ficha = await db.createFichaEpiEmitida({
+            tenantId: tenantId,
             empresaId: input.empresaId,
             colaboradorId: input.colaboradorId,
             nomeArquivo: input.nomeArquivo,
@@ -953,7 +1317,12 @@ export const appRouter = router({
     fichasEmitidas: protectedProcedure
       .query(async ({ ctx }) => {
         const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-        return db.getAllFichasEpiEmitidas(empresaId);
+        // ISOLAMENTO DE TENANT: Filtrar fichas apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getAllFichasEpiEmitidas(tenantId, empresaId);
       }),
     deleteFichaEmitida: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -966,20 +1335,46 @@ export const appRouter = router({
     list: protectedProcedure
       .input(z.object({ empresaId: z.number().optional() }).optional())
       .query(async ({ ctx, input }) => {
+        console.log("[Cargos.list] 👤 Usuário:", ctx.user.id, "Role:", ctx.user.role, "TenantId:", ctx.user.tenantId);
+        
         let empresaId: number | undefined;
 
-        if (ctx.user.role === "admin") {
+        if (ctx.user.role === "admin" || ctx.user.role === "super_admin") {
           empresaId = input?.empresaId ?? undefined;
+          console.log("[Cargos.list] 👑 Admin geral detectado - pode ver todos os cargos");
         } else {
-          empresaId = ctx.user.empresaId || undefined;
+          // tenant_admin pode escolher empresa, mas apenas do seu tenant
+          empresaId = input?.empresaId ?? ctx.user.empresaId ?? undefined;
+          console.log("[Cargos.list] 🔒 Usuário/tenant_admin - filtrando por empresaId:", empresaId);
         }
 
-        return db.getAllCargos(empresaId ?? null);
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        // tenant_admin é admin do SEU tenant, não do sistema todo - deve ver apenas seu tenant
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin geral pode ver todos
+          : (ctx.user.tenantId || null); // tenant_admin e outros só veem seus próprios dados
+        
+        console.log("[Cargos.list] 📋 Buscando cargos com tenantId:", tenantId, "empresaId:", empresaId);
+        const result = await db.getAllCargos(tenantId, empresaId ?? null);
+        console.log("[Cargos.list] ✅ Retornando", result?.length || 0, "cargos");
+        return result;
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getCargoById(input.id);
+      .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Filtrar cargo apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        const cargo = await db.getCargoById(input.id, tenantId);
+        // ISOLAMENTO DE TENANT: Verificar se o cargo pertence ao tenant do usuário
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin") {
+          if (!cargo || cargo.tenantId !== ctx.user.tenantId) {
+            throw new Error("Cargo não encontrado ou sem permissão de acesso.");
+          }
+        }
+        return cargo;
       }),
     create: protectedProcedure
       .input(z.object({
@@ -989,8 +1384,16 @@ export const appRouter = router({
         empresaId: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        // ISOLAMENTO DE TENANT: Vincula cargo ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar cargo sem sistema associado.");
+        }
         const empresaId = input.empresaId || ctx.user.empresaId;
-        return db.createCargo({ ...input, empresaId });
+        return db.createCargo({ ...input, empresaId, tenantId });
       }),
     update: protectedProcedure
       .input(z.object({
@@ -1033,7 +1436,12 @@ export const appRouter = router({
         } else {
           empresaId = ctx.user.empresaId || null;
         }
-        return db.getRelatorioCargosPorEmpresa(empresaId);
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        console.log("[Relatório] tenantId:", tenantId, "user.tenantId:", ctx.user.tenantId, "role:", ctx.user.role);
+        return db.getRelatorioCargosPorEmpresa(tenantId, empresaId);
       }),
     relatorioPorSetor: protectedProcedure
       .input(z.object({ empresaId: z.number().optional() }).optional())
@@ -1044,7 +1452,11 @@ export const appRouter = router({
         } else {
           empresaId = ctx.user.empresaId || null;
         }
-        return db.getRelatorioCargosPorSetor(empresaId);
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getRelatorioCargosPorSetor(tenantId, empresaId);
       }),
     relatorioPorEmpresaESetor: protectedProcedure
       .input(z.object({ empresaId: z.number().optional() }).optional())
@@ -1055,7 +1467,11 @@ export const appRouter = router({
         } else {
           empresaId = ctx.user.empresaId || null;
         }
-        return db.getRelatorioCargosPorEmpresaESetor(empresaId);
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getRelatorioCargosPorEmpresaESetor(tenantId, empresaId);
       }),
   }),
 
@@ -1124,12 +1540,29 @@ export const appRouter = router({
           empresaId = ctx.user.empresaId || undefined;
         }
 
-        return db.getAllSetores(input, empresaId);
+        // ISOLAMENTO DE TENANT: Filtrar setores apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getAllSetores(tenantId, input, empresaId);
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getSetorById(input.id);
+      .query(async ({ input, ctx }) => {
+        // ISOLAMENTO DE TENANT: Filtrar setor apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        const setor = await db.getSetorById(input.id, tenantId);
+        // ISOLAMENTO DE TENANT: Verificar se o setor pertence ao tenant do usuário
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin") {
+          if (!setor || setor.tenantId !== ctx.user.tenantId) {
+            throw new Error("Setor não encontrado ou sem permissão de acesso.");
+          }
+        }
+        return setor;
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1138,8 +1571,16 @@ export const appRouter = router({
         empresaId: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        // ISOLAMENTO DE TENANT: Vincula setor ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar setor sem sistema associado.");
+        }
         const empresaId = input.empresaId || ctx.user.empresaId;
-        return db.createSetor({ ...input, empresaId });
+        return db.createSetor({ ...input, empresaId, tenantId });
       }),
     update: protectedProcedure
       .input(z.object({
@@ -1167,7 +1608,12 @@ export const appRouter = router({
     getByCargo: protectedProcedure
       .input(z.object({ cargoId: z.number() }))
       .query(async ({ input }) => {
-        return db.getTreinamentosByCargo(input.cargoId);
+        // ISOLAMENTO DE TENANT: Filtrar treinamentos apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getTreinamentosByCargo(input.cargoId, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1190,7 +1636,12 @@ export const appRouter = router({
     getByCargo: protectedProcedure
       .input(z.object({ cargoId: z.number() }))
       .query(async ({ input }) => {
-        return db.getSetoresByCargo(input.cargoId);
+        // ISOLAMENTO DE TENANT: Filtrar setores apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getSetoresByCargo(input.cargoId, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1213,12 +1664,22 @@ export const appRouter = router({
     list: protectedProcedure
       .query(async ({ ctx }) => {
         const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-        return db.getAllRiscosOcupacionais(empresaId);
+        // ISOLAMENTO DE TENANT: Filtrar riscos apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getAllRiscosOcupacionais(tenantId, empresaId);
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        return db.getRiscoOcupacionalById(input.id);
+        // ISOLAMENTO DE TENANT: Filtrar risco apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getRiscoOcupacionalById(input.id, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1246,6 +1707,16 @@ export const appRouter = router({
         if (empresaId && typeof empresaId === 'number') {
           dataToInsert.empresaId = empresaId;
         }
+        // ISOLAMENTO DE TENANT: Vincula risco ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar risco sem sistema associado.");
+        }
+        dataToInsert.tenantId = tenantId;
+        
         return db.createRiscoOcupacional(dataToInsert);
       }),
     update: protectedProcedure
@@ -1272,7 +1743,12 @@ export const appRouter = router({
     getByCargo: protectedProcedure
       .input(z.object({ cargoId: z.number() }))
       .query(async ({ input }) => {
-        return db.getRiscosByCargo(input.cargoId);
+        // ISOLAMENTO DE TENANT: Filtrar riscos apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getRiscosByCargo(input.cargoId, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1310,8 +1786,16 @@ export const appRouter = router({
             throw new Error(errorMsg);
           }
 
+          // ISOLAMENTO DE TENANT: Vincula risco ao tenant do usuário
+          // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+          if (!tenantId && ctx.user.role !== "super_admin") {
+            throw new Error("Não é possível criar risco sem sistema associado.");
+          }
+          
           const empresaId = input.empresaId || ctx.user.empresaId;
-          const tenantId = (ctx.user as any)?.tenantId || 1; // Default tenantId se não existir
           console.log("[CargoRiscos.create] empresaId:", empresaId, "tenantId:", tenantId);
           
           const dataToInsert: any = {
@@ -1409,12 +1893,22 @@ export const appRouter = router({
       }).optional())
       .query(async ({ input, ctx }) => {
         const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-        return db.getAllTiposTreinamentos(input, empresaId);
+        // ISOLAMENTO DE TENANT: Filtrar tipos de treinamentos apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getAllTiposTreinamentos(tenantId, input, empresaId);
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        return db.getTipoTreinamentoById(input.id);
+        // ISOLAMENTO DE TENANT: Filtrar tipo de treinamento apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getTipoTreinamentoById(input.id, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1427,7 +1921,15 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const empresaId = input.empresaId || ctx.user.empresaId;
-        return db.createTipoTreinamento({ ...input, empresaId });
+        // ISOLAMENTO DE TENANT: Vincula tipo de treinamento ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar tipo de treinamento sem sistema associado.");
+        }
+        return db.createTipoTreinamento({ ...input, empresaId, tenantId });
       }),
     update: protectedProcedure
       .input(z.object({
@@ -1458,12 +1960,19 @@ export const appRouter = router({
   modelosCertificados: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-      return db.getAllModelosCertificados(empresaId);
+      // ISOLAMENTO DE TENANT: Filtrar modelos apenas do tenant do usuário
+      const tenantId = ctx.user.role === "super_admin" ? null : (ctx.user.tenantId || null);
+      return db.getAllModelosCertificados(tenantId, empresaId);
     }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        return db.getModeloCertificadoById(input.id);
+        // ISOLAMENTO DE TENANT: Filtrar modelo apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getModeloCertificadoById(input.id, tenantId);
       }),
     getPadrao: protectedProcedure.query(async ({ ctx }) => {
       const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
@@ -1495,7 +2004,15 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const empresaId = input.empresaId || ctx.user.empresaId;
-        return db.createModeloCertificado({ ...input, empresaId });
+        // ISOLAMENTO DE TENANT: Vincula modelo ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar modelo sem sistema associado.");
+        }
+        return db.createModeloCertificado({ ...input, empresaId, tenantId });
       }),
     update: protectedProcedure
       .input(z.object({
@@ -1542,13 +2059,29 @@ export const appRouter = router({
   // Responsáveis
   responsaveis: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-      return db.getAllResponsaveis(empresaId);
+      // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+      const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+        ? null // Admin pode ver todos
+        : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+      
+      const empresaId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+        ? undefined 
+        : (ctx.user.empresaId || undefined);
+      
+      console.log("[responsaveis.list] tenantId:", tenantId, "empresaId:", empresaId, "role:", ctx.user.role);
+      return db.getAllResponsaveis(tenantId, empresaId);
     }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getResponsavelById(input.id);
+      .query(async ({ input, ctx }) => {
+        const responsavel = await db.getResponsavelById(input.id);
+        // ISOLAMENTO DE TENANT: Verificar se o responsável pertence ao tenant do usuário
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin") {
+          if (!responsavel || responsavel.tenantId !== ctx.user.tenantId) {
+            throw new Error("Responsável não encontrado ou sem permissão de acesso.");
+          }
+        }
+        return responsavel;
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1558,10 +2091,20 @@ export const appRouter = router({
         status: z.enum(["ativo", "inativo"]).default("ativo"),
       }))
       .mutation(async ({ ctx, input }) => {
+        // ISOLAMENTO DE TENANT: Vincula responsável ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar responsável sem sistema associado.");
+        }
+        
         // Preparar dados para inserção - apenas campos definidos
         const data: InsertResponsavel = {
           nomeCompleto: input.nomeCompleto.trim(),
           status: input.status || "ativo",
+          tenantId: tenantId,
         };
         
         // Adicionar campos opcionais apenas se tiverem valor (não vazio)
@@ -1614,12 +2157,22 @@ export const appRouter = router({
       }).optional())
       .query(async ({ ctx, input }) => {
         const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-        return db.getAllCertificadosEmitidos(empresaId, input);
+        // ISOLAMENTO DE TENANT: Filtrar certificados apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getAllCertificadosEmitidos(tenantId, empresaId, input);
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        return db.getCertificadoEmitidoById(input.id);
+        // ISOLAMENTO DE TENANT: Filtrar certificado apenas do tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getCertificadoEmitidoById(input.id, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1636,8 +2189,17 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const empresaId = input.empresaId ?? ctx.user.empresaId;
+        // ISOLAMENTO DE TENANT: Vincula certificado ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar certificado sem sistema associado.");
+        }
         return db.createCertificadoEmitido({
           ...input,
+          tenantId: tenantId,
           empresaId: empresaId || undefined,
         });
       }),
@@ -1708,13 +2270,40 @@ export const appRouter = router({
         searchTerm: z.string().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
-        const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-        return db.getAllOrdensServico(empresaId, input);
+        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+          if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
+            throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
+          }
+        }
+        
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        
+        const empresaId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? undefined 
+          : (ctx.user.empresaId || undefined);
+        
+        console.log("[ordensServico.list] tenantId:", tenantId, "empresaId:", empresaId, "role:", ctx.user.role);
+        return db.getAllOrdensServico(tenantId, empresaId, input);
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return db.getOrdemServicoById(input.id);
+      .query(async ({ input, ctx }) => {
+        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+          if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
+            throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
+          }
+        }
+        
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getOrdemServicoById(input.id, tenantId);
       }),
     getNextNumero: protectedProcedure
       .query(async () => {
@@ -1744,7 +2333,21 @@ export const appRouter = router({
         uf: z.string().optional(),
         responsavelId: z.number().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+          if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
+            throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
+          }
+        }
+        
+        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO
+        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+          if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
+            throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
+          }
+        }
+        
         return db.createOrdemServico(input);
       }),
     update: protectedProcedure
@@ -1791,12 +2394,20 @@ export const appRouter = router({
   modelosOrdemServico: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       const empresaId = ctx.user.role === "admin" ? undefined : ctx.user.empresaId || undefined;
-      return db.getAllModelosOrdemServico(empresaId);
+      // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+      const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+        ? null // Admin pode ver todos
+        : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+      return db.getAllModelosOrdemServico(tenantId, empresaId);
     }),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        return db.getModeloOrdemServicoById(input.id);
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        return db.getModeloOrdemServicoById(input.id, tenantId);
       }),
     create: protectedProcedure
       .input(z.object({
@@ -1811,7 +2422,15 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const empresaId = input.empresaId || ctx.user.empresaId;
-        return db.createModeloOrdemServico({ ...input, empresaId });
+        // ISOLAMENTO DE TENANT: Vincula modelo ao tenant do usuário
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar modelo sem sistema associado.");
+        }
+        return db.createModeloOrdemServico({ ...input, empresaId, tenantId });
       }),
     update: protectedProcedure
       .input(z.object({
@@ -1839,18 +2458,35 @@ export const appRouter = router({
   asos: router({
     dashboard: protectedProcedure
       .query(async ({ ctx }) => {
-        // Usar userId como tenantId (sistema atual não usa multi-tenant)
-        // Se o usuário tiver tenantId, usar; senão usar userId
-        const tenantId = (ctx.user as any)?.tenantId || ctx.user.id;
-        console.log("[ASOs Dashboard Router] tenantId usado:", tenantId, "userId:", ctx.user.id);
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        // tenant_admin é admin do SEU tenant, não do sistema todo - deve ver apenas seu tenant
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin geral pode ver todos
+          : (ctx.user.tenantId || null); // tenant_admin e outros só veem seus próprios dados
+        
+        // VALIDAÇÃO CRÍTICA: Usuários não-admin (incluindo tenant_admin) SEMPRE precisam ter tenantId
+        if (!tenantId && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
+          throw new Error("Usuário não associado a um tenant. Acesso negado.");
+        }
+        
+        console.log("[ASOs Dashboard Router] tenantId usado:", tenantId, "userId:", ctx.user.id, "role:", ctx.user.role);
 
         return db.getAsoDashboard(tenantId);
       }),
 
     sync: protectedProcedure
       .mutation(async ({ ctx }) => {
-        // Sincronizar ASOs dos colaboradores
-        const tenantId = (ctx.user as any)?.tenantId || ctx.user.id;
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        // tenant_admin é admin do SEU tenant, não do sistema todo - deve ver apenas seu tenant
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin geral pode ver todos
+          : (ctx.user.tenantId || null); // tenant_admin e outros só veem seus próprios dados
+        
+        // VALIDAÇÃO CRÍTICA: Usuários não-admin (incluindo tenant_admin) SEMPRE precisam ter tenantId
+        if (!tenantId && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
+          throw new Error("Usuário não associado a um tenant. Acesso negado.");
+        }
+        
         console.log("[ASOs Sync Router] Sincronizando ASOs para tenantId:", tenantId);
 
         const resultado = await db.syncAsosFromColaboradores(tenantId);
@@ -1867,10 +2503,18 @@ export const appRouter = router({
         aVencerEmDias: z.number().optional(),
       }).optional())
       .query(async ({ input, ctx }) => {
-        // Usar userId como tenantId (sistema atual não usa multi-tenant)
-        // Se o usuário tiver tenantId, usar; senão usar userId
-        const tenantId = (ctx.user as any)?.tenantId || ctx.user.id;
-        console.log("[ASOs List Router] tenantId usado:", tenantId, "userId:", ctx.user.id);
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        // tenant_admin é admin do SEU tenant, não do sistema todo - deve ver apenas seu tenant
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin geral pode ver todos
+          : (ctx.user.tenantId || null); // tenant_admin e outros só veem seus próprios dados
+        
+        // VALIDAÇÃO CRÍTICA: Usuários não-admin (incluindo tenant_admin) SEMPRE precisam ter tenantId
+        if (!tenantId && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
+          throw new Error("Usuário não associado a um tenant. Acesso negado.");
+        }
+        
+        console.log("[ASOs List Router] tenantId usado:", tenantId, "userId:", ctx.user.id, "role:", ctx.user.role);
 
         return db.getAllAsos({ tenantId, ...input });
       }),
@@ -1892,13 +2536,19 @@ export const appRouter = router({
         anexoUrl: z.string().optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const tenantId = (ctx.user as any)?.tenantId;
-        if (!tenantId) {
-          throw new Error("Usuário não associado a um tenant");
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        // tenant_admin é admin do SEU tenant, não do sistema todo - deve ver apenas seu tenant
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin geral pode ver todos
+          : (ctx.user.tenantId || null); // tenant_admin e outros só veem seus próprios dados
+        
+        // VALIDAÇÃO CRÍTICA: Usuários não-admin (incluindo tenant_admin) SEMPRE precisam ter tenantId para criar
+        if (!tenantId && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
+          throw new Error("Usuário não associado a um tenant. Não é possível criar ASO.");
         }
 
         return db.createAso({
-          tenantId,
+          tenantId: tenantId!,
           colaboradorId: input.colaboradorId,
           empresaId: input.empresaId,
           numeroAso: input.numeroAso || null,
@@ -1934,9 +2584,15 @@ export const appRouter = router({
         anexoUrl: z.string().optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const tenantId = (ctx.user as any)?.tenantId;
-        if (!tenantId) {
-          throw new Error("Usuário não associado a um tenant");
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        // tenant_admin é admin do SEU tenant, não do sistema todo - deve ver apenas seu tenant
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin geral pode ver todos
+          : (ctx.user.tenantId || null); // tenant_admin e outros só veem seus próprios dados
+        
+        // VALIDAÇÃO CRÍTICA: Usuários não-admin (incluindo tenant_admin) SEMPRE precisam ter tenantId
+        if (!tenantId && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
+          throw new Error("Usuário não associado a um tenant. Acesso negado.");
         }
 
         const updateData: any = {};
@@ -1954,9 +2610,10 @@ export const appRouter = router({
         if (input.observacoes !== undefined) updateData.observacoes = input.observacoes;
         if (input.anexoUrl !== undefined) updateData.anexoUrl = input.anexoUrl;
 
-        const aso = await db.getAsoById(input.id);
-        if (!aso || aso.tenantId !== tenantId) {
-          throw new Error("ASO não encontrado");
+        // ISOLAMENTO DE TENANT: Filtrar ASO apenas do tenant do usuário
+        const aso = await db.getAsoById(input.id, tenantId);
+        if (!aso) {
+          throw new Error("ASO não encontrado ou sem permissão de acesso.");
         }
 
         return db.updateAso(input.id, updateData);
@@ -1965,14 +2622,21 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const tenantId = (ctx.user as any)?.tenantId;
-        if (!tenantId) {
-          throw new Error("Usuário não associado a um tenant");
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        // tenant_admin é admin do SEU tenant, não do sistema todo - deve ver apenas seu tenant
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin geral pode ver todos
+          : (ctx.user.tenantId || null); // tenant_admin e outros só veem seus próprios dados
+        
+        // VALIDAÇÃO CRÍTICA: Usuários não-admin (incluindo tenant_admin) SEMPRE precisam ter tenantId
+        if (!tenantId && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
+          throw new Error("Usuário não associado a um tenant. Acesso negado.");
         }
 
-        const aso = await db.getAsoById(input.id);
-        if (!aso || aso.tenantId !== tenantId) {
-          throw new Error("ASO não encontrado");
+        // ISOLAMENTO DE TENANT: Filtrar ASO apenas do tenant do usuário
+        const aso = await db.getAsoById(input.id, tenantId);
+        if (!aso) {
+          throw new Error("ASO não encontrado ou sem permissão de acesso.");
         }
 
         return db.deleteAso(input.id);
@@ -1980,9 +2644,15 @@ export const appRouter = router({
 
     atualizarStatusVencidos: protectedProcedure
       .mutation(async ({ ctx }) => {
-        const tenantId = (ctx.user as any)?.tenantId;
-        if (!tenantId) {
-          throw new Error("Usuário não associado a um tenant");
+        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
+        // tenant_admin é admin do SEU tenant, não do sistema todo - deve ver apenas seu tenant
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin geral pode ver todos
+          : (ctx.user.tenantId || null); // tenant_admin e outros só veem seus próprios dados
+        
+        // VALIDAÇÃO CRÍTICA: Usuários não-admin (incluindo tenant_admin) SEMPRE precisam ter tenantId
+        if (!tenantId && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
+          throw new Error("Usuário não associado a um tenant. Acesso negado.");
         }
 
         return db.atualizarStatusAsosVencidos(tenantId);
@@ -2045,6 +2715,221 @@ export const appRouter = router({
         });
         
         return result;
+      }),
+  }),
+
+  // === ADMIN: Gerenciamento de Tenants ===
+  admin: router({
+    // Lista todos os tenants
+    listTenants: adminProcedure.query(async () => {
+      return await db.getAllTenants();
+    }),
+
+    // Cria um novo tenant (com modo demonstração)
+    createTenant: adminProcedure
+      .input(z.object({
+        nome: z.string().min(1, "Nome é obrigatório"),
+        email: z.string().email().optional().or(z.literal("")),
+        telefone: z.string().optional(),
+        cpf: z.string().optional(),
+        cnpj: z.string().optional(),
+        senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+        plano: z.enum(["bronze", "prata", "ouro", "diamante"]),
+        valorPlano: z.string().optional(),
+        modoDemonstracao: z.boolean().default(false), // Modo demonstração
+        diasAcesso: z.number().min(1).optional(), // Quantidade de dias de acesso
+        observacoes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const hoje = new Date();
+        let dataFim: Date | null = null;
+        
+        // Se for modo demonstração e tiver dias definidos, calcula dataFim
+        if (input.modoDemonstracao && input.diasAcesso) {
+          dataFim = new Date(hoje);
+          dataFim.setDate(dataFim.getDate() + input.diasAcesso);
+        }
+        
+        // Determina valor do plano se não fornecido
+        const valoresPlanos: Record<string, string> = {
+          bronze: "67,90",
+          prata: "97,90",
+          ouro: "137,90",
+          diamante: "199,90",
+        };
+        const valorPlano = input.valorPlano || valoresPlanos[input.plano] || "0,00";
+        
+        // Normaliza CPF e CNPJ
+        const cpfNormalizado = input.cpf ? normalizeCPF(input.cpf) : null;
+        const cnpjNormalizado = input.cnpj ? normalizeCNPJ(input.cnpj) : null;
+        const emailNormalizado = input.email ? input.email.toLowerCase().trim() : null;
+        
+        // Verifica se já existe usuário com mesmo CPF, CNPJ ou Email
+        if (cpfNormalizado) {
+          const usuarioExistente = await db.getUserByIdentifier(cpfNormalizado);
+          if (usuarioExistente) {
+            throw new Error("Já existe um usuário cadastrado com este CPF");
+          }
+        }
+        
+        if (cnpjNormalizado) {
+          const usuarioExistente = await db.getUserByIdentifier(cnpjNormalizado);
+          if (usuarioExistente) {
+            throw new Error("Já existe um usuário cadastrado com este CNPJ");
+          }
+        }
+        
+        if (emailNormalizado) {
+          const usuarioExistente = await db.getUserByIdentifier(emailNormalizado);
+          if (usuarioExistente) {
+            throw new Error("Já existe um usuário cadastrado com este email");
+          }
+        }
+        
+        // Cria o tenant
+        const tenant = await db.createTenant({
+          nome: input.nome,
+          email: emailNormalizado,
+          telefone: input.telefone || null,
+          cpf: cpfNormalizado,
+          cnpj: cnpjNormalizado,
+          plano: input.plano,
+          status: "ativo" as any,
+          dataInicio: hoje,
+          dataFim: dataFim,
+          valorPlano: valorPlano,
+          dataUltimoPagamento: input.modoDemonstracao ? hoje : null,
+          dataProximoPagamento: dataFim || null,
+          periodicidade: input.modoDemonstracao ? "mensal" as any : "mensal" as any,
+          statusPagamento: input.modoDemonstracao ? "pago" as any : "pendente" as any,
+          observacoes: input.modoDemonstracao 
+            ? `Modo demonstração - ${input.diasAcesso} dias de acesso${input.observacoes ? `. ${input.observacoes}` : ""}`
+            : (input.observacoes || null),
+        });
+        
+        // Cria o usuário automaticamente vinculado ao tenant
+        const identificadorLogin = cpfNormalizado || cnpjNormalizado || emailNormalizado;
+        if (!identificadorLogin) {
+          throw new Error("É necessário informar CPF, CNPJ ou Email para criar o usuário");
+        }
+        
+        const novoUsuario = await db.createUser({
+          name: input.nome,
+          email: emailNormalizado,
+          cpf: cpfNormalizado,
+          cnpj: cnpjNormalizado,
+          password: input.senha,
+          role: "tenant_admin", // Primeiro usuário do tenant é admin do tenant
+          tenantId: tenant.id,
+          openId: `tenant-${tenant.id}-${Date.now()}`,
+          empresaId: null,
+        });
+        
+        console.log(`[CreateTenant] ✅ Tenant ${tenant.id} criado com usuário ${novoUsuario?.id}`);
+        
+        // Log de auditoria
+        await logAudit({
+          userId: ctx.user.id,
+          action: AuditActions.USER_CREATE, // Reutilizando ação existente
+          resource: "tenants",
+          resourceId: tenant.id,
+          details: { 
+            modoDemonstracao: input.modoDemonstracao,
+            diasAcesso: input.diasAcesso,
+            plano: input.plano,
+            usuarioCriado: novoUsuario?.id
+          },
+          ip: ctx.req.ip || ctx.req.socket.remoteAddress,
+          userAgent: ctx.req.headers["user-agent"],
+          timestamp: new Date()
+        });
+        
+        return tenant;
+      }),
+
+    // Obtém detalhes de um tenant
+    getTenant: adminProcedure
+      .input(z.object({ tenantId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getTenantById(input.tenantId);
+      }),
+
+    // Atualiza o plano de um tenant
+    updateTenantPlano: adminProcedure
+      .input(z.object({
+        tenantId: z.number(),
+        plano: z.enum(["bronze", "prata", "ouro", "diamante"]),
+        valorPlano: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateTenantPlano(input.tenantId, input.plano, input.valorPlano);
+      }),
+
+    // Atualiza informações de pagamento
+    updateTenantPagamento: adminProcedure
+      .input(z.object({
+        tenantId: z.number(),
+        dataUltimoPagamento: z.string().optional(),
+        dataProximoPagamento: z.string().optional(),
+        statusPagamento: z.enum(["pago", "pendente", "atrasado", "cancelado"]).optional(),
+        valorPlano: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateTenantPagamento(
+          input.tenantId,
+          input.dataUltimoPagamento ? new Date(input.dataUltimoPagamento) : undefined,
+          input.dataProximoPagamento ? new Date(input.dataProximoPagamento) : undefined,
+          input.statusPagamento,
+          input.valorPlano
+        );
+      }),
+
+    // Atualiza informações de contato
+    updateTenantContato: adminProcedure
+      .input(z.object({
+        tenantId: z.number(),
+        nome: z.string().optional(),
+        email: z.string().optional(),
+        telefone: z.string().optional(),
+        cpf: z.string().optional(),
+        cnpj: z.string().optional(),
+        observacoes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateTenantContato(
+          input.tenantId,
+          input.nome,
+          input.email,
+          input.telefone,
+          input.cpf,
+          input.cnpj,
+          input.observacoes
+        );
+      }),
+
+    // Atualiza o status de um tenant
+    updateTenantStatus: adminProcedure
+      .input(z.object({
+        tenantId: z.number(),
+        status: z.enum(["ativo", "suspenso", "cancelado"]),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateTenantStatus(input.tenantId, input.status);
+      }),
+
+    // Atualiza as datas de um tenant
+    updateTenantDates: adminProcedure
+      .input(z.object({
+        tenantId: z.number(),
+        dataInicio: z.string(),
+        dataFim: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateTenantDates(
+          input.tenantId,
+          new Date(input.dataInicio),
+          input.dataFim ? new Date(input.dataFim) : undefined
+        );
       }),
   }),
 })

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, VerticalAlign, Header, Footer, InternalHyperlink, PageBreak, ExternalHyperlink, XmlComponent, Media, ImageRun } from "docx";
 import { saveAs } from "file-saver";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 // Nota: A biblioteca docx não suporta campos dinâmicos de página nativamente
 // Por enquanto, usamos texto fixo "Página 1 de 2"
@@ -275,20 +276,46 @@ export default function LaudoPgro() {
   const [emissaoEditandoId, setEmissaoEditandoId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [gerandoWord, setGerandoWord] = useState(false);
+  // Obter tenantId do usuário logado para isolar dados no localStorage
+  const { user } = useAuth();
+  const tenantId = useMemo(() => {
+    return user?.tenantId || user?.id || "default"; // Usar ID como fallback se não tiver tenantId
+  }, [user?.tenantId, user?.id]);
+  
   const [emissoesSelecionadas, setEmissoesSelecionadas] = useState<string[]>([]);
-  const [emissoes, setEmissoes] = useState<EmissaoPgro[]>(() => {
-    if (typeof window === "undefined") return [];
+  const [emissoes, setEmissoes] = useState<EmissaoPgro[]>([]);
+  
+  // Carregar emissões do localStorage quando o tenantId estiver disponível
+  useEffect(() => {
+    if (typeof window === "undefined" || !tenantId) return;
     try {
-      const raw = window.localStorage.getItem("pgro-emissoes");
-      if (!raw) return [];
+      // ISOLAMENTO POR TENANT: Usar chave específica do tenant
+      const storageKey = `pgro-emissoes-${tenantId}`;
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) {
+        setEmissoes([]);
+        return;
+      }
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-      return [];
+      if (Array.isArray(parsed)) {
+        // Filtrar apenas dados do tenant correto (segurança extra)
+        const filtered = parsed.filter((e: any) => {
+          // Se a emissão tiver tenantId, verificar
+          if (e.tenantId !== undefined) {
+            return e.tenantId === tenantId || (user?.role === "admin" || user?.role === "super_admin");
+          }
+          // Se não tiver tenantId, assumir que é do tenant atual (dados antigos)
+          return true;
+        });
+        setEmissoes(filtered);
+      } else {
+        setEmissoes([]);
+      }
     } catch (error) {
       console.error("Erro ao carregar emissões do localStorage", error);
-      return [];
+      setEmissoes([]);
     }
-  });
+  }, [tenantId, user?.role]);
 
   const [buscaEmissao, setBuscaEmissao] = useState("");
   const [empresaFiltroEmissao, setEmpresaFiltroEmissao] = useState<string>("__all__");
@@ -443,11 +470,18 @@ export default function LaudoPgro() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem("pgro-emissoes", JSON.stringify(emissoes));
+      // ISOLAMENTO POR TENANT: Usar chave específica do tenant
+      const storageKey = `pgro-emissoes-${tenantId}`;
+      // Garantir que todas as emissões tenham tenantId
+      const emissoesComTenant = emissoes.map(e => ({
+        ...e,
+        tenantId: e.tenantId || tenantId
+      }));
+      window.localStorage.setItem(storageKey, JSON.stringify(emissoesComTenant));
     } catch (error) {
       console.error("Erro ao salvar emissões do PGRO", error);
     }
-  }, [emissoes]);
+  }, [emissoes, tenantId]);
 
   const handleSelectEmpresa = (empresa: EmpresaResumo) => {
     setSelectedEmpresa(empresa);
@@ -735,7 +769,14 @@ export default function LaudoPgro() {
       setEmissoes(lista);
       if (typeof window !== "undefined") {
         try {
-          window.localStorage.setItem("pgro-emissoes", JSON.stringify(lista));
+          // ISOLAMENTO POR TENANT: Usar chave específica do tenant
+          const storageKey = `pgro-emissoes-${tenantId}`;
+          // Garantir que todas as emissões tenham tenantId
+          const listaComTenant = lista.map(e => ({
+            ...e,
+            tenantId: e.tenantId || tenantId
+          }));
+          window.localStorage.setItem(storageKey, JSON.stringify(listaComTenant));
         } catch (error) {
           console.error("Erro ao persistir emissões do PGRO", error);
         }

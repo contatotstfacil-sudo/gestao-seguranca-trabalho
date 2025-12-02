@@ -7,10 +7,20 @@ import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, date } f
 export const tenants = mysqlTable("tenants", {
   id: int("id").autoincrement().primaryKey(),
   nome: varchar("nome", { length: 255 }).notNull(),
-  plano: mysqlEnum("plano", ["basico", "profissional"]).notNull(),
+  email: varchar("email", { length: 320 }),
+  telefone: varchar("telefone", { length: 20 }),
+  cpf: varchar("cpf", { length: 14 }),
+  cnpj: varchar("cnpj", { length: 18 }),
+  plano: mysqlEnum("plano", ["bronze", "prata", "ouro", "diamante"]).notNull(),
   status: mysqlEnum("status", ["ativo", "suspenso", "cancelado"]).default("ativo").notNull(),
   dataInicio: date("dataInicio").notNull(),
   dataFim: date("dataFim"),
+  valorPlano: varchar("valorPlano", { length: 20 }), // Valor mensal do plano
+  dataUltimoPagamento: date("dataUltimoPagamento"), // Data do último pagamento
+  dataProximoPagamento: date("dataProximoPagamento"), // Data do próximo pagamento
+  periodicidade: mysqlEnum("periodicidade", ["mensal", "trimestral", "semestral", "anual"]).default("mensal"), // Periodicidade de pagamento
+  statusPagamento: mysqlEnum("statusPagamento", ["pago", "pendente", "atrasado", "cancelado"]).default("pendente"), // Status do pagamento
+  observacoes: text("observacoes"), // Observações sobre o cliente
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

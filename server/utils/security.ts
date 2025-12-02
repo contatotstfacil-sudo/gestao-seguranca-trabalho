@@ -181,10 +181,21 @@ export function validateOrigin(req: Request): boolean {
     return process.env.NODE_ENV === "development";
   }
   
-  // Em desenvolvimento, aceita localhost e 127.0.0.1
+  // Em desenvolvimento, aceita localhost, 127.0.0.1 e IPs da rede local (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
   if (process.env.NODE_ENV === "development") {
     const isLocalhost = origin.includes("localhost") || origin.includes("127.0.0.1");
     if (isLocalhost) return true;
+    
+    // Aceita IPs da rede local em desenvolvimento
+    const localNetworkPatterns = [
+      /^https?:\/\/192\.168\./,
+      /^https?:\/\/10\./,
+      /^https?:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\./,
+    ];
+    
+    if (origin && localNetworkPatterns.some(pattern => pattern.test(origin))) {
+      return true;
+    }
   }
   
   // Em produção, valida contra lista de origens permitidas

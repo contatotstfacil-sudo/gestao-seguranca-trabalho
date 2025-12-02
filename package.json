@@ -15,6 +15,9 @@
     "check:deploy": "tsx scripts/deploy-check.ts",
     "deploy:migrate": "tsx scripts/deploy-migrate.ts",
     "deploy:create-admin": "tsx scripts/deploy-create-admin.ts",
+    "test:system": "tsx scripts/teste-sistema-completo.ts",
+    "diagnostico:login": "tsx scripts/diagnostico-login.ts",
+    "fix:env": "tsx scripts/corrigir-variaveis-ambiente.ts",
     "check:db": "tsx -e \"import('dotenv/config').then(() => import('./server/db').then(async (db) => { const d = await db.getDb(); if (d) { await d.execute('SELECT 1'); console.log('✅ Banco OK'); } else { console.log('❌ Banco não disponível'); } process.exit(0); }))\"",
     "seed:colaboradores": "tsx ./seed-colaboradores.ts",
     "seed:adicionais": "tsx ./seed-adicionais.ts",
@@ -39,7 +42,8 @@
     "gerar-descricoes-cbo": "tsx scripts/gerar-descricoes-cbo.ts",
     "criar:colaboradores-construtoras": "tsx scripts/criar-colaboradores-construtoras.ts",
     "migrate:cargos-cbo": "tsx scripts/aplicar-migracao-cargos-cbo.ts",
-    "seed:empresas-detalhes": "tsx scripts/preencher-grau-risco-e-atividades-empresas.ts"
+    "seed:empresas-detalhes": "tsx scripts/preencher-grau-risco-e-atividades-empresas.ts",
+    "dev:rede-local": "powershell -ExecutionPolicy Bypass -File ./scripts/iniciar-servidor-rede-local.ps1"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

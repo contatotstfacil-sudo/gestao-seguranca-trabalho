@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpar Anotações do Tenant 24 (Filipi)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #dc3545;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 2px solid #0c5460;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #c82333;
+        }
+        .success {
+            background: #28a745;
+        }
+        .success:hover {
+            background: #218838;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Limpar Anotações do Tenant 24 (Filipi)</h1>
+        
+        <div class="warning">
+            <strong>⚠️ ATENÇÃO:</strong> Este script irá REMOVER todas as anotações e rotinas do tenant 24 (Filipi) que foram copiadas incorretamente do admin.
+        </div>
+        
+        <div class="info">
+            <strong>ℹ️ O que este script faz:</strong>
+            <ul>
+                <li>Remove anotações da chave: <code>home-painel-notas-tenant-24</code></li>
+                <li>Remove rotinas da chave: <code>home-painel-rotinas-tenant-24</code></li>
+                <li>Mantém as anotações do admin intactas</li>
+            </ul>
+        </div>
+        
+        <button onclick="limparAnotacoesFilipi()">🗑️ Limpar Anotações do Filipi (Tenant 24)</button>
+        <button onclick="verificarStatus()" class="success">🔍 Verificar Status</button>
+        
+        <div id="resultado"></div>
+    </div>
+
+    <script>
+        function limparAnotacoesFilipi() {
+            const resultado = document.getElementById('resultado');
+            resultado.innerHTML = '';
+            
+            try {
+                const chaveAnotacoes = 'home-painel-notas-tenant-24';
+                const chaveRotinas = 'home-painel-rotinas-tenant-24';
+                
+                // Verificar o que existe antes
+                const anotacoesAntes = localStorage.getItem(chaveAnotacoes);
+                const rotinasAntes = localStorage.getItem(chaveRotinas);
+                
+                let removidas = 0;
+                
+                if (anotacoesAntes) {
+                    localStorage.removeItem(chaveAnotacoes);
+                    removidas++;
+                    console.log(`✅ Removidas anotações do tenant 24`);
+                }
+                
+                if (rotinasAntes) {
+                    localStorage.removeItem(chaveRotinas);
+                    removidas++;
+                    console.log(`✅ Removidas rotinas do tenant 24`);
+                }
+                
+                if (removidas > 0) {
+                    resultado.className = 'result success';
+                    resultado.innerHTML = `
+                        <h3>✅ Limpeza concluída!</h3>
+                        <p><strong>${removidas} chave(s) removida(s):</strong></p>
+                        <ul>
+                            ${anotacoesAntes ? `<li>✅ Anotações removidas (${JSON.parse(anotacoesAntes).length} anotações)</li>` : ''}
+                            ${rotinasAntes ? `<li>✅ Rotinas removidas (${JSON.parse(rotinasAntes).length} rotinas)</li>` : ''}
+                        </ul>
+                        <p><strong>Próximo passo:</strong> Recarregue a página do sistema e faça login como Filipi. Ele verá apenas suas próprias anotações (vazias por enquanto).</p>
+                    `;
+                } else {
+                    resultado.className = 'result success';
+                    resultado.innerHTML = `
+                        <h3>ℹ️ Nada para limpar</h3>
+                        <p>Não foram encontradas anotações ou rotinas do tenant 24 para remover.</p>
+                    `;
+                }
+            } catch (error) {
+                resultado.className = 'result error';
+                resultado.innerHTML = `
+                    <h3>❌ Erro</h3>
+                    <p>Erro ao limpar: ${error.message}</p>
+                `;
+            }
+        }
+        
+        function verificarStatus() {
+            const resultado = document.getElementById('resultado');
+            resultado.innerHTML = '';
+            
+            const chaves = {
+                'Admin - Anotações': 'home-painel-notas-admin-desenvolvedor',
+                'Admin - Rotinas': 'home-painel-rotinas-admin-desenvolvedor',
+                'Filipi (Tenant 24) - Anotações': 'home-painel-notas-tenant-24',
+                'Filipi (Tenant 24) - Rotinas': 'home-painel-rotinas-tenant-24',
+            };
+            
+            let html = '<h3>📊 Status Atual:</h3><ul>';
+            
+            for (const [label, chave] of Object.entries(chaves)) {
+                const valor = localStorage.getItem(chave);
+                if (valor) {
+                    try {
+                        const parsed = JSON.parse(valor);
+                        const count = Array.isArray(parsed) ? parsed.length : 'N/A';
+                        html += `<li><strong>${label}:</strong> ✅ ${count} itens</li>`;
+                    } catch (e) {
+                        html += `<li><strong>${label}:</strong> ✅ Dados encontrados (erro ao parsear)</li>`;
+                    }
+                } else {
+                    html += `<li><strong>${label}:</strong> ❌ Vazio</li>`;
+                }
+            }
+            
+            html += '</ul>';
+            resultado.className = 'result success';
+            resultado.innerHTML = html;
+        }
+        
+        // Verificar status automaticamente ao carregar
+        window.onload = function() {
+            verificarStatus();
+        };
+    </script>
+</body>
+</html>
+

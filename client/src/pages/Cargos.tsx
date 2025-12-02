@@ -215,7 +215,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       }
       // Invalidar e refetch a query (sem await para evitar problemas de serialização)
       utils.cargoTreinamentos.getByCargo.invalidate({ cargoId: variables.cargoId }).then(() => {
-        refetchTreinamentos();
+      refetchTreinamentos();
         console.log("[Cargos] Query de treinamentos atualizada");
       });
     },
@@ -323,7 +323,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       }
       // Invalidar e refetch a query (sem await para evitar problemas de serialização)
       utils.cargoSetores.getByCargo.invalidate({ cargoId: variables.cargoId }).then(() => {
-        refetchSetores();
+      refetchSetores();
         console.log("[Cargos] Query de setores atualizada");
       });
     },
@@ -563,9 +563,9 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
         try {
           // Usar mutateAsync diretamente para obter a resposta
           const novoRisco = await createRiscoOcupacionalMutation.mutateAsync({
-            nomeRisco: tipoAgente,
-            tipoRisco: tipoRiscoMap[tipoAgente] || "fisico",
-            status: "ativo" as const,
+              nomeRisco: tipoAgente,
+              tipoRisco: tipoRiscoMap[tipoAgente] || "fisico",
+              status: "ativo" as const,
           });
           
           console.log(`[CriarRisco] Risco criado com sucesso. Resposta completa:`, JSON.stringify(novoRisco, null, 2));
@@ -609,7 +609,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
             shape: error?.shape
           });
           throw new Error(error?.message || error?.data?.message || `Erro ao criar risco ocupacional "${tipoAgente}"`);
-        }
+      }
       }
       
       console.log(`[CriarRisco] Risco existente encontrado: ${riscoExistente.id} para "${tipoAgente}"`);
@@ -658,11 +658,11 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
         }
         if (!dataToSave.riscoOcupacionalId || dataToSave.riscoOcupacionalId <= 0) {
           throw new Error(`RiscoOcupacionalId inválido: ${dataToSave.riscoOcupacionalId}`);
-        }
-        
+          }
+          
         // Salvar usando mutateAsync
         await createRiscoMutation.mutateAsync(dataToSave);
-        salvos++;
+                salvos++;
         console.log(`[Cargos] Risco ${salvos}/${totalRiscos} salvo: ${risco.tipoAgente}`);
       } catch (error: any) {
         console.error(`[Cargos] Erro ao salvar risco "${risco.tipoAgente}":`, error);
@@ -709,9 +709,9 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
         gradacaoEfeitos: "",
         gradacaoExposicao: "",
       });
-      setRiscosTemporarios([]);
-      setShowRiscoDialog(false);
-      refetchRiscos();
+    setRiscosTemporarios([]);
+    setShowRiscoDialog(false);
+    refetchRiscos();
     }
   };
 
@@ -1007,7 +1007,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
       const descricaoNormalizada = removerEspacos(normalizarTexto(cargo.descricao || ""));
       const cbo = (cargo.codigoCbo || cargo.cbo || "").toString().toLowerCase();
 
-      return (
+  return (
         nomeCargoNormalizado.includes(termo) ||
         descricaoNormalizada.includes(termo) ||
         cbo.includes(termo)
@@ -1083,7 +1083,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   if (isLoading) return <div>Carregando...</div>;
 
   const content = (
-    <div className="space-y-6">
+      <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">Cargos</h1>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -1406,7 +1406,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Lista de Cargos</CardTitle>
+            <CardTitle>Lista de Cargos</CardTitle>
               {selectedIds.length > 0 && (
                 <Button
                   variant="destructive"
@@ -1437,13 +1437,13 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                 return (
                   <React.Fragment key={cargo.id}>
                     <div className="border rounded-lg p-4">
-                      <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center">
                         <div className="flex items-center gap-3 flex-1">
                           <Checkbox
                             checked={selectedIds.includes(cargo.id)}
                             onCheckedChange={() => handleToggleSelect(cargo.id)}
                           />
-                          <div className="flex-1">
+                    <div className="flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <h3 className="font-semibold text-lg">{cargo.nomeCargo}</h3>
                               {(cargo.codigoCbo || cargo.cbo) && (
@@ -1457,31 +1457,31 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                               <p className="text-sm text-muted-foreground mt-2">{cargo.descricao}</p>
                             )}
                           </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setExpandedCargo(expandedCargo === cargo.id ? null : cargo.id)}
-                          >
-                            {expandedCargo === cargo.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleEdit(cargo)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(cargo.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
                     </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpandedCargo(expandedCargo === cargo.id ? null : cargo.id)}
+                      >
+                        {expandedCargo === cargo.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(cargo)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(cargo.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                        </div>
+                    </div>
+                  </div>
 
-                    {expandedCargo === cargo.id && (
-                      <div className="mt-4 space-y-4 border-t pt-4">
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-semibold">Treinamentos Obrigatórios</h4>
-                            <>
+                  {expandedCargo === cargo.id && (
+                    <div className="mt-4 space-y-4 border-t pt-4">
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="font-semibold">Treinamentos Obrigatórios</h4>
+                          <>
                             <Button
                               size="sm"
                               variant="outline"
@@ -1550,12 +1550,12 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum treinamento obrigatório cadastrado</p>
                         )}
-                        </div>
+                      </div>
 
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-semibold">Setores Vinculados</h4>
-                            <>
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="font-semibold">Setores Vinculados</h4>
+                          <>
                             <Button
                               size="sm"
                               variant="outline"
@@ -1622,12 +1622,12 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum setor vinculado</p>
                         )}
-                        </div>
+                      </div>
 
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-semibold">Riscos Ocupacionais</h4>
-                            <>
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="font-semibold">Riscos Ocupacionais</h4>
+                          <>
                             <Button
                               size="sm"
                               variant="outline"
@@ -1762,14 +1762,14 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                     </div>
                                     <div className="space-y-2">
                                       <Label htmlFor="possiveisDanosSaude">Possíveis Danos à Saúde</Label>
-                                      <Textarea
+                                        <Textarea
                                         id="possiveisDanosSaude"
                                         value={riscoForm.possiveisDanosSaude}
                                         onChange={(e) => setRiscoForm({ ...riscoForm, possiveisDanosSaude: e.target.value })}
                                         placeholder="Descreva os possíveis danos à saúde..."
-                                        rows={3}
-                                        className="w-full"
-                                      />
+                                          rows={3}
+                                          className="w-full"
+                                        />
                                     </div>
                                     <div className="space-y-2">
                                       <Label>Conclusão</Label>
@@ -1994,7 +1994,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                 </div>
                               </div>
                             </DialogContent>
-                          </Dialog>
+                            </Dialog>
                           </>
                         </div>
 
@@ -2017,7 +2017,7 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                               </div>
                             )}
                             <div className="overflow-x-auto">
-                              <Table>
+                          <Table>
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead className="w-[50px]">
@@ -2037,13 +2037,13 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                   <TableHead className="min-w-[100px]">EFEITOS</TableHead>
                                   <TableHead className="min-w-[100px]">EXPOSIÇÃO</TableHead>
                                   <TableHead className="min-w-[80px]">Ações</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {riscosByCargo.map((r: any) => (
-                                  <TableRow key={r.id}>
-                                    {editingRiscoId === r.id ? (
-                                      <>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {riscosByCargo.map((r: any) => (
+                                <TableRow key={r.id}>
+                                  {editingRiscoId === r.id ? (
+                                    <>
                                         <TableCell>
                                           <Checkbox
                                             checked={selectedRiscosIds.includes(r.id)}
@@ -2051,20 +2051,20 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                             disabled
                                           />
                                         </TableCell>
-                                        <TableCell>
-                                          <select
-                                            value={editRiscoForm.tipoAgente}
-                                            onChange={(e) => setEditRiscoForm({ ...editRiscoForm, tipoAgente: e.target.value })}
-                                            className="w-full border rounded-md px-2 py-1 h-8 text-sm"
-                                          >
-                                            <option value="">Selecione o tipo de agente</option>
-                                            <option value="Físico">Físico</option>
-                                            <option value="Químico">Químico</option>
-                                            <option value="Biológico">Biológico</option>
-                                            <option value="Ergonômico">Ergonômico</option>
-                                            <option value="Agentes Mecânicos">Agentes Mecânicos</option>
-                                          </select>
-                                        </TableCell>
+                                      <TableCell>
+                                        <select
+                                          value={editRiscoForm.tipoAgente}
+                                          onChange={(e) => setEditRiscoForm({ ...editRiscoForm, tipoAgente: e.target.value })}
+                                          className="w-full border rounded-md px-2 py-1 h-8 text-sm"
+                                        >
+                                          <option value="">Selecione o tipo de agente</option>
+                                          <option value="Físico">Físico</option>
+                                          <option value="Químico">Químico</option>
+                                          <option value="Biológico">Biológico</option>
+                                          <option value="Ergonômico">Ergonômico</option>
+                                          <option value="Agentes Mecânicos">Agentes Mecânicos</option>
+                                        </select>
+                                      </TableCell>
                                         <TableCell>
                                           <Input
                                             value={editRiscoForm.fonteGeradora}
@@ -2097,15 +2097,15 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                             className="w-full text-sm h-8"
                                           />
                                         </TableCell>
-                                        <TableCell>
-                                          <Textarea
+                                      <TableCell>
+                                        <Textarea
                                             value={editRiscoForm.possiveisDanosSaude}
                                             onChange={(e) => setEditRiscoForm({ ...editRiscoForm, possiveisDanosSaude: e.target.value })}
                                             placeholder="Danos à saúde"
-                                            rows={2}
-                                            className="w-full text-sm"
-                                          />
-                                        </TableCell>
+                                          rows={2}
+                                          className="w-full text-sm"
+                                        />
+                                      </TableCell>
                                         <TableCell>
                                           <select
                                             value={editRiscoForm.tipoAnalise}
@@ -2151,29 +2151,29 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                             className="w-full text-sm h-8"
                                           />
                                         </TableCell>
-                                        <TableCell>
-                                          <div className="flex gap-2">
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => handleSaveEditRisco(currentCargoId || r.cargoId)}
-                                              disabled={updateRiscoMutation.isPending}
-                                            >
-                                              <Check className="h-4 w-4 text-green-600" />
-                                            </Button>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={handleCancelEditRisco}
-                                              disabled={updateRiscoMutation.isPending}
-                                            >
-                                              <X className="h-4 w-4 text-red-600" />
-                                            </Button>
-                                          </div>
-                                        </TableCell>
-                                      </>
-                                    ) : (
-                                      <>
+                                      <TableCell>
+                                        <div className="flex gap-2">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleSaveEditRisco(currentCargoId || r.cargoId)}
+                                            disabled={updateRiscoMutation.isPending}
+                                          >
+                                            <Check className="h-4 w-4 text-green-600" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleCancelEditRisco}
+                                            disabled={updateRiscoMutation.isPending}
+                                          >
+                                            <X className="h-4 w-4 text-red-600" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </>
+                                  ) : (
+                                    <>
                                         <TableCell>
                                           <Checkbox
                                             checked={selectedRiscosIds.includes(r.id)}
@@ -2184,8 +2184,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                         <TableCell className="max-w-[150px]">
                                           <div className="truncate" title={r.fonteGeradora}>
                                             {r.fonteGeradora || "-"}
-                                          </div>
-                                        </TableCell>
+                                        </div>
+                                      </TableCell>
                                         <TableCell>{r.tipo || "-"}</TableCell>
                                         <TableCell className="max-w-[150px]">
                                           <div className="truncate" title={r.meioPropagacao}>
@@ -2210,16 +2210,16 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                         </TableCell>
                                         <TableCell>{r.gradacaoEfeitos || "-"}</TableCell>
                                         <TableCell>{r.gradacaoExposicao || "-"}</TableCell>
-                                        <TableCell>
-                                          <div className="flex gap-2">
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => handleEditRisco(r)}
+                                      <TableCell>
+                                        <div className="flex gap-2">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleEditRisco(r)}
                                               title="Editar risco"
-                                            >
-                                              <Pencil className="h-4 w-4" />
-                                            </Button>
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
                                             <Button
                                               variant="ghost"
                                               size="sm"
@@ -2229,30 +2229,30 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                                             >
                                               <Copy className="h-4 w-4" />
                                             </Button>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => handleDeleteRisco(r.id)}
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleDeleteRisco(r.id)}
                                               title="Excluir risco"
-                                            >
-                                              <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                          </div>
-                                        </TableCell>
-                                      </>
-                                    )}
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </>
+                                  )}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
                           </div>
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum risco ocupacional cadastrado</p>
                         )}
-                        </div>
                       </div>
-                    )}
+                    </div>
+                  )}
                   </React.Fragment>
               );
             })}

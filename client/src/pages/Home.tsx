@@ -25,8 +25,12 @@ type Nota = {
   createdAt: string;
 };
 
-const HOME_NOTAS_STORAGE_KEY = "home-painel-notas";
-const HOME_ROTINAS_STORAGE_KEY = "home-painel-rotinas";
+// Chaves de localStorage isoladas por tenantId para garantir que cada cliente veja apenas suas próprias anotações
+// Admin/desenvolvedor (sem tenantId) usa chave específica para não misturar com tenants
+const getHomeNotasStorageKey = (tenantId: number | null | undefined) => 
+  tenantId ? `home-painel-notas-tenant-${tenantId}` : "home-painel-notas-admin-desenvolvedor";
+const getHomeRotinasStorageKey = (tenantId: number | null | undefined) => 
+  tenantId ? `home-painel-rotinas-tenant-${tenantId}` : "home-painel-rotinas-admin-desenvolvedor";
 
 const prioridadeEstilos: Record<NotaPrioridade, { label: string; badgeClass: string; containerClass: string; dotClass: string }> = {
   alta: {
@@ -974,36 +978,15 @@ export default function Home() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [now, setNow] = useState(() => new Date());
-  const [anotacoes, setAnotacoes] = useState<Nota[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = window.localStorage.getItem(HOME_NOTAS_STORAGE_KEY);
-      if (!saved) return [];
-      const parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return [];
-      return parsed as Nota[];
-    } catch (error) {
-      console.error("[Home] Erro ao carregar anotações:", error);
-      return [];
-    }
-  });
+  
+  // Inicializar com array vazio - será carregado quando o usuário estiver disponível
+  const [anotacoes, setAnotacoes] = useState<Nota[]>([]);
   const [notaTitulo, setNotaTitulo] = useState("");
   const [notaDescricao, setNotaDescricao] = useState("");
   const [notaPrioridade, setNotaPrioridade] = useState<NotaPrioridade>("media");
   const [filtroNotas, setFiltroNotas] = useState<"todas" | NotaPrioridade>("todas");
-  const [rotinas, setRotinas] = useState<Rotina[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = window.localStorage.getItem(HOME_ROTINAS_STORAGE_KEY);
-      if (!saved) return [];
-      const parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return [];
-      return parsed as Rotina[];
-    } catch (error) {
-      console.error("[Home] Erro ao carregar rotinas:", error);
-      return [];
-    }
-  });
+  // Inicializar com array vazio - será carregado quando o usuário estiver disponível
+  const [rotinas, setRotinas] = useState<Rotina[]>([]);
   const [rotinaTitulo, setRotinaTitulo] = useState("");
   const [rotinaDescricao, setRotinaDescricao] = useState("");
   const [rotinaData, setRotinaData] = useState("");
@@ -1017,15 +1000,219 @@ export default function Home() {
     return () => window.clearInterval(interval);
   }, []);
 
+  // Carregar anotações quando o usuário estiver disponível
+  // IMPORTANTE: Admins sem tenantId também têm suas próprias anotações
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(HOME_NOTAS_STORAGE_KEY, JSON.stringify(anotacoes));
-  }, [anotacoes]);
+    if (typeof window === "undefined" || !user) {
+      setAnotacoes([]);
+      return;
+    }
+    
+    try {
+      const tenantId = user.tenantId;
+      const userRole = user.role;
+      const isAdmin = userRole === "admin" || userRole === "super_admin";
+      
+      // VALIDAÇÃO CRÍTICA: Determinar se é admin ou tenant
+      // Admin: role = admin/super_admin E tenantId = null/undefined
+      // Tenant: tem tenantId definido (mesmo que seja tenant_admin)
+      const isRealAdmin = isAdmin && !tenantId;
+      
+      const storageKey = getHomeNotasStorageKey(tenantId);
+      console.log(`[Home] 🔍 Carregando anotações - UserId: ${user.id}, Role: ${userRole}, TenantId: ${tenantId}, IsAdmin: ${isRealAdmin}`);
+      console.log(`[Home] 🔑 Chave de storage: ${storageKey}`);
+      
+      let saved = window.localStorage.getItem(storageKey);
+      console.log(`[Home] 📦 Anotações na chave específica: ${saved ? `✅ ENCONTRADAS (${saved.length} chars)` : '❌ NÃO ENCONTRADAS'}`);
+      
+      // MIGRAÇÃO APENAS PARA ADMIN REAL: Se for admin (sem tenantId) e não encontrar na nova chave, tentar chaves antigas
+      // IMPORTANTE: NÃO migrar para tenants - cada tenant deve ter suas próprias anotações isoladas
+      if (!saved && isRealAdmin) {
+        console.log(`[Home] 🔄 [ADMIN] Tentando migração de chaves antigas...`);
+        const oldKeys = [
+          "home-painel-notas", // Chave original
+          "home-painel-notas-admin", // Chave intermediária que pode ter sido usada
+        ];
+        
+        for (const oldKey of oldKeys) {
+          const oldSaved = window.localStorage.getItem(oldKey);
+          if (oldSaved) {
+            console.log(`[Home] ✅ [ADMIN] Encontradas anotações na chave antiga: ${oldKey}`);
+            console.log(`[Home] [ADMIN] Migrando ${oldSaved.length} caracteres para nova chave: ${storageKey}`);
+            // Migrar para a nova chave
+            window.localStorage.setItem(storageKey, oldSaved);
+            saved = oldSaved;
+            console.log(`[Home] ✅ [ADMIN] Migração concluída com sucesso!`);
+            break;
+          }
+        }
+      } else if (!saved && tenantId) {
+        // Para tenants, NUNCA fazer migração - devem começar do zero
+        console.log(`[Home] ℹ️ [TENANT ${tenantId}] Nenhuma anotação encontrada - iniciando do zero (SEM migração)`);
+      } else if (!saved && !isRealAdmin && !tenantId) {
+        // Usuário sem tenantId mas não é admin - não deve acontecer, mas por segurança
+        console.warn(`[Home] ⚠️ Usuário sem tenantId mas não é admin - iniciando do zero`);
+      }
+      
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // VALIDAÇÃO DE SEGURANÇA: Se for tenant e encontrar anotações que parecem ser do admin, limpar
+          if (tenantId && parsed.length > 0) {
+            // Verificar se as anotações parecem ser do admin (podem ter sido copiadas incorretamente)
+            const adminKey = getHomeNotasStorageKey(null);
+            const adminSaved = window.localStorage.getItem(adminKey);
+            if (adminSaved) {
+              try {
+                const adminAnotacoes = JSON.parse(adminSaved);
+                if (Array.isArray(adminAnotacoes) && adminAnotacoes.length > 0) {
+                  // Comparar se são as mesmas anotações
+                  const saoIguais = JSON.stringify(parsed) === JSON.stringify(adminAnotacoes);
+                  if (saoIguais) {
+                    console.warn(`[Home] ⚠️ [TENANT ${tenantId}] Anotações parecem ser do admin - LIMPANDO!`);
+                    window.localStorage.removeItem(storageKey);
+                    setAnotacoes([]);
+                    return;
+                  }
+                }
+              } catch (e) {
+                // Ignorar erro de comparação
+              }
+            }
+          }
+          
+          console.log(`[Home] ✅ Carregando ${parsed.length} anotações para ${isRealAdmin ? 'ADMIN' : `TENANT ${tenantId}`}`);
+          setAnotacoes(parsed as Nota[]);
+        } else {
+          console.warn("[Home] ⚠️ Dados salvos não são um array válido:", parsed);
+          setAnotacoes([]);
+        }
+      } else {
+        console.log(`[Home] ℹ️ Nenhuma anotação encontrada para ${isRealAdmin ? 'ADMIN' : `TENANT ${tenantId}`}`);
+        setAnotacoes([]);
+      }
+    } catch (error) {
+      console.error("[Home] ❌ Erro ao carregar anotações:", error);
+      setAnotacoes([]);
+    }
+  }, [user?.tenantId, user?.id, user?.role]); // Recarrega quando tenantId, userId OU role mudar
 
+  // Carregar rotinas quando o usuário estiver disponível
+  // IMPORTANTE: Admins sem tenantId também têm suas próprias rotinas
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(HOME_ROTINAS_STORAGE_KEY, JSON.stringify(rotinas));
-  }, [rotinas]);
+    if (typeof window === "undefined" || !user) {
+      setRotinas([]);
+      return;
+    }
+    
+    try {
+      const tenantId = user.tenantId;
+      const userRole = user.role;
+      const isAdmin = userRole === "admin" || userRole === "super_admin";
+      
+      // VALIDAÇÃO CRÍTICA: Determinar se é admin ou tenant
+      // Admin: role = admin/super_admin E tenantId = null/undefined
+      // Tenant: tem tenantId definido (mesmo que seja tenant_admin)
+      const isRealAdmin = isAdmin && !tenantId;
+      
+      const storageKey = getHomeRotinasStorageKey(tenantId);
+      console.log(`[Home] 🔍 Carregando rotinas - UserId: ${user.id}, Role: ${userRole}, TenantId: ${tenantId}, IsAdmin: ${isRealAdmin}`);
+      console.log(`[Home] 🔑 Chave de storage: ${storageKey}`);
+      
+      let saved = window.localStorage.getItem(storageKey);
+      console.log(`[Home] 📦 Rotinas na chave específica: ${saved ? `✅ ENCONTRADAS (${saved.length} chars)` : '❌ NÃO ENCONTRADAS'}`);
+      
+      // MIGRAÇÃO APENAS PARA ADMIN REAL: Se for admin (sem tenantId) e não encontrar na nova chave, tentar chaves antigas
+      // IMPORTANTE: NÃO migrar para tenants - cada tenant deve ter suas próprias rotinas isoladas
+      if (!saved && isRealAdmin) {
+        console.log(`[Home] 🔄 [ADMIN] Tentando migração de chaves antigas...`);
+        const oldKeys = [
+          "home-painel-rotinas", // Chave original
+          "home-painel-rotinas-admin", // Chave intermediária que pode ter sido usada
+        ];
+        
+        for (const oldKey of oldKeys) {
+          const oldSaved = window.localStorage.getItem(oldKey);
+          if (oldSaved) {
+            console.log(`[Home] ✅ [ADMIN] Encontradas rotinas na chave antiga: ${oldKey}`);
+            console.log(`[Home] [ADMIN] Migrando ${oldSaved.length} caracteres para nova chave: ${storageKey}`);
+            // Migrar para a nova chave
+            window.localStorage.setItem(storageKey, oldSaved);
+            saved = oldSaved;
+            console.log(`[Home] ✅ [ADMIN] Migração concluída com sucesso!`);
+            break;
+          }
+        }
+      } else if (!saved && tenantId) {
+        // Para tenants, NUNCA fazer migração - devem começar do zero
+        console.log(`[Home] ℹ️ [TENANT ${tenantId}] Nenhuma rotina encontrada - iniciando do zero (SEM migração)`);
+      } else if (!saved && !isRealAdmin && !tenantId) {
+        // Usuário sem tenantId mas não é admin - não deve acontecer, mas por segurança
+        console.warn(`[Home] ⚠️ Usuário sem tenantId mas não é admin - iniciando do zero`);
+      }
+      
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // VALIDAÇÃO DE SEGURANÇA: Se for tenant e encontrar rotinas que parecem ser do admin, limpar
+          if (tenantId && parsed.length > 0) {
+            // Verificar se as rotinas parecem ser do admin (podem ter sido copiadas incorretamente)
+            const adminKey = getHomeRotinasStorageKey(null);
+            const adminSaved = window.localStorage.getItem(adminKey);
+            if (adminSaved) {
+              try {
+                const adminRotinas = JSON.parse(adminSaved);
+                if (Array.isArray(adminRotinas) && adminRotinas.length > 0) {
+                  // Comparar se são as mesmas rotinas
+                  const saoIguais = JSON.stringify(parsed) === JSON.stringify(adminRotinas);
+                  if (saoIguais) {
+                    console.warn(`[Home] ⚠️ [TENANT ${tenantId}] Rotinas parecem ser do admin - LIMPANDO!`);
+                    window.localStorage.removeItem(storageKey);
+                    setRotinas([]);
+                    return;
+                  }
+                }
+              } catch (e) {
+                // Ignorar erro de comparação
+              }
+            }
+          }
+          
+          console.log(`[Home] ✅ Carregando ${parsed.length} rotinas para ${isRealAdmin ? 'ADMIN' : `TENANT ${tenantId}`}`);
+          setRotinas(parsed as Rotina[]);
+        } else {
+          console.warn("[Home] ⚠️ Dados salvos não são um array válido:", parsed);
+          setRotinas([]);
+        }
+      } else {
+        console.log(`[Home] ℹ️ Nenhuma rotina encontrada para ${isRealAdmin ? 'ADMIN' : `TENANT ${tenantId}`}`);
+        setRotinas([]);
+      }
+    } catch (error) {
+      console.error("[Home] ❌ Erro ao carregar rotinas:", error);
+      setRotinas([]);
+    }
+  }, [user?.tenantId, user?.id, user?.role]); // Recarrega quando tenantId, userId OU role mudar
+
+  // Salvar anotações no localStorage quando mudarem
+  // IMPORTANTE: Admins sem tenantId também salvam suas anotações
+  useEffect(() => {
+    if (typeof window === "undefined" || !user) return;
+    const storageKey = getHomeNotasStorageKey(user.tenantId);
+    console.log(`[Home] 💾 Salvando ${anotacoes.length} anotações na chave: ${storageKey} (tenantId: ${user.tenantId || 'admin'})`);
+    window.localStorage.setItem(storageKey, JSON.stringify(anotacoes));
+    console.log(`[Home] ✅ Anotações salvas com sucesso!`);
+  }, [anotacoes, user?.tenantId, user?.id]);
+
+  // Salvar rotinas no localStorage quando mudarem
+  // IMPORTANTE: Admins sem tenantId também salvam suas rotinas
+  useEffect(() => {
+    if (typeof window === "undefined" || !user) return;
+    const storageKey = getHomeRotinasStorageKey(user.tenantId);
+    console.log(`[Home] 💾 Salvando ${rotinas.length} rotinas na chave: ${storageKey} (tenantId: ${user.tenantId || 'admin'})`);
+    window.localStorage.setItem(storageKey, JSON.stringify(rotinas));
+    console.log(`[Home] ✅ Rotinas salvas com sucesso!`);
+  }, [rotinas, user?.tenantId, user?.id]);
 
   const primeiroNome = useMemo(() => {
     if (!user?.name) return "Usuário";

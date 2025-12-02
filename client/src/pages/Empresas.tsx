@@ -107,7 +107,25 @@ export default function Empresas() {
       resetForm();
     },
     onError: (error) => {
-      toast.error("Erro ao cadastrar empresa: " + error.message);
+      // Extrair mensagem de erro de várias formas possíveis
+      let errorMessage = "Erro ao cadastrar empresa";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.data?.message) {
+        errorMessage = error.data.message;
+      } else if (error.shape?.message) {
+        errorMessage = error.shape.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      // Se a mensagem contém "Você chegou no limite", mostrar apenas essa mensagem
+      if (errorMessage.includes("Você chegou no limite")) {
+        toast.error("Você chegou no limite.");
+      } else {
+        toast.error("Erro ao cadastrar empresa: " + errorMessage);
+      }
     },
   });
 

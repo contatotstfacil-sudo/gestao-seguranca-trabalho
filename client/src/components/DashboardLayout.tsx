@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, HardHat, Briefcase, GraduationCap, ShieldCheck, FolderTree, FileText, FileCheck, Settings, ClipboardList, Stethoscope, Home as HomeIcon, BarChart3, ChevronRight } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, HardHat, Briefcase, GraduationCap, ShieldCheck, FolderTree, FileText, FileCheck, Settings, ClipboardList, Stethoscope, Home as HomeIcon, BarChart3, ChevronRight, Shield } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState, memo, useMemo, useCallback, startTransition } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -49,6 +49,9 @@ const menuItems: MenuItem[] = [
   { icon: FileText, label: "Laudos Ocupacionais", path: "/laudos-ocupacionais" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
+
+// Menu de Administração (sempre disponível para adicionar quando necessário)
+const adminMenuItem: MenuItem = { icon: Shield, label: "Administração", path: "/admin/clientes" };
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 220;
@@ -201,6 +204,19 @@ export default function DashboardLayout({
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
   }, [sidebarWidth]);
 
+  // Log detalhado do usuário para debug
+  useEffect(() => {
+    if (user) {
+      console.log('[DashboardLayout] 🔍 Usuário completo:', user);
+      console.log('[DashboardLayout] 🔍 Role:', user.role);
+      console.log('[DashboardLayout] 🔍 Tipo do role:', typeof user.role);
+      console.log('[DashboardLayout] 🔍 É admin?', user.role === 'admin');
+      console.log('[DashboardLayout] 🔍 É super_admin?', user.role === 'super_admin');
+    } else {
+      console.log('[DashboardLayout] ⚠️ Usuário é null ou undefined');
+    }
+  }, [user]);
+
   if (loading) {
     return <DashboardLayoutSkeleton />
   }
@@ -278,10 +294,80 @@ function DashboardLayoutContent({
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   
+  // Filtrar menu items baseado no role do usuário
+  const filteredMenuItems = useMemo(() => {
+    // Apenas admin e super_admin podem ver o menu Administração
+    // tenant_admin é administrador do tenant (cliente), não do sistema
+    
+    // Verificação mais robusta do role - múltiplas fontes
+    let userRole: string | null = null;
+    
+    // 1. Tentar do user direto
+    if (user?.role) {
+      userRole = String(user.role).toLowerCase().trim();
+    }
+    
+    // 2. Verificar também no localStorage (fallback)
+    if (!userRole) {
+      try {
+        const storedUser = localStorage.getItem("manus-runtime-user-info");
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          if (parsed?.role) {
+            userRole = String(parsed.role).toLowerCase().trim();
+            console.log('[DashboardLayout] Role obtido do localStorage:', userRole);
+          }
+        }
+      } catch (e) {
+        // Ignorar erro
+      }
+    }
+    
+    // 3. Verificar múltiplas condições para admin
+    const roleString = userRole || (user?.role ? String(user.role).toLowerCase().trim() : '');
+    const isAdmin = roleString === 'admin';
+    const isSuperAdmin = roleString === 'super_admin';
+    const hasNoTenant = user?.tenantId === null || user?.tenantId === undefined;
+    const isTenantOne = user?.tenantId === 1; // Admin geral do sistema tem tenantId = 1
+    
+    // IMPORTANTE: Menu Administração é visível para:
+    // 1. 'admin' ou 'super_admin' (sempre)
+    // 2. 'tenant_admin' com tenantId = 1 ou null (admin geral do sistema)
+    // 3. NÃO para 'tenant_admin' com outros tenantId (admins de clientes específicos)
+    const isSystemAdmin = isAdmin || isSuperAdmin || (roleString === 'tenant_admin' && (isTenantOne || hasNoTenant));
+    
+    console.log('[DashboardLayout] ============================================');
+    console.log('[DashboardLayout] User completo:', user);
+    console.log('[DashboardLayout] User role (original):', user?.role);
+    console.log('[DashboardLayout] User role (normalizado):', userRole);
+    console.log('[DashboardLayout] User tenantId:', user?.tenantId);
+    console.log('[DashboardLayout] Tipo do role:', typeof userRole);
+    console.log('[DashboardLayout] É admin?', isAdmin);
+    console.log('[DashboardLayout] É super_admin?', isSuperAdmin);
+    console.log('[DashboardLayout] Não tem tenant?', hasNoTenant);
+    console.log('[DashboardLayout] isSystemAdmin (final):', isSystemAdmin);
+    console.log('[DashboardLayout] filteredMenuItems.length (antes):', menuItems.length);
+    
+    // ADICIONAR MENU SE FOR ADMIN
+    if (isSystemAdmin) {
+      console.log('[DashboardLayout] ✅ ADICIONANDO menu Administração');
+      const itemsWithAdmin = [...menuItems, adminMenuItem];
+      console.log('[DashboardLayout] filteredMenuItems.length (depois):', itemsWithAdmin.length);
+      console.log('[DashboardLayout] Último item:', itemsWithAdmin[itemsWithAdmin.length - 1]);
+      console.log('[DashboardLayout] Verificando se menu está no array:', itemsWithAdmin.some(item => item.path === '/admin/clientes'));
+      return itemsWithAdmin;
+    } else {
+      console.log('[DashboardLayout] ❌ Menu Administração NÃO será exibido');
+      console.log('[DashboardLayout] Motivo: role =', roleString, 'tenantId =', user?.tenantId);
+      console.log('[DashboardLayout] User completo para debug:', JSON.stringify(user, null, 2));
+    }
+    return menuItems;
+  }, [user]);
+  
   // Calcular qual menu deve estar expandido baseado na rota atual (simplificado)
   const shouldBeExpanded = useMemo(() => {
     const result: Record<string, boolean> = {};
-    for (const item of menuItems) {
+    for (const item of filteredMenuItems) {
       if (item.subItems) {
         for (const sub of item.subItems) {
           if (location === sub.path || location.startsWith(sub.path + "/")) {
@@ -292,7 +378,7 @@ function DashboardLayoutContent({
       }
     }
     return result;
-  }, [location]);
+  }, [location, filteredMenuItems]);
   
   // Auto-expandir menu quando estiver em uma rota de submenu (usando startTransition)
   useEffect(() => {
@@ -328,7 +414,7 @@ function DashboardLayoutContent({
   // Memoizar todos os handlers de toggle em um objeto - usando startTransition para não bloquear
   const toggleHandlers = useMemo(() => {
     const handlers: Record<string, () => void> = {};
-    menuItems.forEach(item => {
+    filteredMenuItems.forEach(item => {
       if (item.subItems) {
         handlers[item.path] = () => {
           startTransition(() => {
@@ -351,12 +437,12 @@ function DashboardLayoutContent({
       }
     });
     return handlers;
-  }, [setExpandedMenus, setLocation, shouldBeExpanded]);
+  }, [setExpandedMenus, setLocation, shouldBeExpanded, filteredMenuItems]);
   
   // Memoizar todos os handlers de click para itens simples
   const simpleClickHandlers = useMemo(() => {
     const handlers: Record<string, () => void> = {};
-    menuItems.forEach(item => {
+    filteredMenuItems.forEach(item => {
       if (!item.subItems) {
         handlers[item.path] = () => setLocation(item.path);
       }
@@ -366,8 +452,8 @@ function DashboardLayoutContent({
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem =
-    menuItems.find(item => item.path === location) ??
-    menuItems.find(item => location.startsWith(`${item.path}/`));
+    filteredMenuItems.find(item => item.path === location) ??
+    filteredMenuItems.find(item => location.startsWith(`${item.path}/`));
   const isMobile = useIsMobile();
   useEffect(() => {
     if (isCollapsed) {
@@ -454,8 +540,19 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-1.5 py-0.5">
-              {menuItems.map(item => {
+              {filteredMenuItems.map((item, index) => {
                 const hasSubItems = Boolean(item.subItems?.length);
+                
+                // Log para debug
+                if (item.path === '/admin/clientes') {
+                  console.log('[DashboardLayout] 🎯 Renderizando menu Administração:', {
+                    index,
+                    path: item.path,
+                    label: item.label,
+                    hasSubItems,
+                    totalItems: filteredMenuItems.length
+                  });
+                }
                 
                 if (hasSubItems) {
                   // isExpanded: se está explicitamente expandido OU se deve estar expandido pela rota

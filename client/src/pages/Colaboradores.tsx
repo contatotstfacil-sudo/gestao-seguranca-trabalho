@@ -186,7 +186,8 @@ export default function Colaboradores() {
   // Filtrar cargos e setores pela empresa selecionada
   const cargos = useMemo(() => {
     if (!todosCargos) return [];
-    if (!formData.empresaId) return todosCargos;
+    // Não mostrar cargos se não houver empresa selecionada
+    if (!formData.empresaId) return [];
     // Mostrar apenas cargos vinculados à empresa selecionada
     return todosCargos.filter((cargo: any) => 
       cargo.empresaId && cargo.empresaId.toString() === formData.empresaId
@@ -195,7 +196,8 @@ export default function Colaboradores() {
   
   const setores = useMemo(() => {
     if (!todosSetores) return [];
-    if (!formData.empresaId) return todosSetores;
+    // Não mostrar setores se não houver empresa selecionada
+    if (!formData.empresaId) return [];
     // Mostrar apenas setores vinculados à empresa selecionada
     return todosSetores.filter((setor: any) => 
       setor.empresaId && setor.empresaId.toString() === formData.empresaId
@@ -213,7 +215,25 @@ export default function Colaboradores() {
       resetForm();
     },
     onError: (error) => {
-      toast.error("Erro ao cadastrar colaborador: " + error.message);
+      // Extrair mensagem de erro de várias formas possíveis
+      let errorMessage = "Erro ao cadastrar colaborador";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.data?.message) {
+        errorMessage = error.data.message;
+      } else if (error.shape?.message) {
+        errorMessage = error.shape.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      // Se a mensagem contém "Você chegou no limite", mostrar apenas essa mensagem
+      if (errorMessage.includes("Você chegou no limite")) {
+        toast.error("Você chegou no limite.");
+      } else {
+        toast.error("Erro ao cadastrar colaborador: " + errorMessage);
+      }
     },
   });
 
@@ -730,40 +750,62 @@ export default function Colaboradores() {
                     <div>
                       <Label htmlFor="cargoId">Cargo</Label>
                       <Select
-                        value={formData.cargoId}
+                        value={formData.empresaId && formData.cargoId ? formData.cargoId : ""}
                         onValueChange={(value) => {
                           setFormData({ ...formData, cargoId: value });
                           // Limpar seleção de treinamentos quando cargo muda
                           setSelectedTrainings(new Set());
                         }}
+                        disabled={!formData.empresaId}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um cargo" />
+                        <SelectTrigger className={!formData.empresaId ? "opacity-50 cursor-not-allowed bg-gray-50" : ""}>
+                          <SelectValue placeholder={formData.empresaId ? "Selecione um cargo" : "Selecione uma empresa primeiro"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {cargos?.map((cargo: any) => (
-                            <SelectItem key={cargo.id} value={cargo.id.toString()}>
-                              {cargo.nomeCargo}
-                            </SelectItem>
-                          ))}
+                          {!formData.empresaId ? (
+                            <div className="px-2 py-1.5 text-sm text-gray-500 text-center">
+                              Selecione uma empresa primeiro
+                            </div>
+                          ) : cargos && cargos.length > 0 ? (
+                            cargos.map((cargo: any) => (
+                              <SelectItem key={cargo.id} value={cargo.id.toString()}>
+                                {cargo.nomeCargo}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <div className="px-2 py-1.5 text-sm text-gray-500 text-center">
+                              Nenhum cargo encontrado
+                            </div>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
                       <Label htmlFor="setorId">Setor</Label>
                       <Select
-                        value={formData.setorId}
+                        value={formData.empresaId && formData.setorId ? formData.setorId : ""}
                         onValueChange={(value) => setFormData({ ...formData, setorId: value })}
+                        disabled={!formData.empresaId}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um setor" />
+                        <SelectTrigger className={!formData.empresaId ? "opacity-50 cursor-not-allowed bg-gray-50" : ""}>
+                          <SelectValue placeholder={formData.empresaId ? "Selecione um setor" : "Selecione uma empresa primeiro"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {setores?.map((setor: any) => (
-                            <SelectItem key={setor.id} value={setor.id.toString()}>
-                              {setor.nomeSetor}
-                            </SelectItem>
-                          ))}
+                          {!formData.empresaId ? (
+                            <div className="px-2 py-1.5 text-sm text-gray-500 text-center">
+                              Selecione uma empresa primeiro
+                            </div>
+                          ) : setores && setores.length > 0 ? (
+                            setores.map((setor: any) => (
+                              <SelectItem key={setor.id} value={setor.id.toString()}>
+                                {setor.nomeSetor}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <div className="px-2 py-1.5 text-sm text-gray-500 text-center">
+                              Nenhum setor encontrado
+                            </div>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>

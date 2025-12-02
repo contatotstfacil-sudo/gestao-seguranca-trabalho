@@ -27,7 +27,8 @@ import {
   userPermissoes, InsertUserPermissao,
   permissoesUsuarios, InsertPermissoesUsuario,
   asos, InsertAso,
-  cargosCbo, InsertCargoCbo
+  cargosCbo, InsertCargoCbo,
+  tenants, InsertTenant
 } from "../drizzle/schema";
 
 import { ENV } from './_core/env';
@@ -189,7 +190,7 @@ export async function upsertUser(userData: Partial<InsertUser>) {
 
 // === EMPRESAS ===
 
-export async function getAllEmpresas(filters?: { searchTerm?: string; dataInicio?: string; dataFim?: string }) {
+export async function getAllEmpresas(filters?: { searchTerm?: string; dataInicio?: string; dataFim?: string }, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -203,12 +204,23 @@ export async function getAllEmpresas(filters?: { searchTerm?: string; dataInicio
     
     let sqlQuery = "SELECT * FROM empresas";
     const params: any[] = [];
+    const whereConditions: string[] = [];
+    
+    // ISOLAMENTO DE TENANT: Filtrar por tenantId se fornecido
+    if (tenantId !== null && tenantId !== undefined) {
+      whereConditions.push("tenantId = ?");
+      params.push(tenantId);
+    }
     
     if (filters?.searchTerm) {
       const searchTerm = filters.searchTerm.trim();
-      sqlQuery += " WHERE (LOWER(razaoSocial) LIKE ? OR LOWER(cnpj) LIKE ?)";
+      whereConditions.push("(LOWER(razaoSocial) LIKE ? OR LOWER(cnpj) LIKE ?)");
       const searchPattern = `%${searchTerm.toLowerCase()}%`;
       params.push(searchPattern, searchPattern);
+    }
+    
+    if (whereConditions.length > 0) {
+      sqlQuery += " WHERE " + whereConditions.join(" AND ");
     }
     
     sqlQuery += " ORDER BY razaoSocial ASC";
@@ -223,7 +235,7 @@ export async function getAllEmpresas(filters?: { searchTerm?: string; dataInicio
   }
 }
 
-export async function getEmpresaById(id: number) {
+export async function getEmpresaById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -234,7 +246,17 @@ export async function getEmpresaById(id: number) {
     }
     
     const connection = await mysql.createConnection(process.env.DATABASE_URL);
-    const [rows] = await connection.execute("SELECT * FROM empresas WHERE id = ?", [id]);
+    
+    // ISOLAMENTO DE TENANT: Filtrar por tenantId se fornecido
+    let sqlQuery = "SELECT * FROM empresas WHERE id = ?";
+    const params: any[] = [id];
+    
+    if (tenantId !== null && tenantId !== undefined) {
+      sqlQuery += " AND tenantId = ?";
+      params.push(tenantId);
+    }
+    
+    const [rows] = await connection.execute(sqlQuery, params);
     await connection.end();
     
     const result = (rows as any[])[0] || null;
@@ -285,20 +307,40 @@ export async function createEmpresa(data: InsertEmpresa) {
   if (!db) throw new Error("Database not available");
 
   try {
+    console.log("[createEmpresa] 🏢 Criando empresa com tenantId:", data.tenantId);
+    
     // Preencher bairro fictício se não fornecido
     const dataComBairro = {
       ...data,
       bairroEndereco: data.bairroEndereco || bairrosFicticios[Math.floor(Math.random() * bairrosFicticios.length)],
     };
 
-    const result = await db.insert(empresas).values(dataComBairro);
-    const insertId = (result as any)[0]?.insertId;
-    if (insertId) {
-      return await getEmpresaById(insertId);
+    // Garantir que tenantId está presente
+    if (!dataComBairro.tenantId) {
+      throw new Error("tenantId é obrigatório para criar empresa");
     }
-    return null;
-  } catch (error) {
+
+    const result = await db.insert(empresas).values(dataComBairro);
+    const insertId = (result as any)[0]?.insertId || (result as any).insertId;
+    
+    console.log("[createEmpresa] ✅ Empresa criada com ID:", insertId);
+    
+    if (insertId) {
+      // IMPORTANTE: Passar tenantId ao buscar a empresa criada para garantir isolamento
+      const empresaCriada = await getEmpresaById(insertId, dataComBairro.tenantId);
+      
+      if (!empresaCriada) {
+        throw new Error("Empresa criada mas não foi possível recuperá-la");
+      }
+      
+      console.log("[createEmpresa] ✅ Empresa recuperada:", empresaCriada.razaoSocial);
+      return empresaCriada;
+    }
+    
+    throw new Error("Não foi possível obter o ID da empresa criada");
+  } catch (error: any) {
     console.error("[Database] Erro ao criar empresa:", error);
+    console.error("[Database] Stack:", error?.stack);
     throw error;
   }
 }
@@ -403,12 +445,25 @@ export async function updateEmpresa(id: number, data: Partial<InsertEmpresa>) {
   }
 }
 
-export async function deleteEmpresa(id: number) {
+export async function deleteEmpresa(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    await db.delete(empresas).where(eq(empresas.id, id));
+    // ISOLAMENTO DE TENANT: Verificar se a empresa pertence ao tenant antes de deletar
+    if (tenantId !== undefined && tenantId !== null) {
+      const existing = await getEmpresaById(id, tenantId);
+      if (!existing) {
+        throw new Error("Empresa não encontrada ou não pertence ao seu sistema");
+      }
+    }
+    
+    const conditions: any[] = [eq(empresas.id, id)];
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(empresas.tenantId, tenantId));
+    }
+    
+    await db.delete(empresas).where(and(...conditions));
     return { success: true };
   } catch (error) {
     console.error("[Database] Erro ao excluir empresa:", error);
@@ -419,6 +474,7 @@ export async function deleteEmpresa(id: number) {
 // === COLABORADORES ===
 
 export async function getAllColaboradores(
+  tenantId: number | null,
   empresaId: number | null, 
   filters?: { 
     searchTerm?: string;
@@ -439,6 +495,17 @@ export async function getAllColaboradores(
     // Construir WHERE clause
     let whereConditions: string[] = [];
     let params: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório para clientes)
+    // Se tenantId for null, admin pode ver todos (não adiciona filtro)
+    // Se tenantId for um número, filtra apenas esse tenant
+    if (tenantId !== null && tenantId !== undefined) {
+      whereConditions.push("c.tenantId = ?");
+      params.push(tenantId);
+    } else if (tenantId === null) {
+      // Admin sem tenantId específico - não filtra (pode ver todos)
+      console.log("[getAllColaboradores] ⚠️ tenantId é null - retornando todos os colaboradores (admin)");
+    }
     
     if (empresaId) {
       whereConditions.push("c.empresaId = ?");
@@ -488,12 +555,19 @@ export async function getAllColaboradores(
   }
 }
 
-export async function getColaboradorById(id: number) {
+export async function getColaboradorById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    const result = await db.select().from(colaboradores).where(eq(colaboradores.id, id)).limit(1);
+    const conditions: any[] = [eq(colaboradores.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o colaborador pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(colaboradores.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(colaboradores).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar colaborador:", error);
@@ -546,10 +620,21 @@ export async function createColaborador(data: InsertColaborador) {
   if (!db) throw new Error("Database not available");
 
   try {
+    console.log("[createColaborador] 🧑 Criando colaborador com tenantId:", data.tenantId);
+    
+    // Garantir que tenantId está presente (exceto para admin)
+    if (!data.tenantId) {
+      throw new Error("tenantId é obrigatório para criar colaborador");
+    }
+    
     const result = await db.insert(colaboradores).values(data);
-    const insertId = (result as any)[0]?.insertId;
+    const insertId = (result as any)[0]?.insertId || (result as any).insertId;
+    
+    console.log("[createColaborador] ✅ Colaborador criado com ID:", insertId);
+    
     if (insertId) {
-      const colaborador = await getColaboradorById(insertId);
+      // IMPORTANTE: Passar tenantId ao buscar o colaborador criado para garantir isolamento
+      const colaborador = await getColaboradorById(insertId, data.tenantId);
       
       // Se o colaborador tem dataPrimeiroAso e validadeAso, criar ASO automaticamente
       if (colaborador && colaborador.dataPrimeiroAso && colaborador.validadeAso) {
@@ -603,13 +688,26 @@ export async function createColaborador(data: InsertColaborador) {
   }
 }
 
-export async function updateColaborador(id: number, data: Partial<InsertColaborador>) {
+export async function updateColaborador(id: number, data: Partial<InsertColaborador>, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    await db.update(colaboradores).set({ ...data, updatedAt: new Date() }).where(eq(colaboradores.id, id));
-    const colaborador = await getColaboradorById(id);
+    // ISOLAMENTO DE TENANT: Verificar se o colaborador pertence ao tenant antes de atualizar
+    if (tenantId !== undefined && tenantId !== null) {
+      const existing = await getColaboradorById(id, tenantId);
+      if (!existing) {
+        throw new Error("Colaborador não encontrado ou não pertence ao seu sistema");
+      }
+    }
+    
+    const conditions: any[] = [eq(colaboradores.id, id)];
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(colaboradores.tenantId, tenantId));
+    }
+    
+    await db.update(colaboradores).set({ ...data, updatedAt: new Date() }).where(and(...conditions));
+    const colaborador = await getColaboradorById(id, tenantId);
     
     // Se o colaborador tem dataPrimeiroAso e validadeAso, criar/atualizar ASO automaticamente
     if (colaborador && colaborador.dataPrimeiroAso && colaborador.validadeAso) {
@@ -702,6 +800,7 @@ export async function deleteColaboradores(ids: number[]) {
 }
 
 export async function getColaboradorStats(
+  tenantId: number | null,
   empresaId: number | null | undefined,
   filters?: {
     status?: 'ativo' | 'inativo';
@@ -716,6 +815,7 @@ export async function getColaboradorStats(
     // Log detalhado para debug
     console.log("═══════════════════════════════════════");
     console.log("[getColaboradorStats] 🗄️ INICIANDO QUERY NO BANCO");
+    console.log("[getColaboradorStats] tenantId recebido:", tenantId);
     console.log("[getColaboradorStats] empresaId recebido:", empresaId, "Tipo:", typeof empresaId);
     console.log("[getColaboradorStats] filters recebido:", JSON.stringify(filters, null, 2));
     
@@ -726,27 +826,23 @@ export async function getColaboradorStats(
     
     const connection = await mysql.createConnection(process.env.DATABASE_URL);
     
-    // Construir WHERE clause
+    // Construir WHERE clause - ISOLAMENTO DE TENANT OBRIGATÓRIO
     let whereConditions: string[] = [];
     let params: any[] = [];
     
-    console.log("[getColaboradorStats] 🔍🔍🔍 VERIFICANDO empresaId:");
-    console.log("[getColaboradorStats] empresaId valor:", empresaId);
-    console.log("[getColaboradorStats] empresaId tipo:", typeof empresaId);
-    console.log("[getColaboradorStats] empresaId é null?:", empresaId === null);
-    console.log("[getColaboradorStats] empresaId é undefined?:", empresaId === undefined);
-    console.log("[getColaboradorStats] empresaId é número?:", typeof empresaId === 'number');
-    console.log("[getColaboradorStats] empresaId > 0?:", typeof empresaId === 'number' && empresaId > 0);
+    // SEMPRE filtrar por tenantId (exceto se for null para admin)
+    if (tenantId !== null && tenantId !== undefined) {
+      whereConditions.push("tenantId = ?");
+      params.push(tenantId);
+      console.log("[getColaboradorStats] 🔒 Filtro tenantId ADICIONADO:", tenantId);
+    }
     
     if (empresaId !== null && empresaId !== undefined && typeof empresaId === 'number' && empresaId > 0) {
       whereConditions.push("empresaId = ?");
       params.push(empresaId);
       console.log("[getColaboradorStats] ✅✅✅ Filtro empresaId ADICIONADO:", empresaId);
-      console.log("[getColaboradorStats] ✅✅✅ WHERE clause será: empresaId = ?");
-      console.log("[getColaboradorStats] ✅✅✅ Parâmetro será:", empresaId);
     } else {
-      console.log("[getColaboradorStats] ⚠️⚠️⚠️ SEM filtro empresaId - retornando TODOS os colaboradores");
-      console.log("[getColaboradorStats] Razão: empresaId é", empresaId === null ? 'null' : empresaId === undefined ? 'undefined' : 'inválido');
+      console.log("[getColaboradorStats] ⚠️⚠️⚠️ SEM filtro empresaId");
     }
     
     if (filters?.status) {
@@ -827,26 +923,77 @@ export async function getColaboradorStats(
       : "";
     
     // Estatísticas por setor usando SQL direto
+    // IMPORTANTE: Filtrar tenantId também na tabela setores
+    let setorWhereConditions = [...whereConditions];
+    let setorParams = [...params];
+    
+    // Adicionar filtro de tenantId na tabela setores também
+    if (tenantId !== null && tenantId !== undefined) {
+      setorWhereConditions.push("s.tenantId = ?");
+      setorParams.push(tenantId);
+    }
+    
+    const setorWhereClause = setorWhereConditions.length > 0 
+      ? `WHERE ${setorWhereConditions.map(cond => cond.replace(/^(\w+)\s*=\s*\?$/, "c.$1 = ?").replace(/^s\.tenantId/, "s.tenantId")).join(" AND ")}` 
+      : "";
+    
     const setorQuery = `
       SELECT s.nomeSetor as setor, COUNT(*) as count
       FROM colaboradores c
-      LEFT JOIN setores s ON c.setorId = s.id
-      ${whereClauseWithAlias}
+      LEFT JOIN setores s ON c.setorId = s.id AND s.tenantId = ?
+      ${setorWhereClause}
       GROUP BY s.nomeSetor
     `;
-    const [setorRows] = await connection.execute(setorQuery, params);
+    const [setorRows] = await connection.execute(setorQuery, tenantId !== null && tenantId !== undefined ? [tenantId, ...setorParams] : setorParams);
     const setorStats = (setorRows as any[]) || [];
     
     // Estatísticas por função/cargo usando SQL direto
+    // IMPORTANTE: Filtrar tenantId também na tabela cargos
+    let funcaoWhereConditions: string[] = [];
+    let funcaoParams: any[] = [];
+    
+    // Adicionar condições de WHERE para colaboradores
+    whereConditions.forEach(cond => {
+      funcaoWhereConditions.push(cond.replace(/^(\w+)\s*=\s*\?$/, "c.$1 = ?"));
+    });
+    funcaoParams.push(...params);
+    
+    // Adicionar filtro de tenantId na tabela cargos também
+    if (tenantId !== null && tenantId !== undefined) {
+      funcaoWhereConditions.push("(car.tenantId = ? OR car.tenantId IS NULL)");
+      funcaoParams.push(tenantId);
+    }
+    
+    const funcaoWhereClause = funcaoWhereConditions.length > 0 
+      ? `WHERE ${funcaoWhereConditions.join(" AND ")}` 
+      : "";
+    
+    // Definir condição de JOIN - sempre incluir tenantId no JOIN quando disponível
+    const funcaoJoinCondition = tenantId !== null && tenantId !== undefined 
+      ? `c.cargoId = car.id AND (car.tenantId = ? OR car.tenantId IS NULL)` 
+      : `c.cargoId = car.id`;
+    
+    // Parâmetros para o JOIN (tenantId vem primeiro se existir)
+    const funcaoJoinParams = tenantId !== null && tenantId !== undefined ? [tenantId] : [];
+    const funcaoQueryParams = [...funcaoJoinParams, ...funcaoParams];
+    
     const funcaoQuery = `
-      SELECT car.nomeCargo as funcao, COUNT(*) as count
+      SELECT COALESCE(car.nomeCargo, 'Sem função') as funcao, COUNT(*) as count
       FROM colaboradores c
-      LEFT JOIN cargos car ON c.cargoId = car.id
-      ${whereClauseWithAlias}
+      LEFT JOIN cargos car ON ${funcaoJoinCondition}
+      ${funcaoWhereClause}
       GROUP BY car.nomeCargo
+      HAVING COUNT(*) > 0
+      ORDER BY count DESC
     `;
-    const [funcaoRows] = await connection.execute(funcaoQuery, params);
+    
+    console.log("[getColaboradorStats] 🔍 FUNÇÃO QUERY:", funcaoQuery);
+    console.log("[getColaboradorStats] 🔍 FUNÇÃO PARAMS:", funcaoQueryParams);
+    
+    const [funcaoRows] = await connection.execute(funcaoQuery, funcaoQueryParams);
     const funcaoStats = (funcaoRows as any[]) || [];
+    
+    console.log("[getColaboradorStats] 📊 FUNÇÃO STATS:", funcaoStats.length, "resultados");
     
     // Estatísticas por status usando SQL direto
     const statusQuery = `
@@ -859,28 +1006,86 @@ export async function getColaboradorStats(
     const statusStats = (statusRows as any[]) || [];
     
     // Colaboradores mais antigos usando SQL direto (top 5)
+    // IMPORTANTE: Filtrar tenantId também na tabela cargos no JOIN
+    const maisAntigosWhereConditions: string[] = [];
+    const maisAntigosParams: any[] = [];
+    
+    // Adicionar condições de WHERE para colaboradores
+    whereConditions.forEach(cond => {
+      maisAntigosWhereConditions.push(cond.replace(/^(\w+)\s*=\s*\?$/, "c.$1 = ?"));
+    });
+    maisAntigosParams.push(...params);
+    
+    // Adicionar filtro de tenantId na tabela cargos também
+    if (tenantId !== null && tenantId !== undefined) {
+      maisAntigosWhereConditions.push("(car.tenantId = ? OR car.tenantId IS NULL)");
+      maisAntigosParams.push(tenantId);
+    }
+    
+    const maisAntigosWhereClause = maisAntigosWhereConditions.length > 0 
+      ? `WHERE ${maisAntigosWhereConditions.join(" AND ")}` 
+      : "";
+    
+    const maisAntigosJoinParams = tenantId !== null && tenantId !== undefined ? [tenantId] : [];
+    const maisAntigosQueryParams = [...maisAntigosJoinParams, ...maisAntigosParams];
+    
     const maisAntigosQuery = `
-      SELECT c.id, c.nomeCompleto as nome, car.nomeCargo as funcao, c.dataAdmissao
+      SELECT c.id, c.nomeCompleto as nome, COALESCE(car.nomeCargo, 'Sem função') as funcao, c.dataAdmissao
       FROM colaboradores c
-      LEFT JOIN cargos car ON c.cargoId = car.id
-      ${whereClauseWithAlias}
+      LEFT JOIN cargos car ON ${funcaoJoinCondition}
+      ${maisAntigosWhereClause}
       ORDER BY c.dataAdmissao ASC
       LIMIT 5
     `;
-    const [maisAntigosRows] = await connection.execute(maisAntigosQuery, params);
+    
+    console.log("[getColaboradorStats] 🔍 MAIS ANTIGOS QUERY:", maisAntigosQuery);
+    console.log("[getColaboradorStats] 🔍 MAIS ANTIGOS PARAMS:", maisAntigosQueryParams);
+    
+    const [maisAntigosRows] = await connection.execute(maisAntigosQuery, maisAntigosQueryParams);
     const maisAntigos = (maisAntigosRows as any[]) || [];
     
+    console.log("[getColaboradorStats] 📊 MAIS ANTIGOS:", maisAntigos.length, "resultados");
+    
     // Colaboradores mais novos usando SQL direto (top 5)
+    // IMPORTANTE: Filtrar tenantId também na tabela cargos no JOIN
+    const maisNovosWhereConditions: string[] = [];
+    const maisNovosParams: any[] = [];
+    
+    // Adicionar condições de WHERE para colaboradores
+    whereConditions.forEach(cond => {
+      maisNovosWhereConditions.push(cond.replace(/^(\w+)\s*=\s*\?$/, "c.$1 = ?"));
+    });
+    maisNovosParams.push(...params);
+    
+    // Adicionar filtro de tenantId na tabela cargos também
+    if (tenantId !== null && tenantId !== undefined) {
+      maisNovosWhereConditions.push("(car.tenantId = ? OR car.tenantId IS NULL)");
+      maisNovosParams.push(tenantId);
+    }
+    
+    const maisNovosWhereClause = maisNovosWhereConditions.length > 0 
+      ? `WHERE ${maisNovosWhereConditions.join(" AND ")}` 
+      : "";
+    
+    const maisNovosJoinParams = tenantId !== null && tenantId !== undefined ? [tenantId] : [];
+    const maisNovosQueryParams = [...maisNovosJoinParams, ...maisNovosParams];
+    
     const maisNovosQuery = `
-      SELECT c.id, c.nomeCompleto as nome, car.nomeCargo as funcao, c.dataAdmissao
+      SELECT c.id, c.nomeCompleto as nome, COALESCE(car.nomeCargo, 'Sem função') as funcao, c.dataAdmissao
       FROM colaboradores c
-      LEFT JOIN cargos car ON c.cargoId = car.id
-      ${whereClauseWithAlias}
+      LEFT JOIN cargos car ON ${funcaoJoinCondition}
+      ${maisNovosWhereClause}
       ORDER BY c.dataAdmissao DESC
       LIMIT 5
     `;
-    const [maisNovosRows] = await connection.execute(maisNovosQuery, params);
+    
+    console.log("[getColaboradorStats] 🔍 MAIS NOVOS QUERY:", maisNovosQuery);
+    console.log("[getColaboradorStats] 🔍 MAIS NOVOS PARAMS:", maisNovosQueryParams);
+    
+    const [maisNovosRows] = await connection.execute(maisNovosQuery, maisNovosQueryParams);
     const maisNovos = (maisNovosRows as any[]) || [];
+    
+    console.log("[getColaboradorStats] 📊 MAIS NOVOS:", maisNovos.length, "resultados");
     
     await connection.end();
     
@@ -947,15 +1152,26 @@ export async function getColaboradorStats(
 
 // === OBRAS ===
 
-export async function getAllObras(empresaId: number | null) {
+export async function getAllObras(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    let query = db.select().from(obras);
+    const conditions: any[] = [];
     
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(obras.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(obras.empresaId, empresaId)) as any;
+      conditions.push(eq(obras.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(obras);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     
     return await query.orderBy(asc(obras.nomeObra));
@@ -965,12 +1181,19 @@ export async function getAllObras(empresaId: number | null) {
   }
 }
 
-export async function getObraById(id: number) {
+export async function getObraById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    const result = await db.select().from(obras).where(eq(obras.id, id)).limit(1);
+    const conditions: any[] = [eq(obras.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se a obra pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(obras.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(obras).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar obra:", error);
@@ -995,13 +1218,26 @@ export async function createObra(data: InsertObra) {
   }
 }
 
-export async function updateObra(id: number, data: Partial<InsertObra>) {
+export async function updateObra(id: number, data: Partial<InsertObra>, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    await db.update(obras).set({ ...data, updatedAt: new Date() }).where(eq(obras.id, id));
-    return await getObraById(id);
+    // ISOLAMENTO DE TENANT: Verificar se a obra pertence ao tenant antes de atualizar
+    if (tenantId !== undefined && tenantId !== null) {
+      const existing = await getObraById(id, tenantId);
+      if (!existing) {
+        throw new Error("Obra não encontrada ou não pertence ao seu sistema");
+      }
+    }
+    
+    const conditions: any[] = [eq(obras.id, id)];
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(obras.tenantId, tenantId));
+    }
+    
+    await db.update(obras).set({ ...data, updatedAt: new Date() }).where(and(...conditions));
+    return await getObraById(id, tenantId);
   } catch (error) {
     console.error("[Database] Erro ao atualizar obra:", error);
     throw error;
@@ -1023,53 +1259,75 @@ export async function deleteObra(id: number) {
 
 // === DASHBOARD ===
 
-export async function getDashboardStats(empresaId: number | null) {
+export async function getDashboardStats(tenantId: number | null, empresaId: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   try {
-    // Empresas ativas
+    // ISOLAMENTO DE TENANT: Filtrar TODAS as queries por tenantId
+    const tenantConditions: any[] = [];
+    if (tenantId !== null && tenantId !== undefined) {
+      tenantConditions.push(eq(empresas.tenantId, tenantId));
+    }
+    
+    // Empresas ativas - SEMPRE filtrar por tenantId
     let empresasQuery = db.select({ count: sql<number>`COUNT(*)` })
       .from(empresas)
-      .where(eq(empresas.status, "ativa"));
+      .where(and(eq(empresas.status, "ativa"), ...tenantConditions));
     if (empresaId) {
-      empresasQuery = empresasQuery.where(and(eq(empresas.status, "ativa"), eq(empresas.id, empresaId)) as any) as any;
+      empresasQuery = empresasQuery.where(and(eq(empresas.status, "ativa"), eq(empresas.id, empresaId), ...tenantConditions) as any) as any;
     }
     const [empresasCount] = await empresasQuery;
     
-    // Colaboradores ativos
+    // Colaboradores ativos - SEMPRE filtrar por tenantId
+    const colaboradorTenantConditions: any[] = [];
+    if (tenantId !== null && tenantId !== undefined) {
+      colaboradorTenantConditions.push(eq(colaboradores.tenantId, tenantId));
+    }
     let colaboradoresQuery = db.select({ count: sql<number>`COUNT(*)` })
       .from(colaboradores)
-      .where(eq(colaboradores.status, "ativo"));
+      .where(and(eq(colaboradores.status, "ativo"), ...colaboradorTenantConditions));
     if (empresaId) {
-      colaboradoresQuery = colaboradoresQuery.where(and(eq(colaboradores.status, "ativo"), eq(colaboradores.empresaId, empresaId)) as any) as any;
+      colaboradoresQuery = colaboradoresQuery.where(and(eq(colaboradores.status, "ativo"), eq(colaboradores.empresaId, empresaId), ...colaboradorTenantConditions) as any) as any;
     }
     const [colaboradoresCount] = await colaboradoresQuery;
     
-    // Obras ativas (status = "ativa")
+    // Obras ativas - SEMPRE filtrar por tenantId
+    const obraTenantConditions: any[] = [];
+    if (tenantId !== null && tenantId !== undefined) {
+      obraTenantConditions.push(eq(obras.tenantId, tenantId));
+    }
     let obrasQuery = db.select({ count: sql<number>`COUNT(*)` })
       .from(obras)
-      .where(eq(obras.status, "ativa"));
+      .where(and(eq(obras.status, "ativa"), ...obraTenantConditions));
     if (empresaId) {
-      obrasQuery = obrasQuery.where(and(eq(obras.status, "ativa"), eq(obras.empresaId, empresaId)) as any) as any;
+      obrasQuery = obrasQuery.where(and(eq(obras.status, "ativa"), eq(obras.empresaId, empresaId), ...obraTenantConditions) as any) as any;
     }
     const [obrasCount] = await obrasQuery;
     
-    // Treinamentos vencidos (dataValidade < hoje)
+    // Treinamentos vencidos - SEMPRE filtrar por tenantId
+    const treinamentoTenantConditions: any[] = [];
+    if (tenantId !== null && tenantId !== undefined) {
+      treinamentoTenantConditions.push(eq(treinamentos.tenantId, tenantId));
+    }
     let treinamentosQuery = db.select({ count: sql<number>`COUNT(*)` })
       .from(treinamentos)
-      .where(sql`${treinamentos.dataValidade} < CURDATE()`);
+      .where(and(sql`${treinamentos.dataValidade} < CURDATE()`, ...treinamentoTenantConditions));
     if (empresaId) {
-      treinamentosQuery = treinamentosQuery.where(and(sql`${treinamentos.dataValidade} < CURDATE()`, eq(treinamentos.empresaId, empresaId)) as any) as any;
+      treinamentosQuery = treinamentosQuery.where(and(sql`${treinamentos.dataValidade} < CURDATE()`, eq(treinamentos.empresaId, empresaId), ...treinamentoTenantConditions) as any) as any;
     }
     const [treinamentosVencidos] = await treinamentosQuery;
     
-    // EPIs vencidos ou vencendo (dataValidade < hoje ou próximo de vencer)
+    // EPIs vencidos - SEMPRE filtrar por tenantId
+    const epiTenantConditions: any[] = [];
+    if (tenantId !== null && tenantId !== undefined) {
+      epiTenantConditions.push(eq(epis.tenantId, tenantId));
+    }
     let episQuery = db.select({ count: sql<number>`COUNT(*)` })
       .from(epis)
-      .where(sql`${epis.dataValidade} < CURDATE()`);
+      .where(and(sql`${epis.dataValidade} < CURDATE()`, ...epiTenantConditions));
     if (empresaId) {
-      episQuery = episQuery.where(and(sql`${epis.dataValidade} < CURDATE()`, eq(epis.empresaId, empresaId)) as any) as any;
+      episQuery = episQuery.where(and(sql`${epis.dataValidade} < CURDATE()`, eq(epis.empresaId, empresaId), ...epiTenantConditions) as any) as any;
     }
     const [episVencidos] = await episQuery;
     
@@ -1168,13 +1426,25 @@ export async function deleteUser(id: number) {
 
 // === TREINAMENTOS ===
 
-export async function getAllTreinamentos(empresaId: number | null) {
+export async function getAllTreinamentos(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    let query = db.select().from(treinamentos);
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(treinamentos.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(treinamentos.empresaId, empresaId)) as any;
+      conditions.push(eq(treinamentos.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(treinamentos);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     return await query.orderBy(asc(treinamentos.nomeTreinamento));
   } catch (error) {
@@ -1183,11 +1453,18 @@ export async function getAllTreinamentos(empresaId: number | null) {
   }
 }
 
-export async function getTreinamentoById(id: number) {
+export async function getTreinamentoById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(treinamentos).where(eq(treinamentos.id, id)).limit(1);
+    const conditions: any[] = [eq(treinamentos.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o treinamento pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(treinamentos.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(treinamentos).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar treinamento:", error);
@@ -1235,13 +1512,25 @@ export async function deleteTreinamento(id: number) {
 
 // === EPIs ===
 
-export async function getAllEpis(empresaId: number | null) {
+export async function getAllEpis(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    let query = db.select().from(epis);
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(epis.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(epis.empresaId, empresaId)) as any;
+      conditions.push(eq(epis.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(epis);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     return await query.orderBy(asc(epis.nomeEpi));
   } catch (error) {
@@ -1250,11 +1539,18 @@ export async function getAllEpis(empresaId: number | null) {
   }
 }
 
-export async function getEpiById(id: number) {
+export async function getEpiById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(epis).where(eq(epis.id, id)).limit(1);
+    const conditions: any[] = [eq(epis.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o EPI pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(epis.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(epis).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar EPI:", error);
@@ -1319,13 +1615,24 @@ export async function deleteEpi(id: number) {
   }
 }
 
-export async function getDadosFichaEPI(empresaId: number, colaboradorId: number) {
+export async function getDadosFichaEPI(empresaId: number, colaboradorId: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const [colaborador] = await db.select().from(colaboradores).where(eq(colaboradores.id, colaboradorId)).limit(1);
-    const [empresa] = await db.select().from(empresas).where(eq(empresas.id, empresaId)).limit(1);
-    const episColaborador = await db.select().from(epis).where(eq(epis.colaboradorId, colaboradorId));
+    // ISOLAMENTO DE TENANT: Filtrar todos os dados pelo tenant
+    const colaboradorConditions: any[] = [eq(colaboradores.id, colaboradorId)];
+    const empresaConditions: any[] = [eq(empresas.id, empresaId)];
+    const episConditions: any[] = [eq(epis.colaboradorId, colaboradorId)];
+    
+    if (tenantId !== undefined && tenantId !== null) {
+      colaboradorConditions.push(eq(colaboradores.tenantId, tenantId));
+      empresaConditions.push(eq(empresas.tenantId, tenantId));
+      episConditions.push(eq(epis.tenantId, tenantId));
+    }
+    
+    const [colaborador] = await db.select().from(colaboradores).where(and(...colaboradorConditions)).limit(1);
+    const [empresa] = await db.select().from(empresas).where(and(...empresaConditions)).limit(1);
+    const episColaborador = await db.select().from(epis).where(and(...episConditions));
     return { colaborador, empresa, epis: episColaborador };
   } catch (error) {
     console.error("[Database] Erro ao buscar dados da ficha EPI:", error);
@@ -1333,13 +1640,25 @@ export async function getDadosFichaEPI(empresaId: number, colaboradorId: number)
   }
 }
 
-export async function getAllFichasEpiEmitidas(empresaId: number | null) {
+export async function getAllFichasEpiEmitidas(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    let query = db.select().from(fichasEpiEmitidas);
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(fichasEpiEmitidas.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(fichasEpiEmitidas.empresaId, empresaId)) as any;
+      conditions.push(eq(fichasEpiEmitidas.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(fichasEpiEmitidas);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     return await query.orderBy(asc(fichasEpiEmitidas.nomeArquivo));
   } catch (error) {
@@ -1379,14 +1698,31 @@ export async function deleteFichaEpiEmitida(id: number) {
 
 // === CARGOS ===
 
-export async function getAllCargos(empresaId: number | null) {
+export async function getAllCargos(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
     let query = db.select().from(cargos);
-    if (empresaId) {
-      query = query.where(eq(cargos.empresaId, empresaId)) as any;
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    // Se tenantId for null, é admin/super_admin e pode ver TODOS os cargos (não filtra)
+    if (tenantId !== null && tenantId !== undefined) {
+      conditions.push(eq(cargos.tenantId, tenantId));
+      console.log("[getAllCargos] 🔒 Filtrando por tenantId:", tenantId);
+    } else {
+      console.log("[getAllCargos] 👑 Admin - Sem filtro de tenant (vê todos os cargos)");
     }
+    
+    // Filtro opcional por empresa
+    if (empresaId) {
+      conditions.push(eq(cargos.empresaId, empresaId));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
     return await query.orderBy(asc(cargos.nomeCargo));
   } catch (error) {
     console.error("[Database] Erro ao buscar cargos:", error);
@@ -1396,10 +1732,27 @@ export async function getAllCargos(empresaId: number | null) {
 
 // === RELATÓRIOS DE CARGOS ===
 
-export async function getRelatorioCargosPorEmpresa(empresaId: number | null) {
+export async function getRelatorioCargosPorEmpresa(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório) - SEMPRE filtrar se tenantId não for null
+    // Se tenantId for null, é admin e pode ver todos (não filtra)
+    if (tenantId !== null && tenantId !== undefined) {
+      conditions.push(eq(cargos.tenantId, tenantId));
+      conditions.push(eq(empresas.tenantId, tenantId));
+      console.log("[getRelatorioCargosPorEmpresa] 🔒 Filtrando por tenantId:", tenantId);
+    } else {
+      console.log("[getRelatorioCargosPorEmpresa] 👑 Admin - Sem filtro de tenant (vê todos)");
+    }
+    
+    // Filtro opcional por empresa
+    if (empresaId) {
+      conditions.push(eq(cargos.empresaId, empresaId));
+    }
+    
     let query = db
       .select({
         empresaId: empresas.id,
@@ -1408,12 +1761,13 @@ export async function getRelatorioCargosPorEmpresa(empresaId: number | null) {
         quantidade: sql<number>`COUNT(${cargos.id})`.as('quantidade'),
       })
       .from(cargos)
-      .leftJoin(empresas, eq(cargos.empresaId, empresas.id))
-      .groupBy(empresas.id, empresas.razaoSocial, empresas.nomeFantasia);
+      .leftJoin(empresas, eq(cargos.empresaId, empresas.id));
     
-    if (empresaId) {
-      query = query.where(eq(cargos.empresaId, empresaId)) as any;
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
+    
+    query = query.groupBy(empresas.id, empresas.razaoSocial, empresas.nomeFantasia) as any;
     
     return await query;
   } catch (error) {
@@ -1422,10 +1776,26 @@ export async function getRelatorioCargosPorEmpresa(empresaId: number | null) {
   }
 }
 
-export async function getRelatorioCargosPorSetor(empresaId: number | null) {
+export async function getRelatorioCargosPorSetor(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório) - SEMPRE filtrar se tenantId não for null
+    if (tenantId !== null && tenantId !== undefined) {
+      conditions.push(eq(cargos.tenantId, tenantId));
+      conditions.push(eq(setores.tenantId, tenantId));
+      console.log("[getRelatorioCargosPorSetor] 🔒 Filtrando por tenantId:", tenantId);
+    } else {
+      console.log("[getRelatorioCargosPorSetor] 👑 Admin - Sem filtro de tenant (vê todos)");
+    }
+    
+    // Filtro opcional por empresa
+    if (empresaId) {
+      conditions.push(eq(cargos.empresaId, empresaId));
+    }
+    
     let baseQuery = db
       .select({
         setorId: setores.id,
@@ -1434,12 +1804,13 @@ export async function getRelatorioCargosPorSetor(empresaId: number | null) {
       })
       .from(cargoSetores)
       .leftJoin(setores, eq(cargoSetores.setorId, setores.id))
-      .leftJoin(cargos, eq(cargoSetores.cargoId, cargos.id))
-      .groupBy(setores.id, setores.nomeSetor);
+      .leftJoin(cargos, eq(cargoSetores.cargoId, cargos.id));
     
-    if (empresaId) {
-      baseQuery = baseQuery.where(eq(cargos.empresaId, empresaId)) as any;
+    if (conditions.length > 0) {
+      baseQuery = baseQuery.where(and(...conditions)) as any;
     }
+    
+    baseQuery = baseQuery.groupBy(setores.id, setores.nomeSetor) as any;
     
     return await baseQuery;
   } catch (error) {
@@ -1448,10 +1819,27 @@ export async function getRelatorioCargosPorSetor(empresaId: number | null) {
   }
 }
 
-export async function getRelatorioCargosPorEmpresaESetor(empresaId: number | null) {
+export async function getRelatorioCargosPorEmpresaESetor(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório) - SEMPRE filtrar se tenantId não for null
+    if (tenantId !== null && tenantId !== undefined) {
+      conditions.push(eq(cargos.tenantId, tenantId));
+      conditions.push(eq(empresas.tenantId, tenantId));
+      conditions.push(eq(setores.tenantId, tenantId));
+      console.log("[getRelatorioCargosPorEmpresaESetor] 🔒 Filtrando por tenantId:", tenantId);
+    } else {
+      console.log("[getRelatorioCargosPorEmpresaESetor] 👑 Admin - Sem filtro de tenant (vê todos)");
+    }
+    
+    // Filtro opcional por empresa
+    if (empresaId) {
+      conditions.push(eq(cargos.empresaId, empresaId));
+    }
+    
     let baseQuery = db
       .select({
         empresaId: empresas.id,
@@ -1464,12 +1852,13 @@ export async function getRelatorioCargosPorEmpresaESetor(empresaId: number | nul
       .from(cargoSetores)
       .leftJoin(cargos, eq(cargoSetores.cargoId, cargos.id))
       .leftJoin(empresas, eq(cargos.empresaId, empresas.id))
-      .leftJoin(setores, eq(cargoSetores.setorId, setores.id))
-      .groupBy(empresas.id, empresas.razaoSocial, empresas.nomeFantasia, setores.id, setores.nomeSetor);
+      .leftJoin(setores, eq(cargoSetores.setorId, setores.id));
     
-    if (empresaId) {
-      baseQuery = baseQuery.where(eq(cargos.empresaId, empresaId)) as any;
+    if (conditions.length > 0) {
+      baseQuery = baseQuery.where(and(...conditions)) as any;
     }
+    
+    baseQuery = baseQuery.groupBy(empresas.id, empresas.razaoSocial, empresas.nomeFantasia, setores.id, setores.nomeSetor) as any;
     
     return await baseQuery;
   } catch (error) {
@@ -1478,11 +1867,18 @@ export async function getRelatorioCargosPorEmpresaESetor(empresaId: number | nul
   }
 }
 
-export async function getCargoById(id: number) {
+export async function getCargoById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(cargos).where(eq(cargos.id, id)).limit(1);
+    const conditions: any[] = [eq(cargos.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o cargo pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(cargos.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(cargos).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar cargo:", error);
@@ -1530,13 +1926,18 @@ export async function deleteCargo(id: number) {
 
 // === SETORES ===
 
-export async function getAllSetores(filters?: any, empresaId?: number | null) {
+export async function getAllSetores(tenantId: number | null, filters?: any, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
     let query = db.select().from(setores);
 
     const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(setores.tenantId, tenantId));
+    }
 
     if (empresaId) {
       conditions.push(eq(setores.empresaId, empresaId));
@@ -1563,11 +1964,18 @@ export async function getAllSetores(filters?: any, empresaId?: number | null) {
   }
 }
 
-export async function getSetorById(id: number) {
+export async function getSetorById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(setores).where(eq(setores.id, id)).limit(1);
+    const conditions: any[] = [eq(setores.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o setor pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(setores.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(setores).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar setor:", error);
@@ -1629,10 +2037,23 @@ export async function deleteSetores(ids: number[]) {
 
 // === CARGO TREINAMENTOS ===
 
-export async function getTreinamentosByCargo(cargoId: number) {
+export async function getTreinamentosByCargo(cargoId: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    const conditions: any[] = [eq(cargoTreinamentos.cargoId, cargoId)];
+    
+    // ISOLAMENTO DE TENANT: Filtrar por tenant através do cargo e tipo de treinamento
+    if (tenantId !== undefined && tenantId !== null) {
+      // Buscar o cargo primeiro para verificar o tenantId
+      const cargo = await getCargoById(cargoId, tenantId);
+      if (!cargo) {
+        return []; // Cargo não pertence ao tenant
+      }
+      // Adicionar filtro no tipo de treinamento também
+      conditions.push(eq(tiposTreinamentos.tenantId, tenantId));
+    }
+    
     const result = await db
       .select({
         id: cargoTreinamentos.id,
@@ -1645,7 +2066,7 @@ export async function getTreinamentosByCargo(cargoId: number) {
       })
       .from(cargoTreinamentos)
       .leftJoin(tiposTreinamentos, eq(cargoTreinamentos.tipoTreinamentoId, tiposTreinamentos.id))
-      .where(eq(cargoTreinamentos.cargoId, cargoId))
+      .where(and(...conditions))
       .orderBy(asc(tiposTreinamentos.nomeTreinamento));
     console.log(`[Database] Treinamentos encontrados para cargo ${cargoId}:`, result.length);
     return result;
@@ -1683,10 +2104,23 @@ export async function deleteCargoTreinamento(id: number) {
 
 // === CARGO SETORES ===
 
-export async function getSetoresByCargo(cargoId: number) {
+export async function getSetoresByCargo(cargoId: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    const conditions: any[] = [eq(cargoSetores.cargoId, cargoId)];
+    
+    // ISOLAMENTO DE TENANT: Filtrar por tenant através do cargo e setor
+    if (tenantId !== undefined && tenantId !== null) {
+      // Buscar o cargo primeiro para verificar o tenantId
+      const cargo = await getCargoById(cargoId, tenantId);
+      if (!cargo) {
+        return []; // Cargo não pertence ao tenant
+      }
+      // Adicionar filtro no setor também
+      conditions.push(eq(setores.tenantId, tenantId));
+    }
+    
     const result = await db
       .select({
         id: cargoSetores.id,
@@ -1699,7 +2133,7 @@ export async function getSetoresByCargo(cargoId: number) {
       })
       .from(cargoSetores)
       .leftJoin(setores, eq(cargoSetores.setorId, setores.id))
-      .where(eq(cargoSetores.cargoId, cargoId))
+      .where(and(...conditions))
       .orderBy(asc(setores.nomeSetor));
     console.log(`[Database] Setores encontrados para cargo ${cargoId}:`, result.length);
     return result;
@@ -1737,13 +2171,25 @@ export async function deleteCargoSetor(id: number) {
 
 // === RISCOS OCUPACIONAIS ===
 
-export async function getAllRiscosOcupacionais(empresaId: number | null) {
+export async function getAllRiscosOcupacionais(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    let query = db.select().from(riscosOcupacionais);
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(riscosOcupacionais.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(riscosOcupacionais.empresaId, empresaId)) as any;
+      conditions.push(eq(riscosOcupacionais.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(riscosOcupacionais);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     return await query.orderBy(asc(riscosOcupacionais.nomeRisco));
   } catch (error) {
@@ -1752,11 +2198,18 @@ export async function getAllRiscosOcupacionais(empresaId: number | null) {
   }
 }
 
-export async function getRiscoOcupacionalById(id: number) {
+export async function getRiscoOcupacionalById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(riscosOcupacionais).where(eq(riscosOcupacionais.id, id)).limit(1);
+    const conditions: any[] = [eq(riscosOcupacionais.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o risco pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(riscosOcupacionais.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(riscosOcupacionais).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar risco ocupacional:", error);
@@ -1851,10 +2304,23 @@ export async function deleteRiscoOcupacional(id: number) {
   }
 }
 
-export async function getRiscosByCargo(cargoId: number) {
+export async function getRiscosByCargo(cargoId: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    const conditions: any[] = [eq(cargoRiscos.cargoId, cargoId)];
+    
+    // ISOLAMENTO DE TENANT: Filtrar por tenant através do cargo e risco ocupacional
+    if (tenantId !== undefined && tenantId !== null) {
+      // Buscar o cargo primeiro para verificar o tenantId
+      const cargo = await getCargoById(cargoId, tenantId);
+      if (!cargo) {
+        return []; // Cargo não pertence ao tenant
+      }
+      // Adicionar filtro no risco ocupacional também
+      conditions.push(eq(riscosOcupacionais.tenantId, tenantId));
+    }
+    
     const resultados = await db
       .select({
         id: cargoRiscos.id,
@@ -1879,7 +2345,7 @@ export async function getRiscosByCargo(cargoId: number) {
       })
       .from(cargoRiscos)
       .leftJoin(riscosOcupacionais, eq(cargoRiscos.riscoOcupacionalId, riscosOcupacionais.id))
-      .where(eq(cargoRiscos.cargoId, cargoId))
+      .where(and(...conditions))
       .orderBy(asc(riscosOcupacionais.nomeRisco));
     
     return resultados;
@@ -1954,13 +2420,25 @@ export async function deleteCargoRisco(id: number) {
 
 // === TIPOS TREINAMENTOS ===
 
-export async function getAllTiposTreinamentos(filters?: any, empresaId?: number | null) {
+export async function getAllTiposTreinamentos(tenantId: number | null, filters?: any, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    let query = db.select().from(tiposTreinamentos);
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(tiposTreinamentos.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(tiposTreinamentos.empresaId, empresaId)) as any;
+      conditions.push(eq(tiposTreinamentos.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(tiposTreinamentos);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     return await query.orderBy(asc(tiposTreinamentos.nomeTreinamento));
   } catch (error) {
@@ -1969,11 +2447,18 @@ export async function getAllTiposTreinamentos(filters?: any, empresaId?: number 
   }
 }
 
-export async function getTipoTreinamentoById(id: number) {
+export async function getTipoTreinamentoById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(tiposTreinamentos).where(eq(tiposTreinamentos.id, id)).limit(1);
+    const conditions: any[] = [eq(tiposTreinamentos.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o tipo de treinamento pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(tiposTreinamentos.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(tiposTreinamentos).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar tipo de treinamento:", error);
@@ -2033,13 +2518,25 @@ export async function deleteTiposTreinamentos(ids: number[]) {
 
 // === MODELOS CERTIFICADOS ===
 
-export async function getAllModelosCertificados(empresaId: number | null) {
+export async function getAllModelosCertificados(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    let query = db.select().from(modelosCertificados);
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(modelosCertificados.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(modelosCertificados.empresaId, empresaId)) as any;
+      conditions.push(eq(modelosCertificados.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(modelosCertificados);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     return await query.orderBy(asc(modelosCertificados.nome));
   } catch (error) {
@@ -2048,11 +2545,18 @@ export async function getAllModelosCertificados(empresaId: number | null) {
   }
 }
 
-export async function getModeloCertificadoById(id: number) {
+export async function getModeloCertificadoById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(modelosCertificados).where(eq(modelosCertificados.id, id)).limit(1);
+    const conditions: any[] = [eq(modelosCertificados.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o modelo pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(modelosCertificados.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(modelosCertificados).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar modelo de certificado:", error);
@@ -2128,14 +2632,31 @@ export async function deleteManyModelosCertificados(ids: number[]) {
 
 // === RESPONSÁVEIS ===
 
-export async function getAllResponsaveis(empresaId: number | null) {
+export async function getAllResponsaveis(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
     let query = db.select().from(responsaveis);
-    if (empresaId) {
-      query = query.where(eq(responsaveis.empresaId, empresaId)) as any;
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório) - SEMPRE filtrar se tenantId não for null
+    // Se tenantId for null, é admin e pode ver todos (não filtra)
+    if (tenantId !== null && tenantId !== undefined) {
+      conditions.push(eq(responsaveis.tenantId, tenantId));
+      console.log("[getAllResponsaveis] 🔒 Filtrando por tenantId:", tenantId);
+    } else {
+      console.log("[getAllResponsaveis] 👑 Admin - Sem filtro de tenant (vê todos)");
     }
+    
+    // Filtro opcional por empresa
+    if (empresaId) {
+      conditions.push(eq(responsaveis.empresaId, empresaId));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
     return await query.orderBy(asc(responsaveis.nomeCompleto));
   } catch (error) {
     console.error("[Database] Erro ao buscar responsáveis:", error);
@@ -2516,13 +3037,25 @@ export async function deleteManyResponsaveis(ids: number[]) {
 
 // === CERTIFICADOS EMITIDOS ===
 
-export async function getAllCertificadosEmitidos(empresaId: number | null, filters?: any) {
+export async function getAllCertificadosEmitidos(tenantId: number | null, empresaId?: number | null, filters?: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    let query = db.select().from(certificadosEmitidos);
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(certificadosEmitidos.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(certificadosEmitidos.empresaId, empresaId)) as any;
+      conditions.push(eq(certificadosEmitidos.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(certificadosEmitidos);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     return await query.orderBy(asc(certificadosEmitidos.nomeColaborador));
   } catch (error) {
@@ -2531,11 +3064,18 @@ export async function getAllCertificadosEmitidos(empresaId: number | null, filte
   }
 }
 
-export async function getCertificadoEmitidoById(id: number) {
+export async function getCertificadoEmitidoById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(certificadosEmitidos).where(eq(certificadosEmitidos.id, id)).limit(1);
+    const conditions: any[] = [eq(certificadosEmitidos.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o certificado pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(certificadosEmitidos.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(certificadosEmitidos).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar certificado emitido:", error);
@@ -2662,10 +3202,26 @@ export async function deleteManyTiposEpis(ids: number[]) {
 
 // === ORDENS DE SERVIÇO ===
 
-export async function getAllOrdensServico(empresaId: number | null, filters?: any) {
+export async function getAllOrdensServico(tenantId: number | null, empresaId?: number | null, filters?: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório) - SEMPRE filtrar se tenantId não for null
+    // Se tenantId for null, é admin e pode ver todos (não filtra)
+    if (tenantId !== null && tenantId !== undefined) {
+      conditions.push(eq(ordensServico.tenantId, tenantId));
+      console.log("[getAllOrdensServico] 🔒 Filtrando por tenantId:", tenantId);
+    } else {
+      console.log("[getAllOrdensServico] 👑 Admin - Sem filtro de tenant (vê todos)");
+    }
+    
+    // Filtro opcional por empresa
+    if (empresaId) {
+      conditions.push(eq(ordensServico.empresaId, empresaId));
+    }
+    
     let query = db.select({
       id: ordensServico.id,
       numeroOrdem: ordensServico.numeroOrdem,
@@ -2681,8 +3237,8 @@ export async function getAllOrdensServico(empresaId: number | null, filters?: an
       updatedAt: ordensServico.updatedAt,
     }).from(ordensServico);
     
-    if (empresaId) {
-      query = query.where(eq(ordensServico.empresaId, empresaId)) as any;
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     
     return await query.orderBy(asc(ordensServico.numeroOrdem));
@@ -2692,11 +3248,18 @@ export async function getAllOrdensServico(empresaId: number | null, filters?: an
   }
 }
 
-export async function getOrdemServicoById(id: number) {
+export async function getOrdemServicoById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(ordensServico).where(eq(ordensServico.id, id)).limit(1);
+    const conditions: any[] = [eq(ordensServico.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se a ordem de serviço pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(ordensServico.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(ordensServico).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar ordem de serviço:", error);
@@ -2769,13 +3332,25 @@ export async function deleteManyOrdensServico(ids: number[]) {
 
 // === MODELOS ORDEM SERVIÇO ===
 
-export async function getAllModelosOrdemServico(empresaId: number | null) {
+export async function getAllModelosOrdemServico(tenantId: number | null, empresaId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    let query = db.select().from(modelosOrdemServico);
+    const conditions: any[] = [];
+    
+    // FILTRO POR TENANT (obrigatório)
+    if (tenantId) {
+      conditions.push(eq(modelosOrdemServico.tenantId, tenantId));
+    }
+    
+    // Filtro opcional por empresa
     if (empresaId) {
-      query = query.where(eq(modelosOrdemServico.empresaId, empresaId)) as any;
+      conditions.push(eq(modelosOrdemServico.empresaId, empresaId));
+    }
+    
+    let query = db.select().from(modelosOrdemServico);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
     return await query.orderBy(desc(modelosOrdemServico.createdAt));
   } catch (error) {
@@ -2784,11 +3359,18 @@ export async function getAllModelosOrdemServico(empresaId: number | null) {
   }
 }
 
-export async function getModeloOrdemServicoById(id: number) {
+export async function getModeloOrdemServicoById(id: number, tenantId?: number | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    const result = await db.select().from(modelosOrdemServico).where(eq(modelosOrdemServico.id, id)).limit(1);
+    const conditions: any[] = [eq(modelosOrdemServico.id, id)];
+    
+    // ISOLAMENTO DE TENANT: Verificar se o modelo pertence ao tenant
+    if (tenantId !== undefined && tenantId !== null) {
+      conditions.push(eq(modelosOrdemServico.tenantId, tenantId));
+    }
+    
+    const result = await db.select().from(modelosOrdemServico).where(and(...conditions)).limit(1);
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar modelo de ordem de serviço:", error);
@@ -3004,7 +3586,7 @@ export async function getAsoByColaborador(
 }
 
 export async function getAllAsos(filters?: {
-  tenantId?: number;
+  tenantId?: number | null;
   colaboradorId?: number;
   empresaId?: number;
   tipoAso?: string;
@@ -3019,8 +3601,13 @@ export async function getAllAsos(filters?: {
     let query = db.select().from(asos);
     const conditions: any[] = [];
 
-    if (filters?.tenantId) {
+    // FILTRO POR TENANT (obrigatório para não-admins)
+    // Se tenantId for null, é admin/super_admin e pode ver TODOS os ASOs (não filtra)
+    if (filters?.tenantId !== null && filters?.tenantId !== undefined) {
       conditions.push(eq(asos.tenantId, filters.tenantId));
+      console.log("[getAllAsos] 🔒 Filtrando por tenantId:", filters.tenantId);
+    } else {
+      console.log("[getAllAsos] 👑 Admin - Sem filtro de tenant (vê todos os ASOs)");
     }
 
     if (filters?.colaboradorId) {
@@ -3563,6 +4150,282 @@ export async function refreshColaboradorAsoSnapshot(tenantId: number, colaborado
       .where(eq(colaboradores.id, colaboradorId));
   } catch (error) {
     console.error("[Database] Erro ao atualizar snapshot de ASO do colaborador:", error);
+  }
+}
+
+// === TENANTS (ADMIN) ===
+
+/**
+ * Cria um novo tenant (cliente/sistema)
+ */
+export async function createTenant(data: InsertTenant) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const result = await db.insert(tenants).values(data);
+    const insertId = (result as any)[0]?.insertId;
+    
+    if (insertId) {
+      return await getTenantById(insertId);
+    }
+    
+    throw new Error("Erro ao criar tenant");
+  } catch (error) {
+    console.error("[Database] Erro ao criar tenant:", error);
+    throw error;
+  }
+}
+
+/**
+ * Lista todos os tenants (apenas para admin)
+ */
+export async function getAllTenants() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const tenantsList = await db.select().from(tenants).orderBy(desc(tenants.createdAt));
+    
+    // Buscar estatísticas de cada tenant
+    const tenantsWithStats = await Promise.all(
+      tenantsList.map(async (tenant) => {
+        const [usersCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(users)
+          .where(eq(users.tenantId, tenant.id));
+
+        const [empresasCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(empresas)
+          .where(eq(empresas.tenantId, tenant.id));
+
+        const [colaboradoresCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(colaboradores)
+          .where(eq(colaboradores.tenantId, tenant.id));
+
+        return {
+          ...tenant,
+          stats: {
+            usuarios: Number(usersCount?.count || 0),
+            empresas: Number(empresasCount?.count || 0),
+            colaboradores: Number(colaboradoresCount?.count || 0),
+          },
+        };
+      })
+    );
+
+    return tenantsWithStats;
+  } catch (error) {
+    console.error("[Database] Erro ao listar tenants:", error);
+    throw error;
+  }
+}
+
+/**
+ * Atualiza o plano de um tenant
+ */
+export async function updateTenantPlano(tenantId: number, novoPlano: string, valorPlano?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const updateData: any = {
+      plano: novoPlano as any,
+      updatedAt: new Date(),
+    };
+    
+    if (valorPlano) {
+      updateData.valorPlano = valorPlano;
+    }
+
+    await db
+      .update(tenants)
+      .set(updateData)
+      .where(eq(tenants.id, tenantId));
+
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar plano do tenant:", error);
+    throw error;
+  }
+}
+
+/**
+ * Atualiza informações de pagamento de um tenant
+ */
+export async function updateTenantPagamento(
+  tenantId: number,
+  dataUltimoPagamento?: Date,
+  dataProximoPagamento?: Date,
+  statusPagamento?: string,
+  valorPlano?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (dataUltimoPagamento !== undefined) {
+      updateData.dataUltimoPagamento = dataUltimoPagamento;
+    }
+    if (dataProximoPagamento !== undefined) {
+      updateData.dataProximoPagamento = dataProximoPagamento;
+    }
+    if (statusPagamento) {
+      updateData.statusPagamento = statusPagamento as any;
+    }
+    if (valorPlano) {
+      updateData.valorPlano = valorPlano;
+    }
+
+    await db
+      .update(tenants)
+      .set(updateData)
+      .where(eq(tenants.id, tenantId));
+
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar pagamento do tenant:", error);
+    throw error;
+  }
+}
+
+/**
+ * Atualiza informações de contato de um tenant
+ */
+export async function updateTenantContato(
+  tenantId: number,
+  nome?: string,
+  email?: string,
+  telefone?: string,
+  cpf?: string,
+  cnpj?: string,
+  observacoes?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (nome) updateData.nome = nome;
+    if (email) updateData.email = email;
+    if (telefone) updateData.telefone = telefone;
+    if (cpf) updateData.cpf = cpf;
+    if (cnpj) updateData.cnpj = cnpj;
+    if (observacoes !== undefined) updateData.observacoes = observacoes;
+
+    await db
+      .update(tenants)
+      .set(updateData)
+      .where(eq(tenants.id, tenantId));
+
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar contato do tenant:", error);
+    throw error;
+  }
+}
+
+/**
+ * Atualiza o status de um tenant
+ */
+export async function updateTenantStatus(tenantId: number, novoStatus: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db
+      .update(tenants)
+      .set({
+        status: novoStatus as any,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenants.id, tenantId));
+
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar status do tenant:", error);
+    throw error;
+  }
+}
+
+/**
+ * Atualiza as datas de um tenant
+ */
+export async function updateTenantDates(tenantId: number, dataInicio: Date, dataFim?: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db
+      .update(tenants)
+      .set({
+        dataInicio: dataInicio,
+        dataFim: dataFim || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenants.id, tenantId));
+
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar datas do tenant:", error);
+    throw error;
+  }
+}
+
+/**
+ * Obtém detalhes de um tenant específico
+ */
+export async function getTenantById(tenantId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const [tenant] = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (!tenant) {
+      throw new Error("Tenant não encontrado");
+    }
+
+    // Buscar estatísticas
+    const [usersCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(eq(users.tenantId, tenantId));
+
+    const [empresasCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(empresas)
+      .where(eq(empresas.tenantId, tenantId));
+
+    const [colaboradoresCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(colaboradores)
+      .where(eq(colaboradores.tenantId, tenantId));
+
+    return {
+      ...tenant,
+      stats: {
+        usuarios: Number(usersCount?.count || 0),
+        empresas: Number(empresasCount?.count || 0),
+        colaboradores: Number(colaboradoresCount?.count || 0),
+      },
+    };
+  } catch (error) {
+    console.error("[Database] Erro ao buscar tenant:", error);
+    throw error;
   }
 }
 

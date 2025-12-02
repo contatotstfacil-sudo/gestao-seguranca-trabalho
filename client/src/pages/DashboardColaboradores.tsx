@@ -48,6 +48,14 @@ export default function DashboardColaboradores() {
       }
       const data = await response.json();
       const { _debug, ...statsData } = data;
+      console.log("[DashboardColaboradores] 📊 DADOS RECEBIDOS:", {
+        total: statsData.total,
+        funcoes: statsData.funcoes?.length || 0,
+        setor: statsData.setor?.length || 0,
+        maisAntigos: statsData.maisAntigos?.length || 0,
+        maisNovos: statsData.maisNovos?.length || 0,
+        dadosCompletos: statsData
+      });
       if (!cancelled) {
         setStats(statsData);
         setIsLoading(false);
@@ -72,19 +80,34 @@ export default function DashboardColaboradores() {
   }, []);
 
   // Memoizar valores calculados
-  const statsValues = useMemo(() => ({
-    total: stats?.total ?? 0,
-    ativos: stats?.ativos ?? 0,
-    inativos: stats?.inativos ?? 0,
-    totalHomens: stats?.totalHomens ?? 0,
-    totalMulheres: stats?.totalMulheres ?? 0,
-    percentualHomens: stats?.percentualHomens ?? 0,
-    percentualMulheres: stats?.percentualMulheres ?? 0,
-    topFuncoes: stats?.funcoes?.slice(0, 10) ?? [],
-    topSetores: stats?.setor?.slice(0, 10) ?? [],
-    maisAntigos: stats?.maisAntigos ?? [],
-    maisNovos: stats?.maisNovos ?? [],
-  }), [stats]);
+  const statsValues = useMemo(() => {
+    const values = {
+      total: stats?.total ?? 0,
+      ativos: stats?.ativos ?? 0,
+      inativos: stats?.inativos ?? 0,
+      totalHomens: stats?.totalHomens ?? 0,
+      totalMulheres: stats?.totalMulheres ?? 0,
+      percentualHomens: stats?.percentualHomens ?? 0,
+      percentualMulheres: stats?.percentualMulheres ?? 0,
+      topFuncoes: stats?.funcoes?.slice(0, 10) ?? [],
+      topSetores: stats?.setor?.slice(0, 10) ?? [],
+      maisAntigos: stats?.maisAntigos ?? [],
+      maisNovos: stats?.maisNovos ?? [],
+    };
+    
+    console.log("[DashboardColaboradores] 📊 STATS VALUES:", {
+      topFuncoes: values.topFuncoes.length,
+      topSetores: values.topSetores.length,
+      maisAntigos: values.maisAntigos.length,
+      maisNovos: values.maisNovos.length,
+      dadosFuncoes: values.topFuncoes,
+      dadosSetores: values.topSetores,
+      dadosAntigos: values.maisAntigos,
+      dadosNovos: values.maisNovos
+    });
+    
+    return values;
+  }, [stats]);
 
   const dadosSexo = useMemo(() => {
     if (!statsValues.totalHomens && !statsValues.totalMulheres) return [];
@@ -372,32 +395,36 @@ export default function DashboardColaboradores() {
           )}
 
         {/* Top 10 Funções */}
-        {statsValues.topFuncoes.length > 0 && (
         <Card>
           <CardHeader>
               <CardTitle>Top 10 Funções com Mais Colaboradores</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={400}>
+            {statsValues.topFuncoes.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={statsValues.topFuncoes} layout="vertical" margin={{ top: 20, right: 30, left: 200, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="funcao" type="category" width={180} />
                   <Tooltip />
                   <Bar dataKey="count" radius={[0, 8, 8, 0]} fill="#3b82f6" />
-              </BarChart>
-            </ResponsiveContainer>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-gray-500">
+                <p>Nenhum dado disponível</p>
+              </div>
+            )}
           </CardContent>
         </Card>
-      )}
 
         {/* Top 10 Setores */}
-        {statsValues.topSetores.length > 0 && (
         <Card>
           <CardHeader>
               <CardTitle>Top 10 Setores com Mais Colaboradores</CardTitle>
           </CardHeader>
           <CardContent>
+            {statsValues.topSetores.length > 0 ? (
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={statsValues.topSetores} layout="vertical" margin={{ top: 20, right: 30, left: 200, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -407,18 +434,22 @@ export default function DashboardColaboradores() {
                   <Bar dataKey="count" radius={[0, 8, 8, 0]} fill="#10b981" />
                 </BarChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-gray-500">
+                <p>Nenhum dado disponível</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Top 5 Mais Antigos e Mais Novos */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {statsValues.maisAntigos.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Top 5 Funcionários Mais Antigos</CardTitle>
-              </CardHeader>
-              <CardContent>
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 Funcionários Mais Antigos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {statsValues.maisAntigos.length > 0 ? (
                 <div className="space-y-3">
                   {statsValues.maisAntigos.map((colab: any, index: number) => (
                     <div key={colab.id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -439,17 +470,21 @@ export default function DashboardColaboradores() {
                       </div>
                     </div>
                   ))}
-              </div>
-          </CardContent>
-        </Card>
-      )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-[200px] text-gray-500">
+                  <p>Nenhum dado disponível</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          {statsValues.maisNovos.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Top 5 Funcionários Mais Novos</CardTitle>
-        </CardHeader>
-        <CardContent>
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 Funcionários Mais Novos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {statsValues.maisNovos.length > 0 ? (
                 <div className="space-y-3">
                   {statsValues.maisNovos.map((colab: any, index: number) => (
                     <div key={colab.id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -471,9 +506,13 @@ export default function DashboardColaboradores() {
                     </div>
                   ))}
                 </div>
-        </CardContent>
-      </Card>
-          )}
+              ) : (
+                <div className="flex items-center justify-center h-[200px] text-gray-500">
+                  <p>Nenhum dado disponível</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
