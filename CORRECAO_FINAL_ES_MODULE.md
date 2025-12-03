@@ -138,3 +138,5 @@ Para testar sem criar instalador, use `pnpm electron:dev`.
 
 
 
+
+

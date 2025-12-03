@@ -1,12 +1,13 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
-import { FileText, ChevronRight, Settings, List, FileCheck, Plus } from "lucide-react";
+import { FileText, ChevronRight, Settings, List, FileCheck, Plus, ClipboardList } from "lucide-react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import ListaTreinamentos from "./ListaTreinamentos";
 import TiposTreinamentos from "./TiposTreinamentos";
 import ModelosCertificados from "./ModelosCertificados";
 import EmissaoCertificados from "./EmissaoCertificados";
+import ListaPresencaEmitida from "./ListaPresencaEmitida";
 import React from "react";
 
 type TreinamentosSection = {
@@ -46,6 +47,13 @@ const treinamentosSections: TreinamentosSection[] = [
     path: "/treinamentos/lista",
     component: ListaTreinamentos,
   },
+  {
+    id: "lista-presenca-emitida",
+    label: "Lista de Presença Emitida",
+    icon: ClipboardList,
+    path: "/treinamentos/lista-presenca-emitida",
+    component: ListaPresencaEmitida,
+  },
 ];
 
 export default function TreinamentosPainel() {
@@ -71,57 +79,48 @@ export default function TreinamentosPainel() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Menu Lateral */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardContent className="p-2">
-                <nav className="space-y-1">
+        {/* Menu no Cabeçalho */}
+        <Card>
+          <CardContent className="p-2">
+            <nav className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setLocation("/treinamentos")}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                  location === "/treinamentos"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <FileText className="h-4 w-4" />
+                <span>Visão Geral</span>
+              </button>
+              
+              {treinamentosSections.map((section) => {
+                const Icon = section.icon;
+                const isActive = location === section.path;
+                return (
                   <button
-                    onClick={() => setLocation("/treinamentos")}
+                    key={section.id}
+                    onClick={() => setLocation(section.path)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
-                      location === "/treinamentos"
+                      "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                      isActive
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-accent text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    <FileText className="h-4 w-4" />
-                    <span className="font-medium">Visão Geral</span>
+                    <Icon className="h-4 w-4" />
+                    <span>{section.label}</span>
                   </button>
-                  
-                  {treinamentosSections.map((section) => {
-                    const Icon = section.icon;
-                    const isActive = location === section.path;
-                    return (
-                      <button
-                        key={section.id}
-                        onClick={() => setLocation(section.path)}
-                        className={cn(
-                          "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
-                          isActive
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-accent text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Icon className="h-4 w-4" />
-                          <span className="font-medium">{section.label}</span>
-                        </div>
-                        <ChevronRight className={cn(
-                          "h-4 w-4 transition-transform",
-                          isActive && "rotate-90"
-                        )} />
-                      </button>
-                    );
-                  })}
-                </nav>
-              </CardContent>
-            </Card>
-          </div>
+                );
+              })}
+            </nav>
+          </CardContent>
+        </Card>
 
-          {/* Conteúdo Principal */}
-          <div className="lg:col-span-3">
+        {/* Conteúdo Principal */}
+        <div>
             {showMenu ? (
               <Card>
                 <CardContent className="p-6">
@@ -129,7 +128,7 @@ export default function TreinamentosPainel() {
                     <div>
                       <h2 className="text-xl font-semibold mb-2">Áreas de Treinamentos</h2>
                       <p className="text-muted-foreground">
-                        Selecione uma opção no menu lateral para gerenciar treinamentos.
+                        Selecione uma opção no menu acima para gerenciar treinamentos.
                       </p>
                     </div>
 
@@ -157,6 +156,8 @@ export default function TreinamentosPainel() {
                                     ? "Cadastre e gerencie os prazos de treinamentos disponíveis."
                                     : section.id === "lista-treinamentos"
                                     ? "Visualize e gerencie todos os treinamentos realizados."
+                                    : section.id === "lista-presenca-emitida"
+                                    ? "Gere listas de presença automaticamente a partir dos certificados emitidos."
                                     : "Visualize e gerencie todos os treinamentos realizados."}
                                 </p>
                               </div>
@@ -180,7 +181,6 @@ export default function TreinamentosPainel() {
                 </CardContent>
               </Card>
             )}
-          </div>
         </div>
       </div>
     </DashboardLayout>

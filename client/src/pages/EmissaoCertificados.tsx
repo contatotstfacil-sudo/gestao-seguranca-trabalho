@@ -20,6 +20,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Popover,
@@ -57,10 +58,14 @@ import {
 export default function EmissaoCertificados({ showLayout = true }: { showLayout?: boolean }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedModeloId, setSelectedModeloId] = useState<string>("");
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>("");
   const [selectedColaboradorId, setSelectedColaboradorId] = useState<string>("");
+  const [selectedTipoTreinamentoIds, setSelectedTipoTreinamentoIds] = useState<string[]>([]);
+  const [emitirParaTodos, setEmitirParaTodos] = useState(false);
   const [selectedResponsavelId, setSelectedResponsavelId] = useState<string>("");
   const [datasRealizacao, setDatasRealizacao] = useState<string[]>([]);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [emitirDialogOpen, setEmitirDialogOpen] = useState(false);
   const [orientacaoPreview, setOrientacaoPreview] = useState<"portrait" | "landscape">("landscape");
   const [colaboradorOpen, setColaboradorOpen] = useState(false);
   const [colaboradorSearch, setColaboradorSearch] = useState("");
@@ -69,6 +74,7 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
   const { data: modelos = [], isLoading: isLoadingModelos } = trpc.modelosCertificados.list.useQuery();
   const { data: colaboradores = [], isLoading: isLoadingColaboradores } = trpc.colaboradores.list.useQuery({});
   const { data: responsaveis = [] } = trpc.responsaveis.list.useQuery();
+  const { data: todosTiposTreinamentos = [] } = trpc.tiposTreinamentos.list.useQuery();
   const [searchCertificados, setSearchCertificados] = useState("");
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>("");
   const [filtroMes, setFiltroMes] = useState<string>("");
@@ -119,16 +125,45 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
     },
   });
   
-  // Buscar empresa do colaborador quando selecionado
+  // Empresa selecionada
+  const empresaSelecionada = useMemo(() => {
+    if (!selectedEmpresaId) return null;
+    return empresas?.find((e: any) => e.id.toString() === selectedEmpresaId);
+  }, [empresas, selectedEmpresaId]);
+
+  // Buscar empresa do colaborador quando selecionado (fallback se não tiver empresa selecionada)
   const colaboradorSelecionado = useMemo(() => {
     if (!selectedColaboradorId) return null;
     return colaboradores.find((c: any) => c.id.toString() === selectedColaboradorId);
   }, [colaboradores, selectedColaboradorId]);
 
-  const { data: empresa } = trpc.empresas.getById.useQuery(
-    { id: colaboradorSelecionado?.empresaId || 0 },
-    { enabled: !!colaboradorSelecionado?.empresaId }
+  // Buscar tipos de treinamentos vinculados ao cargo do colaborador (após definir colaboradorSelecionado)
+  const cargoIdDoColaborador = colaboradorSelecionado?.cargoId || colaboradorSelecionado?.cargo?.id || null;
+  
+  // Debug: verificar se o colaborador tem cargoId
+  useEffect(() => {
+    if (colaboradorSelecionado) {
+      console.log("🔍 Colaborador selecionado:", colaboradorSelecionado);
+      console.log("🔍 cargoIdDoColaborador:", cargoIdDoColaborador);
+    }
+  }, [colaboradorSelecionado, cargoIdDoColaborador]);
+  
+  const { data: tiposTreinamentosCargo = [], isLoading: isLoadingTiposTreinamentos } = trpc.tiposTreinamentos.getByCargo.useQuery(
+    { cargoId: cargoIdDoColaborador || 0 },
+    { enabled: !!cargoIdDoColaborador && !!selectedColaboradorId }
   );
+  
+  // Debug: verificar tipos de treinamentos retornados
+  useEffect(() => {
+    if (tiposTreinamentosCargo.length > 0) {
+      console.log("📚 Tipos de treinamentos encontrados:", tiposTreinamentosCargo);
+    } else if (cargoIdDoColaborador) {
+      console.log("⚠️ Nenhum tipo de treinamento encontrado para cargoId:", cargoIdDoColaborador);
+    }
+  }, [tiposTreinamentosCargo, cargoIdDoColaborador]);
+
+  // Usar empresa selecionada ou empresa do colaborador
+  const empresa = empresaSelecionada || (colaboradorSelecionado?.empresaId ? empresas?.find((e: any) => e.id === colaboradorSelecionado.empresaId) : null);
 
   // Responsável selecionado
   const responsavelSelecionado = useMemo(() => {
@@ -136,16 +171,23 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
     return responsaveis.find((r: any) => r.id.toString() === selectedResponsavelId);
   }, [responsaveis, selectedResponsavelId]);
 
-  // Filtrar modelos - sempre usar apenas o "Modelo Padrão"
+  // Filtrar modelos baseado nos tipos de treinamento selecionados
   const modelosFiltrados = useMemo(() => {
-    // Buscar modelo padrão pelos modelos cadastrados que tenham nome "Modelo Padrão" ou similar
-    const modeloPadrao = modelos.find((m: any) => 
-      m.nome?.toLowerCase().includes("padrão") || 
-      m.nome?.toLowerCase().includes("padrao") ||
-      m.nome?.toLowerCase().includes("padr")
+    if (selectedTipoTreinamentoIds.length === 0) {
+      // Se não tem tipos selecionados, mostrar todos
+      return modelos;
+    }
+    // Filtrar modelos que tenham o tipoTreinamentoId correspondente a qualquer tipo selecionado
+    return modelos.filter((m: any) => 
+      selectedTipoTreinamentoIds.includes(m.tipoTreinamentoId?.toString() || "")
     );
-    return modeloPadrao ? [modeloPadrao] : (modelos.length > 0 ? [modelos[0]] : []);
-  }, [modelos]);
+  }, [modelos, selectedTipoTreinamentoIds]);
+  
+  // Colaboradores da empresa selecionada (para emissão em massa)
+  const colaboradoresDaEmpresa = useMemo(() => {
+    if (!selectedEmpresaId) return [];
+    return colaboradores.filter((c: any) => c.empresaId?.toString() === selectedEmpresaId);
+  }, [colaboradores, selectedEmpresaId]);
   
   // Garantir que o modelo padrão seja selecionado automaticamente
   useEffect(() => {
@@ -165,14 +207,27 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
     }
   }, [modelosFiltrados.length, modelos]);
 
-  // Filtrar colaboradores baseado no termo de busca
+  // Filtrar colaboradores baseado na empresa selecionada e no termo de busca
   const colaboradoresFiltrados = useMemo(() => {
-    if (!colaboradorSearch.trim()) return colaboradores;
-    const termo = colaboradorSearch.toLowerCase();
-    return colaboradores.filter((colaborador: any) => 
-      colaborador.nomeCompleto?.toLowerCase().includes(termo)
-    );
-  }, [colaboradores, colaboradorSearch]);
+    let colaboradoresFiltrados = colaboradores;
+    
+    // Filtrar por empresa se selecionada
+    if (selectedEmpresaId) {
+      colaboradoresFiltrados = colaboradoresFiltrados.filter((c: any) => 
+        c.empresaId?.toString() === selectedEmpresaId
+      );
+    }
+    
+    // Filtrar por termo de busca
+    if (colaboradorSearch.trim()) {
+      const termo = colaboradorSearch.toLowerCase();
+      colaboradoresFiltrados = colaboradoresFiltrados.filter((colaborador: any) => 
+        colaborador.nomeCompleto?.toLowerCase().includes(termo)
+      );
+    }
+    
+    return colaboradoresFiltrados;
+  }, [colaboradores, selectedEmpresaId, colaboradorSearch]);
 
   // Modelo selecionado
   const modeloSelecionado = useMemo(() => {
@@ -657,12 +712,149 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
     return htmlProcessado;
   }, [modeloSelecionado, colaboradorSelecionado, empresa, responsavelSelecionado, datasRealizacao, orientacaoPreview]);
 
+  // Função para gerar certificado em massa
+  const handleDownloadEmMassa = async () => {
+    // Validações
+    if (!selectedModeloId || !selectedEmpresaId) {
+      toast.error("Selecione empresa e modelo de certificado");
+      return;
+    }
+
+    if (selectedTipoTreinamentoIds.length === 0) {
+      toast.error("Selecione pelo menos um tipo de treinamento");
+      return;
+    }
+
+    if (!emitirParaTodos && !selectedColaboradorId) {
+      toast.error("Selecione um colaborador ou marque 'Emitir para todos'");
+      return;
+    }
+
+    // Validar datas de realização
+    if (datasRealizacao.length === 0 || datasRealizacao.some(d => !d)) {
+      toast.error("Preencha todas as datas de realização");
+      return;
+    }
+
+    // Determinar lista de colaboradores
+    const colaboradoresParaEmitir = emitirParaTodos 
+      ? colaboradoresDaEmpresa 
+      : colaboradorSelecionado 
+        ? [colaboradorSelecionado] 
+        : [];
+
+    if (colaboradoresParaEmitir.length === 0) {
+      toast.error("Nenhum colaborador selecionado");
+      return;
+    }
+
+    // Emitir certificados para cada combinação de colaborador e tipo de treinamento
+    let sucesso = 0;
+    let erros = 0;
+    const total = colaboradoresParaEmitir.length * selectedTipoTreinamentoIds.length;
+
+    toast.loading(`Emitindo ${total} certificado(s)...`, { id: "emitindo-certificados" });
+
+    for (const colaborador of colaboradoresParaEmitir) {
+      for (const tipoTreinamentoId of selectedTipoTreinamentoIds) {
+        try {
+          // Buscar modelo correspondente ao tipo de treinamento
+          // Se emitir para todos, usar modelo selecionado (mesmo para todos)
+          // Se emitir para um colaborador, tentar encontrar modelo específico do tipo
+          const modeloParaTipo = emitirParaTodos 
+            ? modeloSelecionado
+            : modelos.find((m: any) => 
+                m.tipoTreinamentoId?.toString() === tipoTreinamentoId
+              ) || modeloSelecionado;
+
+          if (!modeloParaTipo) {
+            console.warn(`Modelo não encontrado para tipo ${tipoTreinamentoId}`);
+            erros++;
+            continue;
+          }
+
+          // Buscar tipo de treinamento para obter nome
+          const tipoTreinamento = emitirParaTodos
+            ? todosTiposTreinamentos.find((t: any) => t.id.toString() === tipoTreinamentoId)
+            : tiposTreinamentosCargo.find((t: any) => 
+                t.tipoTreinamentoId.toString() === tipoTreinamentoId
+              );
+
+          // Preparar dados para processar template
+          const cargoColaborador = colaborador.nomeCargo || colaborador.funcao || "";
+          const dados = {
+            nomeColaborador: colaborador.nomeCompleto,
+            rgColaborador: colaborador.rg || "",
+            cargoColaborador: cargoColaborador,
+            nomeEmpresa: empresaSelecionada?.razaoSocial || "",
+            cnpjEmpresa: empresaSelecionada?.cnpj || "",
+            datasRealizacao: datasRealizacao.filter(d => d && d.trim() !== ""),
+            descricaoCertificado: tipoTreinamento?.nomeTreinamento || modeloParaTipo.descricaoCertificado || "",
+            conteudoProgramatico: modeloParaTipo.conteudoProgramatico 
+              ? JSON.parse(modeloParaTipo.conteudoProgramatico || "[]")
+              : [],
+            enderecoTreinamento: modeloParaTipo.textoRodape || "",
+          };
+
+          // Processar template
+          const diasTreinamento = datasRealizacao.filter(d => d && d.trim() !== "").length;
+          const htmlGerado = processarTemplate(modeloParaTipo.htmlTemplate || "", dados, diasTreinamento);
+
+          // Criar certificado
+          await new Promise<void>((resolve) => {
+            createCertificadoMutation.mutate({
+              modeloCertificadoId: modeloParaTipo.id,
+              colaboradorId: colaborador.id,
+              empresaId: parseInt(selectedEmpresaId),
+              responsavelId: selectedResponsavelId ? parseInt(selectedResponsavelId) : undefined,
+              nomeColaborador: colaborador.nomeCompleto,
+              rgColaborador: colaborador.rg || undefined,
+              nomeEmpresa: empresaSelecionada?.razaoSocial || undefined,
+              cnpjEmpresa: empresaSelecionada?.cnpj || undefined,
+              datasRealizacao: JSON.stringify(datasRealizacao),
+              htmlGerado: htmlGerado,
+            }, {
+              onSuccess: () => {
+                sucesso++;
+                resolve();
+              },
+              onError: (error) => {
+                console.error(`Erro ao emitir certificado para ${colaborador.nomeCompleto} - ${tipoTreinamento?.nomeTreinamento}:`, error);
+                erros++;
+                resolve(); // Continuar mesmo com erro
+              }
+            });
+          });
+
+          // Pequeno delay para não sobrecarregar
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error("Erro ao processar certificado:", error);
+          erros++;
+        }
+      }
+    }
+
+    // Atualizar toast com resultado
+    toast.dismiss("emitindo-certificados");
+    if (sucesso > 0) {
+      toast.success(`${sucesso} certificado(s) emitido(s) com sucesso!${erros > 0 ? ` ${erros} erro(s).` : ""}`);
+      utils.certificadosEmitidos.list.invalidate();
+    } else {
+      toast.error(`Nenhum certificado foi emitido. ${erros} erro(s).`);
+    }
+  };
+
   const handleVisualizar = () => {
     if (!selectedModeloId) {
       toast.error("Selecione um modelo de certificado");
       return;
     }
-    if (!selectedColaboradorId) {
+    if (!selectedEmpresaId) {
+      toast.error("Selecione uma empresa");
+      return;
+    }
+    if (!selectedColaboradorId && !emitirParaTodos) {
       toast.error("Selecione um colaborador");
       return;
     }
@@ -670,7 +862,7 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
   };
 
   const handleDownload = () => {
-    if (!previewHtml || !modeloSelecionado || !colaboradorSelecionado) {
+    if (!previewHtml || !modeloSelecionado || !colaboradorSelecionado || !empresaSelecionada) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
@@ -688,8 +880,8 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
       responsavelId: selectedResponsavelId ? parseInt(selectedResponsavelId) : undefined,
       nomeColaborador: colaboradorSelecionado.nomeCompleto,
       rgColaborador: colaboradorSelecionado.rg || undefined,
-      nomeEmpresa: empresa?.razaoSocial || undefined,
-      cnpjEmpresa: empresa?.cnpj || undefined,
+      nomeEmpresa: empresaSelecionada.razaoSocial || undefined,
+      cnpjEmpresa: empresaSelecionada.cnpj || undefined,
       datasRealizacao: JSON.stringify(datasRealizacao),
       htmlGerado: previewHtml,
     });
@@ -700,11 +892,11 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
       // Adicionar CSS de impressão para evitar quebra de página
       let htmlComPrint = previewHtml;
       const cssPrint = `
-    @page { size: auto; margin: 0; }
+    @page { size: A4 landscape; margin: 0; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
     @media print {
-      html, body { margin: 0; padding: 0; overflow: hidden; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-      .certificado { page-break-after: avoid !important; page-break-inside: avoid !important; break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+      html, body { margin: 0; padding: 0; overflow: hidden; width: 297mm; height: 210mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+      .certificado { width: 297mm !important; height: 210mm !important; page-break-after: avoid !important; page-break-inside: avoid !important; break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
       .cabecalho { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; background: #1e40af !important; background-color: #1e40af !important; color: #ffffff !important; }
       .conteudo { page-break-inside: avoid !important; break-inside: avoid !important; }
       .rodape { page-break-inside: avoid !important; break-inside: avoid !important; }
@@ -899,11 +1091,11 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
       // Adicionar CSS de impressão para evitar quebra de página
       let htmlComPrint = htmlProcessado;
       const cssPrint = `
-    @page { size: auto; margin: 0; }
+    @page { size: A4 landscape; margin: 0; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
     @media print {
-      html, body { margin: 0; padding: 0; overflow: hidden; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-      .certificado { page-break-after: avoid !important; page-break-inside: avoid !important; break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+      html, body { margin: 0; padding: 0; overflow: hidden; width: 297mm; height: 210mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+      .certificado { width: 297mm !important; height: 210mm !important; page-break-after: avoid !important; page-break-inside: avoid !important; break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
       .cabecalho { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; background: #1e40af !important; background-color: #1e40af !important; color: #ffffff !important; }
       .conteudo { page-break-inside: avoid !important; break-inside: avoid !important; }
       .rodape { page-break-inside: avoid !important; break-inside: avoid !important; }
@@ -954,6 +1146,21 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
     }
   };
 
+  const resetForm = () => {
+    setSelectedEmpresaId("");
+    setSelectedColaboradorId("");
+    setSelectedTipoTreinamentoIds([]);
+    setEmitirParaTodos(false);
+    setSelectedResponsavelId("");
+    setDatasRealizacao([]);
+    setColaboradorSearch("");
+  };
+
+  const handleCloseEmitirDialog = () => {
+    setEmitirDialogOpen(false);
+    resetForm();
+  };
+
   const content = (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -961,38 +1168,53 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
           <h2 className="text-2xl font-bold">Emitir Certificado</h2>
           <p className="text-muted-foreground">Emita certificados para colaboradores</p>
         </div>
-      </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Buscar Modelos de Certificados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Buscar modelo de certificado..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-10"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+        <Dialog open={emitirDialogOpen} onOpenChange={setEmitirDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={resetForm}>
+              <Plus className="mr-2 h-4 w-4" />
+              Emitir Certificado
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Emitir Certificado</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="empresa">Empresa *</Label>
+              <Select 
+                value={selectedEmpresaId || undefined} 
+                onValueChange={(value) => {
+                  setSelectedEmpresaId(value || "");
+                  setSelectedColaboradorId(""); // Limpar colaborador quando mudar empresa
+                }}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="Selecione uma empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresas?.map((empresa: any) => (
+                    <SelectItem key={empresa.id} value={empresa.id.toString()}>
+                      {empresa.razaoSocial}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Emitir Certificado</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            {selectedEmpresaId && empresaSelecionada && (
+              <div>
+                <Label htmlFor="cnpj">CNPJ</Label>
+                <Input
+                  id="cnpj"
+                  value={empresaSelecionada.cnpj || ""}
+                  disabled
+                  className="mt-1.5 bg-muted"
+                  placeholder="CNPJ será preenchido automaticamente"
+                />
+              </div>
+            )}
+
             <div>
               <Label htmlFor="colaborador">Colaborador *</Label>
               <Popover open={colaboradorOpen} onOpenChange={setColaboradorOpen}>
@@ -1002,10 +1224,13 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
                     role="combobox"
                     aria-expanded={colaboradorOpen}
                     className="w-full justify-between mt-1.5 h-10"
+                    disabled={!selectedEmpresaId}
                   >
                     {selectedColaboradorId
                       ? colaboradores.find((c: any) => c.id.toString() === selectedColaboradorId)?.nomeCompleto || "Selecione um colaborador"
-                      : "Selecione um colaborador"}
+                      : selectedEmpresaId 
+                        ? "Selecione um colaborador"
+                        : "Selecione uma empresa primeiro"}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -1018,7 +1243,11 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
                     />
                     <CommandList>
                       <CommandEmpty>
-                        {isLoadingColaboradores ? "Carregando..." : "Nenhum colaborador encontrado."}
+                        {isLoadingColaboradores 
+                          ? "Carregando..." 
+                          : selectedEmpresaId
+                            ? "Nenhum colaborador encontrado para esta empresa."
+                            : "Selecione uma empresa primeiro."}
                       </CommandEmpty>
                       <CommandGroup>
                         {colaboradoresFiltrados.map((colaborador: any) => (
@@ -1050,6 +1279,123 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
                 </PopoverContent>
               </Popover>
             </div>
+
+            {selectedColaboradorId && colaboradorSelecionado && (
+              <div>
+                <Label htmlFor="cargo">Cargo</Label>
+                <Input
+                  id="cargo"
+                  value={colaboradorSelecionado.nomeCargo || colaboradorSelecionado.funcao || ""}
+                  disabled
+                  className="mt-1.5 bg-muted"
+                  placeholder="Cargo será preenchido automaticamente"
+                />
+              </div>
+            )}
+
+            {((selectedColaboradorId && colaboradorSelecionado) || emitirParaTodos) && (
+              <div>
+                <Label htmlFor="tipoTreinamento">Tipos de Treinamento * (Selecione múltiplos)</Label>
+                {!cargoIdDoColaborador ? (
+                  <div className="mt-1.5 p-3 border border-yellow-200 bg-yellow-50 rounded-md">
+                    <p className="text-xs text-yellow-800">
+                      ⚠️ Este colaborador não possui cargo vinculado. É necessário vincular um cargo ao colaborador para selecionar tipos de treinamento.
+                    </p>
+                  </div>
+                ) : isLoadingTiposTreinamentos ? (
+                  <div className="mt-1.5 p-3 border border-gray-200 bg-gray-50 rounded-md">
+                    <p className="text-xs text-gray-600">
+                      Carregando tipos de treinamento...
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                    {tiposTreinamentosCargo.length > 0 ? (
+                      tiposTreinamentosCargo.map((tipo: any) => {
+                        const tipoId = tipo.tipoTreinamentoId.toString();
+                        const isSelected = selectedTipoTreinamentoIds.includes(tipoId);
+                        return (
+                          <div key={tipo.tipoTreinamentoId} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`tipo-${tipo.tipoTreinamentoId}`}
+                              checked={isSelected}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedTipoTreinamentoIds([...selectedTipoTreinamentoIds, tipoId]);
+                                } else {
+                                  setSelectedTipoTreinamentoIds(selectedTipoTreinamentoIds.filter(id => id !== tipoId));
+                                }
+                                setSelectedModeloId(""); // Limpar modelo quando mudar tipos
+                                setDatasRealizacao([]); // Limpar datas
+                              }}
+                            />
+                            <Label 
+                              htmlFor={`tipo-${tipo.tipoTreinamentoId}`}
+                              className="text-sm font-normal cursor-pointer flex-1"
+                            >
+                              {tipo.nomeTreinamento} {tipo.tipoNr ? `- ${tipo.tipoNr}` : ""}
+                            </Label>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        ℹ️ Nenhum tipo de treinamento vinculado ao cargo deste colaborador. Vincule tipos de treinamento ao cargo primeiro.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {selectedTipoTreinamentoIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {selectedTipoTreinamentoIds.length} tipo(s) selecionado(s)
+                  </p>
+                )}
+              </div>
+            )}
+            
+            {selectedEmpresaId && colaboradoresDaEmpresa.length > 0 && (
+              <div className="flex items-center space-x-2 p-3 border rounded-md bg-blue-50">
+                <Checkbox
+                  id="emitir-para-todos"
+                  checked={emitirParaTodos}
+                  onCheckedChange={(checked) => {
+                    setEmitirParaTodos(checked as boolean);
+                    if (checked) {
+                      setSelectedColaboradorId(""); // Limpar colaborador quando emitir para todos
+                    }
+                  }}
+                />
+                <Label htmlFor="emitir-para-todos" className="text-sm font-medium cursor-pointer flex-1">
+                  Emitir para todos os colaboradores desta empresa ({colaboradoresDaEmpresa.length} colaborador(es))
+                </Label>
+              </div>
+            )}
+
+            {selectedTipoTreinamentoIds.length > 0 && modelosFiltrados.length > 0 && (
+              <div>
+                <Label htmlFor="modelo">Modelo de Certificado *</Label>
+                <Select 
+                  value={selectedModeloId || undefined} 
+                  onValueChange={(value) => {
+                    handleModeloChange(value || "");
+                  }}
+                >
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue placeholder="Selecione um modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelosFiltrados.map((modelo: any) => (
+                      <SelectItem key={modelo.id} value={modelo.id.toString()}>
+                        {modelo.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  O mesmo modelo será usado para todos os certificados emitidos.
+                </p>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="responsavel">Responsável pela Assinatura</Label>
@@ -1088,25 +1434,40 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
               </div>
             )}
 
-            <div className="flex gap-2 pt-4">
-              <Button
-                variant="outline"
-                onClick={handleVisualizar}
-                disabled={!selectedModeloId || !selectedColaboradorId}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Visualizar
-              </Button>
-              <Button
-                onClick={handleDownload}
-                disabled={!selectedModeloId || !selectedColaboradorId || !previewHtml}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Gerar Certificado
-              </Button>
+              <div className="flex gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleVisualizar}
+                  disabled={!selectedModeloId || !selectedEmpresaId || (!emitirParaTodos && !selectedColaboradorId) || selectedTipoTreinamentoIds.length === 0}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Visualizar
+                </Button>
+                <Button
+                  onClick={async () => {
+                    await handleDownloadEmMassa();
+                    handleCloseEmitirDialog();
+                  }}
+                  disabled={!selectedModeloId || !selectedEmpresaId || (!emitirParaTodos && !selectedColaboradorId) || selectedTipoTreinamentoIds.length === 0 || datasRealizacao.length === 0}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  {emitirParaTodos 
+                    ? `Gerar ${colaboradoresDaEmpresa.length * selectedTipoTreinamentoIds.length} Certificado(s)`
+                    : selectedTipoTreinamentoIds.length > 1
+                      ? `Gerar ${selectedTipoTreinamentoIds.length} Certificado(s)`
+                      : "Gerar Certificado"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCloseEmitirDialog}
+                >
+                  Cancelar
+                </Button>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
+      </div>
 
         {/* Dialog de Preview */}
         {previewDialogOpen && (
@@ -1553,11 +1914,11 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
                                     // Adicionar CSS de impressão para evitar quebra de página
                                     let htmlComPrint = htmlProcessado;
                                     const cssPrint = `
-    @page { size: auto; margin: 0; }
+    @page { size: A4 landscape; margin: 0; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
     @media print {
-      html, body { margin: 0; padding: 0; overflow: hidden; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-      .certificado { page-break-after: avoid !important; page-break-inside: avoid !important; break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+      html, body { margin: 0; padding: 0; overflow: hidden; width: 297mm; height: 210mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+      .certificado { width: 297mm !important; height: 210mm !important; page-break-after: avoid !important; page-break-inside: avoid !important; break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
       .cabecalho { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; background: #1e40af !important; background-color: #1e40af !important; color: #ffffff !important; }
       .conteudo { page-break-inside: avoid !important; break-inside: avoid !important; }
       .rodape { page-break-inside: avoid !important; break-inside: avoid !important; }

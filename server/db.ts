@@ -2043,15 +2043,16 @@ export async function getTreinamentosByCargo(cargoId: number, tenantId?: number 
   try {
     const conditions: any[] = [eq(cargoTreinamentos.cargoId, cargoId)];
     
-    // ISOLAMENTO DE TENANT: Filtrar por tenant através do cargo e tipo de treinamento
+    // ISOLAMENTO DE TENANT: Filtrar APENAS por cargoTreinamentos.tenantId
+    // IMPORTANTE: NÃO filtrar por tiposTreinamentos.tenantId porque tipos de treinamento podem ser compartilhados
+    // O que importa é que o VÍNCULO (cargoTreinamentos) pertence ao tenant correto
     if (tenantId !== undefined && tenantId !== null) {
-      // Buscar o cargo primeiro para verificar o tenantId
-      const cargo = await getCargoById(cargoId, tenantId);
-      if (!cargo) {
-        return []; // Cargo não pertence ao tenant
-      }
-      // Adicionar filtro no tipo de treinamento também
-      conditions.push(eq(tiposTreinamentos.tenantId, tenantId));
+      // FILTRAR APENAS por tenantId na tabela cargoTreinamentos (OBRIGATÓRIO)
+      conditions.push(eq(cargoTreinamentos.tenantId, tenantId));
+      console.log(`[Database] 🔍 Filtros aplicados: cargoId=${cargoId}, tenantId=${tenantId} (apenas cargoTreinamentos.tenantId)`);
+    } else {
+      // Para admin/super_admin, não filtrar por tenant
+      console.log(`[Database] 🔍 Buscando sem filtro de tenant (admin/super_admin)`);
     }
     
     const result = await db
@@ -2063,12 +2064,29 @@ export async function getTreinamentosByCargo(cargoId: number, tenantId?: number 
         tipoNr: tiposTreinamentos.tipoNr,
         createdAt: cargoTreinamentos.createdAt,
         updatedAt: cargoTreinamentos.updatedAt,
+        tenantId: cargoTreinamentos.tenantId, // Adicionar tenantId para debug
       })
       .from(cargoTreinamentos)
       .leftJoin(tiposTreinamentos, eq(cargoTreinamentos.tipoTreinamentoId, tiposTreinamentos.id))
       .where(and(...conditions))
       .orderBy(asc(tiposTreinamentos.nomeTreinamento));
-    console.log(`[Database] Treinamentos encontrados para cargo ${cargoId}:`, result.length);
+    console.log(`[Database] 📊 Treinamentos encontrados para cargo ${cargoId} (tenantId: ${tenantId}):`, result.length);
+    console.log(`[Database] 📊 Resultados completos:`, JSON.stringify(result, null, 2));
+    
+    // Debug: verificar se há treinamentos sem filtro de tenant
+    if (result.length === 0 && tenantId) {
+      const semFiltro = await db
+        .select()
+        .from(cargoTreinamentos)
+        .where(eq(cargoTreinamentos.cargoId, cargoId))
+        .limit(10);
+      console.log(`[Database] 🔍 DEBUG: Treinamentos sem filtro de tenant:`, semFiltro.length);
+      if (semFiltro.length > 0) {
+        console.log(`[Database] 🔍 DEBUG: Primeiro resultado:`, semFiltro[0]);
+        console.log(`[Database] 🔍 DEBUG: tenantId do vínculo:`, semFiltro[0].tenantId, `vs tenantId buscado:`, tenantId);
+      }
+    }
+    
     return result;
   } catch (error) {
     console.error("[Database] Erro ao buscar treinamentos do cargo:", error);
@@ -2080,12 +2098,68 @@ export async function createCargoTreinamento(data: InsertCargoTreinamento) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    console.log("[Database] Criando cargo treinamento:", data);
+    console.log("[Database] 📝 Criando cargo treinamento:");
+    console.log("[Database] 📝 Dados recebidos:", JSON.stringify(data, null, 2));
+    
+    // Validar dados obrigatórios
+    if (!data.cargoId) {
+      throw new Error("cargoId é obrigatório para criar vínculo de treinamento");
+    }
+    if (!data.tipoTreinamentoId) {
+      throw new Error("tipoTreinamentoId é obrigatório para criar vínculo de treinamento");
+    }
+    
+    // Se não tem tenantId, buscar do cargo
+    if (!data.tenantId) {
+      console.log("[Database] ⚠️ tenantId não fornecido, buscando do cargo...");
+      const cargo = await getCargoById(data.cargoId, null);
+      if (cargo && cargo.tenantId) {
+        data.tenantId = cargo.tenantId;
+        console.log("[Database] ✅ tenantId obtido do cargo:", data.tenantId);
+      } else {
+        throw new Error("Não foi possível determinar tenantId. Cargo não encontrado ou sem tenantId.");
+      }
+    }
+    
+    // Verificar se já existe vínculo (evitar duplicatas)
+    const vínculoExistente = await db
+      .select()
+      .from(cargoTreinamentos)
+      .where(
+        and(
+          eq(cargoTreinamentos.cargoId, data.cargoId),
+          eq(cargoTreinamentos.tipoTreinamentoId, data.tipoTreinamentoId),
+          eq(cargoTreinamentos.tenantId, data.tenantId)
+        )
+      )
+      .limit(1);
+    
+    if (vínculoExistente.length > 0) {
+      console.log("[Database] ⚠️ Vínculo já existe:", vínculoExistente[0]);
+      return { success: true, id: vínculoExistente[0].id, alreadyExists: true };
+    }
+    
+    console.log("[Database] 📤 Inserindo vínculo no banco...");
     const result = await db.insert(cargoTreinamentos).values(data);
-    console.log("[Database] Cargo treinamento criado com sucesso");
-    return { success: true };
-  } catch (error) {
-    console.error("[Database] Erro ao criar cargo treinamento:", error);
+    const insertId = (result as any)[0]?.insertId;
+    console.log("[Database] ✅ Cargo treinamento criado com sucesso! ID:", insertId);
+    
+    // Verificar se foi realmente inserido
+    const verificado = await db
+      .select()
+      .from(cargoTreinamentos)
+      .where(eq(cargoTreinamentos.id, insertId))
+      .limit(1);
+    
+    console.log("[Database] ✅ Vínculo verificado no banco:", verificado.length > 0 ? "SIM" : "NÃO");
+    
+    return { success: true, id: insertId };
+  } catch (error: any) {
+    console.error("[Database] ❌ Erro ao criar cargo treinamento:");
+    console.error("[Database] ❌ Erro completo:", error);
+    console.error("[Database] ❌ Mensagem:", error?.message);
+    console.error("[Database] ❌ Stack:", error?.stack);
+    console.error("[Database] ❌ Código SQL:", error?.code);
     throw error;
   }
 }
@@ -2102,6 +2176,21 @@ export async function deleteCargoTreinamento(id: number) {
   }
 }
 
+export async function deleteCargoTreinamentosBatch(ids: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    if (ids.length === 0) {
+      return { success: true, deleted: 0 };
+    }
+    await db.delete(cargoTreinamentos).where(inArray(cargoTreinamentos.id, ids));
+    return { success: true, deleted: ids.length };
+  } catch (error) {
+    console.error("[Database] Erro ao excluir cargo treinamentos em massa:", error);
+    throw error;
+  }
+}
+
 // === CARGO SETORES ===
 
 export async function getSetoresByCargo(cargoId: number, tenantId?: number | null) {
@@ -2110,15 +2199,15 @@ export async function getSetoresByCargo(cargoId: number, tenantId?: number | nul
   try {
     const conditions: any[] = [eq(cargoSetores.cargoId, cargoId)];
     
-    // ISOLAMENTO DE TENANT: Filtrar por tenant através do cargo e setor
+    // ISOLAMENTO DE TENANT: Filtrar APENAS por cargoSetores.tenantId
+    // IMPORTANTE: NÃO filtrar por setores.tenantId porque setores podem ser compartilhados
+    // O que importa é que o VÍNCULO (cargoSetores) pertence ao tenant correto
     if (tenantId !== undefined && tenantId !== null) {
-      // Buscar o cargo primeiro para verificar o tenantId
-      const cargo = await getCargoById(cargoId, tenantId);
-      if (!cargo) {
-        return []; // Cargo não pertence ao tenant
-      }
-      // Adicionar filtro no setor também
-      conditions.push(eq(setores.tenantId, tenantId));
+      // FILTRAR APENAS por tenantId na tabela cargoSetores (OBRIGATÓRIO)
+      conditions.push(eq(cargoSetores.tenantId, tenantId));
+      console.log(`[Database] 🔍 Filtros aplicados: cargoId=${cargoId}, tenantId=${tenantId} (apenas cargoSetores.tenantId)`);
+    } else {
+      console.log(`[Database] 🔍 Buscando sem filtro de tenant (admin/super_admin)`);
     }
     
     const result = await db
@@ -2130,12 +2219,30 @@ export async function getSetoresByCargo(cargoId: number, tenantId?: number | nul
         empresaId: cargoSetores.empresaId,
         createdAt: cargoSetores.createdAt,
         updatedAt: cargoSetores.updatedAt,
+        tenantId: cargoSetores.tenantId, // Adicionar tenantId para debug
       })
       .from(cargoSetores)
       .leftJoin(setores, eq(cargoSetores.setorId, setores.id))
       .where(and(...conditions))
       .orderBy(asc(setores.nomeSetor));
-    console.log(`[Database] Setores encontrados para cargo ${cargoId}:`, result.length);
+    
+    console.log(`[Database] 📊 Setores encontrados para cargo ${cargoId} (tenantId: ${tenantId}):`, result.length);
+    console.log(`[Database] 📊 Resultados completos:`, JSON.stringify(result, null, 2));
+    
+    // Debug: verificar se há setores sem filtro de tenant
+    if (result.length === 0 && tenantId) {
+      const semFiltro = await db
+        .select()
+        .from(cargoSetores)
+        .where(eq(cargoSetores.cargoId, cargoId))
+        .limit(10);
+      console.log(`[Database] 🔍 DEBUG: Setores sem filtro de tenant:`, semFiltro.length);
+      if (semFiltro.length > 0) {
+        console.log(`[Database] 🔍 DEBUG: Primeiro resultado:`, semFiltro[0]);
+        console.log(`[Database] 🔍 DEBUG: tenantId do vínculo:`, semFiltro[0].tenantId, `vs tenantId buscado:`, tenantId);
+      }
+    }
+    
     return result;
   } catch (error) {
     console.error("[Database] Erro ao buscar setores do cargo:", error);
@@ -2147,12 +2254,64 @@ export async function createCargoSetor(data: InsertCargoSetor) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    console.log("[Database] Criando cargo setor:", JSON.stringify(data, null, 2));
+    console.log("[Database] 📝 Criando cargo setor:");
+    console.log("[Database] 📝 Dados recebidos:", JSON.stringify(data, null, 2));
+    
+    // Validar dados obrigatórios
+    if (!data.cargoId) {
+      throw new Error("cargoId é obrigatório para criar vínculo de setor");
+    }
+    if (!data.setorId) {
+      throw new Error("setorId é obrigatório para criar vínculo de setor");
+    }
+    
+    // Se não tem tenantId, buscar do cargo
+    if (!data.tenantId) {
+      console.log("[Database] ⚠️ tenantId não fornecido, buscando do cargo...");
+      const cargo = await getCargoById(data.cargoId, null);
+      if (cargo && cargo.tenantId) {
+        data.tenantId = cargo.tenantId;
+        console.log("[Database] ✅ tenantId obtido do cargo:", data.tenantId);
+      } else {
+        throw new Error("Não foi possível determinar tenantId. Cargo não encontrado ou sem tenantId.");
+      }
+    }
+    
+    // Verificar se já existe vínculo (evitar duplicatas)
+    const vínculoExistente = await db
+      .select()
+      .from(cargoSetores)
+      .where(
+        and(
+          eq(cargoSetores.cargoId, data.cargoId),
+          eq(cargoSetores.setorId, data.setorId),
+          eq(cargoSetores.tenantId, data.tenantId)
+        )
+      )
+      .limit(1);
+    
+    if (vínculoExistente.length > 0) {
+      console.log("[Database] ⚠️ Vínculo já existe:", vínculoExistente[0]);
+      return { success: true, id: vínculoExistente[0].id, alreadyExists: true };
+    }
+    
+    console.log("[Database] 📤 Inserindo vínculo no banco...");
     const result = await db.insert(cargoSetores).values(data);
-    console.log("[Database] Cargo setor criado com sucesso, resultado:", result);
-    return { success: true };
+    const insertId = (result as any)[0]?.insertId;
+    console.log("[Database] ✅ Cargo setor criado com sucesso! ID:", insertId);
+    
+    // Verificar se foi realmente inserido
+    const verificado = await db
+      .select()
+      .from(cargoSetores)
+      .where(eq(cargoSetores.id, insertId))
+      .limit(1);
+    
+    console.log("[Database] ✅ Vínculo verificado:", verificado.length > 0 ? "SIM" : "NÃO");
+    
+    return { success: true, id: insertId };
   } catch (error) {
-    console.error("[Database] Erro ao criar cargo setor:", error);
+    console.error("[Database] ❌ Erro ao criar cargo setor:", error);
     throw error;
   }
 }
@@ -2165,6 +2324,21 @@ export async function deleteCargoSetor(id: number) {
     return { success: true };
   } catch (error) {
     console.error("[Database] Erro ao excluir cargo setor:", error);
+    throw error;
+  }
+}
+
+export async function deleteCargoSetoresBatch(ids: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    if (ids.length === 0) {
+      return { success: true, deleted: 0 };
+    }
+    await db.delete(cargoSetores).where(inArray(cargoSetores.id, ids));
+    return { success: true, deleted: ids.length };
+  } catch (error) {
+    console.error("[Database] Erro ao excluir cargo setores em massa:", error);
     throw error;
   }
 }
@@ -2310,15 +2484,15 @@ export async function getRiscosByCargo(cargoId: number, tenantId?: number | null
   try {
     const conditions: any[] = [eq(cargoRiscos.cargoId, cargoId)];
     
-    // ISOLAMENTO DE TENANT: Filtrar por tenant através do cargo e risco ocupacional
+    // ISOLAMENTO DE TENANT: Filtrar APENAS por cargoRiscos.tenantId
+    // IMPORTANTE: NÃO filtrar por riscosOcupacionais.tenantId porque riscos podem ser compartilhados
+    // O que importa é que o VÍNCULO (cargoRiscos) pertence ao tenant correto
     if (tenantId !== undefined && tenantId !== null) {
-      // Buscar o cargo primeiro para verificar o tenantId
-      const cargo = await getCargoById(cargoId, tenantId);
-      if (!cargo) {
-        return []; // Cargo não pertence ao tenant
-      }
-      // Adicionar filtro no risco ocupacional também
-      conditions.push(eq(riscosOcupacionais.tenantId, tenantId));
+      // FILTRAR APENAS por tenantId na tabela cargoRiscos (OBRIGATÓRIO)
+      conditions.push(eq(cargoRiscos.tenantId, tenantId));
+      console.log(`[Database] 🔍 Filtros aplicados: cargoId=${cargoId}, tenantId=${tenantId} (apenas cargoRiscos.tenantId)`);
+    } else {
+      console.log(`[Database] 🔍 Buscando sem filtro de tenant (admin/super_admin)`);
     }
     
     const resultados = await db
@@ -2342,11 +2516,29 @@ export async function getRiscosByCargo(cargoId: number, tenantId?: number | null
         tipoRisco: riscosOcupacionais.tipoRisco,
         createdAt: cargoRiscos.createdAt,
         updatedAt: cargoRiscos.updatedAt,
+        tenantId: cargoRiscos.tenantId, // Adicionar tenantId para debug
       })
       .from(cargoRiscos)
       .leftJoin(riscosOcupacionais, eq(cargoRiscos.riscoOcupacionalId, riscosOcupacionais.id))
       .where(and(...conditions))
       .orderBy(asc(riscosOcupacionais.nomeRisco));
+    
+    console.log(`[Database] 📊 Riscos encontrados para cargo ${cargoId} (tenantId: ${tenantId}):`, resultados.length);
+    console.log(`[Database] 📊 Resultados completos:`, JSON.stringify(resultados, null, 2));
+    
+    // Debug: verificar se há riscos sem filtro de tenant
+    if (resultados.length === 0 && tenantId) {
+      const semFiltro = await db
+        .select()
+        .from(cargoRiscos)
+        .where(eq(cargoRiscos.cargoId, cargoId))
+        .limit(10);
+      console.log(`[Database] 🔍 DEBUG: Riscos sem filtro de tenant:`, semFiltro.length);
+      if (semFiltro.length > 0) {
+        console.log(`[Database] 🔍 DEBUG: Primeiro resultado:`, semFiltro[0]);
+        console.log(`[Database] 🔍 DEBUG: tenantId do vínculo:`, semFiltro[0].tenantId, `vs tenantId buscado:`, tenantId);
+      }
+    }
     
     return resultados;
   } catch (error) {

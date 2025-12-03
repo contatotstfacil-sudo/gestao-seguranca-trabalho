@@ -172,3 +172,5 @@ const plano = await trpc.assinaturas.getMinha.query();
 
 
 
+
+

@@ -575,17 +575,17 @@ export const appRouter = router({
           
           console.log("[empresas.create] tenantId determinado:", tenantId);
           
-          // VERIFICAÇÃO DE LIMITE DO PLANO
-          if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && tenantId && ctx.planLimits) {
-            const empresasExistentes = await db.getAllEmpresas(undefined, tenantId);
-            const quantidadeAtual = empresasExistentes?.length || 0;
-            
-            console.log("[empresas.create] Empresas existentes:", quantidadeAtual, "Limite:", ctx.planLimits.maxEmpresas);
-            
-            if (!checkQuantityLimit(quantidadeAtual, ctx.planLimits.maxEmpresas)) {
-              throw new Error(getLimitMessage('empresas', quantidadeAtual, ctx.planLimits.maxEmpresas));
-            }
-          }
+          // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
+          // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && tenantId && ctx.planLimits) {
+          //   const empresasExistentes = await db.getAllEmpresas(undefined, tenantId);
+          //   const quantidadeAtual = empresasExistentes?.length || 0;
+          //   
+          //   console.log("[empresas.create] Empresas existentes:", quantidadeAtual, "Limite:", ctx.planLimits.maxEmpresas);
+          //   
+          //   if (!checkQuantityLimit(quantidadeAtual, ctx.planLimits.maxEmpresas)) {
+          //     throw new Error(getLimitMessage('empresas', quantidadeAtual, ctx.planLimits.maxEmpresas));
+          //   }
+          // }
           
           // Garantir que tenantId está presente (exceto para admin)
           if (tenantId === null && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
@@ -743,17 +743,18 @@ export const appRouter = router({
       }))
       .mutation(async ({ input: formInput, ctx }) => {
         // VERIFICAÇÃO DE LIMITE DO PLANO
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
-          // Limite de colaboradores é POR EMPRESA
-          if (formInput.empresaId && ctx.planLimits.maxColaboradores > 0) {
-            const colaboradoresExistentes = await db.getAllColaboradores(ctx.user.tenantId, formInput.empresaId);
-            const quantidadeAtual = colaboradoresExistentes?.length || 0;
-            
-            if (!checkQuantityLimit(quantidadeAtual, ctx.planLimits.maxColaboradores)) {
-              throw new Error(getLimitMessage('colaboradores', quantidadeAtual, ctx.planLimits.maxColaboradores, true));
-            }
-          }
-        }
+        // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
+        // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+        //   // Limite de colaboradores é POR EMPRESA
+        //   if (formInput.empresaId && ctx.planLimits.maxColaboradores > 0) {
+        //     const colaboradoresExistentes = await db.getAllColaboradores(ctx.user.tenantId, formInput.empresaId);
+        //     const quantidadeAtual = colaboradoresExistentes?.length || 0;
+        //     
+        //     if (!checkQuantityLimit(quantidadeAtual, ctx.planLimits.maxColaboradores)) {
+        //       throw new Error(getLimitMessage('colaboradores', quantidadeAtual, ctx.planLimits.maxColaboradores, true));
+        //     }
+        //   }
+        // }
         
         // ISOLAMENTO DE TENANT: Determinar tenantId correto
         let tenantId: number | null = null;
@@ -949,22 +950,22 @@ export const appRouter = router({
         status: z.enum(["ativa", "concluida"]).default("ativa"),
       }))
       .mutation(async ({ input, ctx }) => {
-        // VERIFICAÇÃO DE LIMITE DO PLANO
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
-          // Busca todas as obras do tenant através das empresas
-          const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
-          const empresaIds = empresasDoTenant?.map(e => e.id) || [];
-          
-          let totalObras = 0;
-          for (const empresaId of empresaIds) {
-            const obras = await db.getAllObras(ctx.user.tenantId, empresaId);
-            totalObras += obras?.length || 0;
-          }
-          
-          if (!checkQuantityLimit(totalObras, ctx.planLimits.maxObras)) {
-            throw new Error(getLimitMessage('obras', totalObras, ctx.planLimits.maxObras));
-          }
-        }
+        // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
+        // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+        //   // Busca todas as obras do tenant através das empresas
+        //   const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
+        //   const empresaIds = empresasDoTenant?.map(e => e.id) || [];
+        //   
+        //   let totalObras = 0;
+        //   for (const empresaId of empresaIds) {
+        //     const obras = await db.getAllObras(ctx.user.tenantId, empresaId);
+        //     totalObras += obras?.length || 0;
+        //   }
+        //   
+        //   if (!checkQuantityLimit(totalObras, ctx.planLimits.maxObras)) {
+        //     throw new Error(getLimitMessage('obras', totalObras, ctx.planLimits.maxObras));
+        //   }
+        // }
         
         // ISOLAMENTO DE TENANT: Vincula obra ao tenant do usuário
         // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
@@ -1072,22 +1073,22 @@ export const appRouter = router({
         status: z.enum(["valido", "vencido", "a_vencer"]).default("valido"),
       }))
       .mutation(async ({ input, ctx }) => {
-        // VERIFICAÇÃO DE LIMITE DO PLANO
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
-          // Busca todos os treinamentos do tenant através das empresas
-          const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
-          const empresaIds = empresasDoTenant?.map(e => e.id) || [];
-          
-          let totalTreinamentos = 0;
-          for (const empresaId of empresaIds) {
-            const treinamentos = await db.getAllTreinamentos(ctx.user.tenantId, empresaId);
-            totalTreinamentos += treinamentos?.length || 0;
-          }
-          
-          if (!checkQuantityLimit(totalTreinamentos, ctx.planLimits.maxTreinamentos)) {
-            throw new Error(getLimitMessage('treinamentos', totalTreinamentos, ctx.planLimits.maxTreinamentos));
-          }
-        }
+        // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
+        // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+        //   // Busca todos os treinamentos do tenant através das empresas
+        //   const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
+        //   const empresaIds = empresasDoTenant?.map(e => e.id) || [];
+        //   
+        //   let totalTreinamentos = 0;
+        //   for (const empresaId of empresaIds) {
+        //     const treinamentos = await db.getAllTreinamentos(ctx.user.tenantId, empresaId);
+        //     totalTreinamentos += treinamentos?.length || 0;
+        //   }
+        //   
+        //   if (!checkQuantityLimit(totalTreinamentos, ctx.planLimits.maxTreinamentos)) {
+        //     throw new Error(getLimitMessage('treinamentos', totalTreinamentos, ctx.planLimits.maxTreinamentos));
+        //   }
+        // }
         
         // ISOLAMENTO DE TENANT: Vincula treinamento ao tenant do usuário
         // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
@@ -1161,22 +1162,22 @@ export const appRouter = router({
         status: z.enum(["em_uso", "vencido", "devolvido"]).default("em_uso"),
       }))
       .mutation(async ({ input, ctx }) => {
-        // VERIFICAÇÃO DE LIMITE DO PLANO
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
-          // Busca todos os EPIs do tenant através das empresas
-          const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
-          const empresaIds = empresasDoTenant?.map(e => e.id) || [];
-          
-          let totalEpis = 0;
-          for (const empresaId of empresaIds) {
-            const epis = await db.getAllEpis(ctx.user.tenantId, empresaId);
-            totalEpis += epis?.length || 0;
-          }
-          
-          if (!checkQuantityLimit(totalEpis, ctx.planLimits.maxEpis)) {
-            throw new Error(getLimitMessage('epis', totalEpis, ctx.planLimits.maxEpis));
-          }
-        }
+        // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
+        // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+        //   // Busca todos os EPIs do tenant através das empresas
+        //   const empresasDoTenant = await db.getAllEmpresas(undefined, ctx.user.tenantId);
+        //   const empresaIds = empresasDoTenant?.map(e => e.id) || [];
+        //   
+        //   let totalEpis = 0;
+        //   for (const empresaId of empresaIds) {
+        //     const epis = await db.getAllEpis(ctx.user.tenantId, empresaId);
+        //     totalEpis += epis?.length || 0;
+        //   }
+        //   
+        //   if (!checkQuantityLimit(totalEpis, ctx.planLimits.maxEpis)) {
+        //     throw new Error(getLimitMessage('epis', totalEpis, ctx.planLimits.maxEpis));
+        //   }
+        // }
         
         // ISOLAMENTO DE TENANT: Vincula EPI ao tenant do usuário
         // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
@@ -1605,14 +1606,371 @@ export const appRouter = router({
   }),
 
   cargoTreinamentos: router({
+    forcarAdicionarRiscosSetor: protectedProcedure
+      .input(z.object({ cargoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const cargo = await db.getCargoById(input.cargoId, null);
+        if (!cargo) {
+          throw new Error("Cargo não encontrado");
+        }
+        
+        const tenantId = cargo.tenantId;
+        if (!tenantId) {
+          throw new Error("Cargo não tem tenantId definido");
+        }
+        
+        const resultados = {
+          riscos: { vinculados: 0, criados: 0, erros: 0 },
+          setor: { vinculado: false, criado: false, erro: null },
+        };
+        
+        // FORÇAR ADIÇÃO DE 2 RISCOS FÍSICOS
+        try {
+          // Buscar riscos físicos existentes
+          const riscosFisicos = await db.getAllRiscosOcupacionais(tenantId, undefined);
+          const riscosFisicosFiltrados = riscosFisicos.filter((r: any) => 
+            r.tipoRisco?.toLowerCase() === 'fisico' || 
+            r.tipoRisco?.toLowerCase() === 'físico' ||
+            r.nomeRisco?.toLowerCase().includes('fisico') ||
+            r.nomeRisco?.toLowerCase().includes('físico')
+          );
+          
+          let risco1 = riscosFisicosFiltrados[0];
+          let risco2 = riscosFisicosFiltrados[1];
+          
+          // Se não tem 2 riscos físicos, criar
+          if (!risco1) {
+            risco1 = await db.createRiscoOcupacional({
+              nomeRisco: 'Ruído',
+              tipoRisco: 'fisico',
+              status: 'ativo',
+              tenantId: tenantId,
+            });
+            resultados.riscos.criados++;
+          }
+          
+          if (!risco2) {
+            risco2 = await db.createRiscoOcupacional({
+              nomeRisco: 'Vibração',
+              tipoRisco: 'fisico',
+              status: 'ativo',
+              tenantId: tenantId,
+            });
+            resultados.riscos.criados++;
+          }
+          
+          // Vincular os 2 riscos
+          if (risco1) {
+            try {
+              const result = await db.createCargoRisco({
+                cargoId: input.cargoId,
+                riscoOcupacionalId: risco1.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success) {
+                resultados.riscos.vinculados++;
+              }
+            } catch (error: any) {
+              resultados.riscos.erros++;
+            }
+          }
+          
+          if (risco2) {
+            try {
+              const result = await db.createCargoRisco({
+                cargoId: input.cargoId,
+                riscoOcupacionalId: risco2.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success) {
+                resultados.riscos.vinculados++;
+              }
+            } catch (error: any) {
+              resultados.riscos.erros++;
+            }
+          }
+        } catch (error: any) {
+          resultados.riscos.erros++;
+        }
+        
+        // FORÇAR ADIÇÃO DO SETOR "COMPRAS"
+        try {
+          // Buscar setor "Compras"
+          const setores = await db.getAllSetores(tenantId, undefined, undefined);
+          let setorCompras = setores.find((s: any) => 
+            s.nomeSetor?.toLowerCase().includes('compra')
+          );
+          
+          // Se não existe, criar
+          if (!setorCompras) {
+            setorCompras = await db.createSetor({
+              nomeSetor: 'Compras',
+              tenantId: tenantId,
+            });
+            resultados.setor.criado = true;
+          }
+          
+          // Vincular setor
+          if (setorCompras) {
+            try {
+              const result = await db.createCargoSetor({
+                cargoId: input.cargoId,
+                setorId: setorCompras.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success) {
+                resultados.setor.vinculado = true;
+              }
+            } catch (error: any) {
+              resultados.setor.erro = error.message;
+            }
+          }
+        } catch (error: any) {
+          resultados.setor.erro = error.message;
+        }
+        
+        return {
+          success: true,
+          ...resultados
+        };
+      }),
+    forcarVinculoTudo: protectedProcedure
+      .input(z.object({ cargoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const cargo = await db.getCargoById(input.cargoId, null);
+        if (!cargo) {
+          throw new Error("Cargo não encontrado");
+        }
+        
+        const tenantId = cargo.tenantId;
+        if (!tenantId) {
+          throw new Error("Cargo não tem tenantId definido");
+        }
+        
+        const resultados = {
+          treinamentos: { vinculados: 0, jaExistentes: 0, erros: 0, total: 0 },
+          setores: { vinculados: 0, jaExistentes: 0, erros: 0, total: 0 },
+          riscos: { vinculados: 0, jaExistentes: 0, erros: 0, total: 0 },
+        };
+        
+        // FORÇAR VÍNCULO DE TREINAMENTOS
+        try {
+          const tiposTreinamentos = await db.getAllTiposTreinamentos(tenantId, undefined, undefined);
+          resultados.treinamentos.total = tiposTreinamentos.length;
+          
+          for (const tipoTreinamento of tiposTreinamentos) {
+            try {
+              const result = await db.createCargoTreinamento({
+                cargoId: input.cargoId,
+                tipoTreinamentoId: tipoTreinamento.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success && !result.alreadyExists) {
+                resultados.treinamentos.vinculados++;
+              } else {
+                resultados.treinamentos.jaExistentes++;
+              }
+            } catch (error: any) {
+              resultados.treinamentos.erros++;
+            }
+          }
+        } catch (error: any) {
+          resultados.treinamentos.erros++;
+        }
+        
+        // FORÇAR VÍNCULO DE SETORES
+        try {
+          const setores = await db.getAllSetores(tenantId, undefined, undefined);
+          resultados.setores.total = setores.length;
+          
+          for (const setor of setores) {
+            try {
+              const result = await db.createCargoSetor({
+                cargoId: input.cargoId,
+                setorId: setor.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success && !result.alreadyExists) {
+                resultados.setores.vinculados++;
+              } else {
+                resultados.setores.jaExistentes++;
+              }
+            } catch (error: any) {
+              resultados.setores.erros++;
+            }
+          }
+        } catch (error: any) {
+          resultados.setores.erros++;
+        }
+        
+        // FORÇAR VÍNCULO DE RISCOS
+        try {
+          const riscos = await db.getAllRiscosOcupacionais(tenantId, undefined);
+          resultados.riscos.total = riscos.length;
+          
+          for (const risco of riscos) {
+            try {
+              const result = await db.createCargoRisco({
+                cargoId: input.cargoId,
+                riscoOcupacionalId: risco.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success) {
+                resultados.riscos.vinculados++;
+              } else {
+                resultados.riscos.jaExistentes++;
+              }
+            } catch (error: any) {
+              resultados.riscos.erros++;
+            }
+          }
+        } catch (error: any) {
+          resultados.riscos.erros++;
+        }
+        
+        return {
+          success: true,
+          ...resultados
+        };
+      }),
+    vincularTudo: protectedProcedure
+      .input(z.object({ cargoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const cargo = await db.getCargoById(input.cargoId, null);
+        if (!cargo) {
+          throw new Error("Cargo não encontrado");
+        }
+        
+        const tenantId = cargo.tenantId;
+        if (!tenantId) {
+          throw new Error("Cargo não tem tenantId definido");
+        }
+        
+        const resultados = {
+          treinamentos: { vinculados: 0, jaExistentes: 0, erros: 0, total: 0 },
+          setores: { vinculados: 0, jaExistentes: 0, erros: 0, total: 0 },
+          riscos: { vinculados: 0, jaExistentes: 0, erros: 0, total: 0 },
+        };
+        
+        // VINCULAR TREINAMENTOS
+        try {
+          const tiposTreinamentos = await db.getAllTiposTreinamentos(tenantId, undefined, undefined);
+          const treinamentosVinculados = await db.getTreinamentosByCargo(input.cargoId, tenantId);
+          const idsJaVinculados = new Set(treinamentosVinculados.map((t: any) => t.tipoTreinamentoId));
+          
+          resultados.treinamentos.total = tiposTreinamentos.length;
+          
+          for (const tipoTreinamento of tiposTreinamentos) {
+            if (idsJaVinculados.has(tipoTreinamento.id)) {
+              resultados.treinamentos.jaExistentes++;
+              continue;
+            }
+            try {
+              const result = await db.createCargoTreinamento({
+                cargoId: input.cargoId,
+                tipoTreinamentoId: tipoTreinamento.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success) {
+                resultados.treinamentos.vinculados++;
+              } else {
+                resultados.treinamentos.jaExistentes++;
+              }
+            } catch (error: any) {
+              resultados.treinamentos.erros++;
+            }
+          }
+        } catch (error: any) {
+          resultados.treinamentos.erros++;
+        }
+        
+        // VINCULAR SETORES
+        try {
+          const setores = await db.getAllSetores(tenantId, undefined, undefined);
+          const setoresVinculados = await db.getSetoresByCargo(input.cargoId, tenantId);
+          const idsJaVinculados = new Set(setoresVinculados.map((s: any) => s.setorId));
+          
+          resultados.setores.total = setores.length;
+          
+          for (const setor of setores) {
+            if (idsJaVinculados.has(setor.id)) {
+              resultados.setores.jaExistentes++;
+              continue;
+            }
+            try {
+              const result = await db.createCargoSetor({
+                cargoId: input.cargoId,
+                setorId: setor.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success) {
+                resultados.setores.vinculados++;
+              } else {
+                resultados.setores.jaExistentes++;
+              }
+            } catch (error: any) {
+              resultados.setores.erros++;
+            }
+          }
+        } catch (error: any) {
+          resultados.setores.erros++;
+        }
+        
+        // VINCULAR RISCOS
+        try {
+          const riscos = await db.getAllRiscosOcupacionais(tenantId, undefined);
+          const riscosVinculados = await db.getRiscosByCargo(input.cargoId, tenantId);
+          const idsJaVinculados = new Set(riscosVinculados.map((r: any) => r.riscoOcupacionalId));
+          
+          resultados.riscos.total = riscos.length;
+          
+          for (const risco of riscos) {
+            if (idsJaVinculados.has(risco.id)) {
+              resultados.riscos.jaExistentes++;
+              continue;
+            }
+            try {
+              const result = await db.createCargoRisco({
+                cargoId: input.cargoId,
+                riscoOcupacionalId: risco.id,
+                empresaId: null,
+                tenantId: tenantId,
+              });
+              if (result.success) {
+                resultados.riscos.vinculados++;
+              } else {
+                resultados.riscos.jaExistentes++;
+              }
+            } catch (error: any) {
+              resultados.riscos.erros++;
+            }
+          }
+        } catch (error: any) {
+          resultados.riscos.erros++;
+        }
+        
+        return {
+          success: true,
+          ...resultados
+        };
+      }),
     getByCargo: protectedProcedure
       .input(z.object({ cargoId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         // ISOLAMENTO DE TENANT: Filtrar treinamentos apenas do tenant do usuário
         // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
         const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
           ? null // Admin pode ver todos
           : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        console.log("[Routers] 🔍 getByCargo - cargoId:", input.cargoId, "tenantId:", tenantId, "role:", ctx.user.role);
         return db.getTreinamentosByCargo(input.cargoId, tenantId);
       }),
     create: protectedProcedure
@@ -1623,24 +1981,126 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const empresaId = input.empresaId || ctx.user.empresaId;
-        return db.createCargoTreinamento({ ...input, empresaId });
+        // ISOLAMENTO DE TENANT: Vincula cargo treinamento ao tenant do usuário
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode ver todos
+          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        
+        console.log("[Routers] 🔍 Criando vínculo de treinamento:");
+        console.log("[Routers] 🔍 Input:", input);
+        console.log("[Routers] 🔍 tenantId:", tenantId);
+        console.log("[Routers] 🔍 empresaId:", empresaId);
+        console.log("[Routers] 🔍 ctx.user:", { role: ctx.user.role, tenantId: ctx.user.tenantId });
+        
+        // Para super_admin, buscar tenantId do cargo
+        if (!tenantId && ctx.user.role === "super_admin") {
+          const cargo = await db.getCargoById(input.cargoId, null);
+          if (cargo && cargo.tenantId) {
+            const cargoTenantId = cargo.tenantId;
+            console.log("[Routers] 🔍 Super admin - usando tenantId do cargo:", cargoTenantId);
+            return db.createCargoTreinamento({ ...input, empresaId, tenantId: cargoTenantId });
+          }
+        }
+        
+        if (!tenantId && ctx.user.role !== "super_admin") {
+          throw new Error("Não é possível criar vínculo sem sistema associado.");
+        }
+        
+        // Buscar o cargo para garantir que pertence ao tenant correto (apenas validação, não bloqueia)
+        const cargo = await db.getCargoById(input.cargoId, tenantId);
+        if (!cargo && tenantId) {
+          console.warn("[Routers] ⚠️ Cargo não encontrado com tenantId, mas continuando...");
+          // Não bloquear - forçar criação mesmo assim
+        }
+        
+        const result = await db.createCargoTreinamento({ ...input, empresaId, tenantId: tenantId || cargo?.tenantId || 1 });
+        console.log("[Routers] ✅ Vínculo criado com sucesso:", result);
+        return result;
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return db.deleteCargoTreinamento(input.id);
       }),
+    deleteBatch: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        return db.deleteCargoTreinamentosBatch(input.ids);
+      }),
+    vincularTodos: protectedProcedure
+      .input(z.object({ cargoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const cargo = await db.getCargoById(input.cargoId, null);
+        if (!cargo) {
+          throw new Error("Cargo não encontrado");
+        }
+        
+        const tenantId = cargo.tenantId;
+        if (!tenantId) {
+          throw new Error("Cargo não tem tenantId definido");
+        }
+        
+        // Buscar todos os tipos de treinamentos do mesmo tenant
+        const tiposTreinamentos = await db.getAllTiposTreinamentos(tenantId, undefined, undefined);
+        
+        // Buscar treinamentos já vinculados
+        const treinamentosVinculados = await db.getTreinamentosByCargo(input.cargoId, tenantId);
+        const idsJaVinculados = new Set(treinamentosVinculados.map((t: any) => t.tipoTreinamentoId));
+        
+        let vinculados = 0;
+        let jaExistentes = 0;
+        let erros = 0;
+        
+        for (const tipoTreinamento of tiposTreinamentos) {
+          if (idsJaVinculados.has(tipoTreinamento.id)) {
+            jaExistentes++;
+            continue;
+          }
+          
+          try {
+            const result = await db.createCargoTreinamento({
+              cargoId: input.cargoId,
+              tipoTreinamentoId: tipoTreinamento.id,
+              empresaId: null,
+              tenantId: tenantId,
+            });
+            
+            if (result.success) {
+              vinculados++;
+            } else {
+              jaExistentes++;
+            }
+          } catch (error: any) {
+            console.error(`Erro ao vincular treinamento ${tipoTreinamento.id}:`, error);
+            erros++;
+          }
+        }
+        
+        return {
+          success: true,
+          vinculados,
+          jaExistentes,
+          erros,
+          total: tiposTreinamentos.length
+        };
+      }),
   }),
 
   cargoSetores: router({
     getByCargo: protectedProcedure
       .input(z.object({ cargoId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         // ISOLAMENTO DE TENANT: Filtrar setores apenas do tenant do usuário
-        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
-        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
-          ? null // Admin pode ver todos
-          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        // Para admin/super_admin, buscar tenantId do cargo
+        let tenantId: number | null = null;
+        if (ctx.user.role === "admin" || ctx.user.role === "super_admin") {
+          // Admin pode ver todos, mas buscar tenantId do cargo para filtrar corretamente
+          const cargo = await db.getCargoById(input.cargoId, null);
+          tenantId = cargo?.tenantId || null;
+        } else {
+          tenantId = ctx.user.tenantId || null;
+        }
+        console.log("[Routers] 🔍 cargoSetores.getByCargo - cargoId:", input.cargoId, "tenantId:", tenantId, "role:", ctx.user.role);
         return db.getSetoresByCargo(input.cargoId, tenantId);
       }),
     create: protectedProcedure
@@ -1651,12 +2111,86 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const empresaId = input.empresaId || ctx.user.empresaId;
-        return db.createCargoSetor({ ...input, empresaId });
+        
+        // ISOLAMENTO DE TENANT: Obter tenantId do contexto
+        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
+          ? null // Admin pode criar sem tenantId específico
+          : (ctx.user.tenantId || null);
+        
+        // Se não tem tenantId e não é admin, buscar do cargo
+        if (!tenantId && ctx.user.role !== "super_admin" && ctx.user.role !== "admin") {
+          throw new Error("Não é possível criar vínculo sem sistema associado.");
+        }
+        
+        console.log("[Routers] 📝 Criando cargo setor:", { cargoId: input.cargoId, setorId: input.setorId, tenantId });
+        return db.createCargoSetor({ ...input, empresaId, tenantId: tenantId || undefined });
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return db.deleteCargoSetor(input.id);
+      }),
+    deleteBatch: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        return db.deleteCargoSetoresBatch(input.ids);
+      }),
+    vincularTodos: protectedProcedure
+      .input(z.object({ cargoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const cargo = await db.getCargoById(input.cargoId, null);
+        if (!cargo) {
+          throw new Error("Cargo não encontrado");
+        }
+        
+        const tenantId = cargo.tenantId;
+        if (!tenantId) {
+          throw new Error("Cargo não tem tenantId definido");
+        }
+        
+        // Buscar todos os setores do mesmo tenant
+        const setores = await db.getAllSetores(tenantId, undefined);
+        
+        // Buscar setores já vinculados
+        const setoresVinculados = await db.getSetoresByCargo(input.cargoId, tenantId);
+        const idsJaVinculados = new Set(setoresVinculados.map((s: any) => s.setorId));
+        
+        let vinculados = 0;
+        let jaExistentes = 0;
+        let erros = 0;
+        
+        for (const setor of setores) {
+          if (idsJaVinculados.has(setor.id)) {
+            jaExistentes++;
+            continue;
+          }
+          
+          try {
+            const result = await db.createCargoSetor({
+              cargoId: input.cargoId,
+              setorId: setor.id,
+              empresaId: null,
+              tenantId: tenantId,
+            });
+            
+            if (result.success) {
+              vinculados++;
+            } else {
+              jaExistentes++;
+            }
+          } catch (error: any) {
+            console.error(`Erro ao vincular setor ${setor.id}:`, error);
+            erros++;
+          }
+        }
+        
+        return {
+          success: true,
+          vinculados,
+          jaExistentes,
+          erros,
+          total: setores.length
+        };
       }),
   }),
 
@@ -1742,12 +2276,18 @@ export const appRouter = router({
   cargoRiscos: router({
     getByCargo: protectedProcedure
       .input(z.object({ cargoId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         // ISOLAMENTO DE TENANT: Filtrar riscos apenas do tenant do usuário
-        // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
-        const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
-          ? null // Admin pode ver todos
-          : (ctx.user.tenantId || null); // Clientes só veem seus próprios dados
+        // Para admin/super_admin, buscar tenantId do cargo
+        let tenantId: number | null = null;
+        if (ctx.user.role === "admin" || ctx.user.role === "super_admin") {
+          // Admin pode ver todos, mas buscar tenantId do cargo para filtrar corretamente
+          const cargo = await db.getCargoById(input.cargoId, null);
+          tenantId = cargo?.tenantId || null;
+        } else {
+          tenantId = ctx.user.tenantId || null;
+        }
+        console.log("[Routers] 🔍 cargoRiscos.getByCargo - cargoId:", input.cargoId, "tenantId:", tenantId, "role:", ctx.user.role);
         return db.getRiscosByCargo(input.cargoId, tenantId);
       }),
     create: protectedProcedure
@@ -1796,12 +2336,26 @@ export const appRouter = router({
           }
           
           const empresaId = input.empresaId || ctx.user.empresaId;
-          console.log("[CargoRiscos.create] empresaId:", empresaId, "tenantId:", tenantId);
+          
+          // Se não tem tenantId e não é admin, buscar do cargo
+          let finalTenantId = tenantId;
+          if (!finalTenantId && ctx.user.role !== "super_admin" && ctx.user.role !== "admin") {
+            // Buscar tenantId do cargo
+            const cargo = await db.getCargoById(input.cargoId, null);
+            if (cargo && cargo.tenantId) {
+              finalTenantId = cargo.tenantId;
+              console.log("[CargoRiscos.create] ✅ tenantId obtido do cargo:", finalTenantId);
+            } else {
+              throw new Error("Não é possível criar risco sem sistema associado.");
+            }
+          }
+          
+          console.log("[CargoRiscos.create] empresaId:", empresaId, "tenantId:", finalTenantId);
           
           const dataToInsert: any = {
             cargoId: input.cargoId,
             riscoOcupacionalId: input.riscoOcupacionalId,
-            tenantId: tenantId,
+            tenantId: finalTenantId,
           };
           
           if (input.tipoAgente && input.tipoAgente.trim()) {
@@ -1883,6 +2437,63 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return db.deleteCargoRisco(input.id);
+      }),
+    vincularTodos: protectedProcedure
+      .input(z.object({ cargoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const cargo = await db.getCargoById(input.cargoId, null);
+        if (!cargo) {
+          throw new Error("Cargo não encontrado");
+        }
+        
+        const tenantId = cargo.tenantId;
+        if (!tenantId) {
+          throw new Error("Cargo não tem tenantId definido");
+        }
+        
+        // Buscar todos os riscos do mesmo tenant
+        const riscos = await db.getAllRiscosOcupacionais(tenantId, undefined);
+        
+        // Buscar riscos já vinculados
+        const riscosVinculados = await db.getRiscosByCargo(input.cargoId, tenantId);
+        const idsJaVinculados = new Set(riscosVinculados.map((r: any) => r.riscoOcupacionalId));
+        
+        let vinculados = 0;
+        let jaExistentes = 0;
+        let erros = 0;
+        
+        for (const risco of riscos) {
+          if (idsJaVinculados.has(risco.id)) {
+            jaExistentes++;
+            continue;
+          }
+          
+          try {
+            const result = await db.createCargoRisco({
+              cargoId: input.cargoId,
+              riscoOcupacionalId: risco.id,
+              empresaId: null,
+              tenantId: tenantId,
+            });
+            
+            if (result.success) {
+              vinculados++;
+            } else {
+              jaExistentes++;
+            }
+          } catch (error: any) {
+            console.error(`Erro ao vincular risco ${risco.id}:`, error);
+            erros++;
+          }
+        }
+        
+        return {
+          success: true,
+          vinculados,
+          jaExistentes,
+          erros,
+          total: riscos.length
+        };
       }),
   }),
 
@@ -2270,13 +2881,14 @@ export const appRouter = router({
         searchTerm: z.string().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
+        // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
         // ADMIN/SUPER_ADMIN SEMPRE TÊM ACESSO TOTAL - SEM VERIFICAÇÕES DE PLANO
         // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO APENAS PARA USUÁRIOS REGULARES
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
-          if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
-            throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
-          }
-        }
+        // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+        //   if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
+        //     throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
+        //   }
+        // }
         
         // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
         const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
@@ -2293,13 +2905,14 @@ export const appRouter = router({
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input, ctx }) => {
+        // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
         // ADMIN/SUPER_ADMIN SEMPRE TÊM ACESSO TOTAL - SEM VERIFICAÇÕES DE PLANO
         // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO APENAS PARA USUÁRIOS REGULARES
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
-          if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
-            throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
-          }
-        }
+        // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+        //   if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
+        //     throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
+        //   }
+        // }
         
         // ISOLAMENTO DE TENANT: Apenas admin/super_admin podem ver todos os tenants
         const tenantId = (ctx.user.role === "admin" || ctx.user.role === "super_admin") 
@@ -2338,11 +2951,12 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         // ADMIN/SUPER_ADMIN SEMPRE TÊM ACESSO TOTAL - SEM VERIFICAÇÕES DE PLANO
         // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO APENAS PARA USUÁRIOS REGULARES
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
-          if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
-            throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
-          }
-        }
+        // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
+        // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+        //   if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
+        //     throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
+        //   }
+        // }
         
         // ISOLAMENTO DE TENANT: Determinar tenantId correto
         // Admin pode criar para qualquer tenant (se empresaId for fornecido, buscar tenant da empresa)

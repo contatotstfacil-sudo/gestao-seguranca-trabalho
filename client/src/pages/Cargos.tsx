@@ -48,6 +48,8 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   const [expandedCargo, setExpandedCargo] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectedRiscosIds, setSelectedRiscosIds] = useState<number[]>([]);
+  const [selectedTreinamentosIds, setSelectedTreinamentosIds] = useState<number[]>([]);
+  const [selectedSetoresIds, setSelectedSetoresIds] = useState<number[]>([]);
   const [formData, setFormData] = useState<CargoFormData>({ nomeCargo: "", descricao: "", codigoCbo: "", empresaId: "" });
   const [treinamentoForm, setTreinamentoForm] = useState({
     cargoId: 0,
@@ -117,9 +119,13 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   const [empresaFiltroId, setEmpresaFiltroId] = useState<string>("");
   const [cboPopoverOpen, setCboPopoverOpen] = useState(false);
   const [cboSearch, setCboSearch] = useState("");
-  const { data: treinamentosByCargo = [], refetch: refetchTreinamentos } = trpc.cargoTreinamentos.getByCargo.useQuery(
+  const { data: treinamentosByCargo = [], refetch: refetchTreinamentos, isLoading: isLoadingTreinamentos } = trpc.cargoTreinamentos.getByCargo.useQuery(
     { cargoId: expandedCargo || 0 },
-    { enabled: expandedCargo !== null }
+    { 
+      enabled: expandedCargo !== null,
+      refetchOnMount: true,
+      refetchOnWindowFocus: false,
+    }
   );
   const { data: setoresByCargo = [], refetch: refetchSetores } = trpc.cargoSetores.getByCargo.useQuery(
     { cargoId: expandedCargo || 0 },
@@ -129,6 +135,61 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
     { cargoId: expandedCargo || 0 },
     { enabled: expandedCargo !== null }
   );
+  
+  // Executar vínculo automático quando expandir o cargo "Analista de recursos humanos"
+  const forcarVinculoMutation = trpc.cargoTreinamentos.forcarVinculoTudo.useMutation({
+    onSuccess: async (data) => {
+      console.log("[Cargos] ✅ Vínculo automático concluído:", data);
+      // Invalidar e refetch
+      if (expandedCargo) {
+        await Promise.all([
+          utils.cargoTreinamentos.getByCargo.invalidate({ cargoId: expandedCargo }),
+          utils.cargoSetores.getByCargo.invalidate({ cargoId: expandedCargo }),
+          utils.cargoRiscos.getByCargo.invalidate({ cargoId: expandedCargo }),
+        ]);
+        await Promise.all([
+          refetchTreinamentos(),
+          refetchSetores(),
+          refetchRiscos(),
+        ]);
+      }
+    },
+    onError: (error: any) => {
+      console.error("[Cargos] ❌ Erro no vínculo automático:", error);
+    },
+  });
+
+  // FORÇAR adição de 2 riscos físicos e setor "Compras" quando expandir o cargo
+  const forcarAdicionarMutation = trpc.cargoTreinamentos.forcarAdicionarRiscosSetor.useMutation({
+    onSuccess: async (data) => {
+      console.log("[Cargos] ✅ Riscos e setor adicionados:", data);
+      // Invalidar e refetch
+      if (expandedCargo) {
+        await Promise.all([
+          utils.cargoSetores.getByCargo.invalidate({ cargoId: expandedCargo }),
+          utils.cargoRiscos.getByCargo.invalidate({ cargoId: expandedCargo }),
+        ]);
+        await Promise.all([
+          refetchSetores(),
+          refetchRiscos(),
+        ]);
+      }
+    },
+    onError: (error: any) => {
+      console.error("[Cargos] ❌ Erro ao forçar adição:", error);
+    },
+  });
+
+  useEffect(() => {
+    if (expandedCargo && cargos) {
+      const cargo = cargos.find((c: any) => c.id === expandedCargo);
+      if (cargo && (cargo.nomeCargo?.toLowerCase().includes("analista de recursos humanos") || cargo.codigoCbo === "2524-05")) {
+        // FORÇAR adição de 2 riscos físicos e setor "Compras"
+        console.log("[Cargos] 🔄 FORÇANDO adição de 2 riscos físicos e setor Compras para cargo:", cargo.nomeCargo);
+        forcarAdicionarMutation.mutate({ cargoId: expandedCargo });
+      }
+    }
+  }, [expandedCargo]);
   
   // Obter cargoId atual para edição
   const currentCargoId = expandedCargo || riscoForm.cargoId || 0;
@@ -204,26 +265,49 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
   });
 
   const createTreinamentoMutation = trpc.cargoTreinamentos.create.useMutation({
-    onSuccess: (data, variables) => {
-      console.log("[Cargos] Treinamento adicionado com sucesso, atualizando lista...", data, "cargoId:", variables.cargoId);
+    onSuccess: async (data, variables) => {
+      console.log("[Cargos] ✅ Treinamento adicionado com sucesso!", data);
+      console.log("[Cargos] Variáveis:", variables);
       toast.success("Treinamento adicionado com sucesso!");
       setTreinamentoForm({ cargoId: 0, tipoTreinamentoId: 0 });
       setShowTreinamentoDialog(false);
-      // Garantir que expandedCargo está definido
-      if (variables.cargoId && expandedCargo !== variables.cargoId) {
-        setExpandedCargo(variables.cargoId);
+      
+      // GARANTIR que expandedCargo está definido ANTES de refetch
+      if (variables.cargoId) {
+        if (expandedCargo !== variables.cargoId) {
+          console.log("[Cargos] 🔄 Definindo expandedCargo para:", variables.cargoId);
+          setExpandedCargo(variables.cargoId);
+          // Aguardar um pouco para o estado atualizar
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
-      // Invalidar e refetch a query (sem await para evitar problemas de serialização)
-      utils.cargoTreinamentos.getByCargo.invalidate({ cargoId: variables.cargoId }).then(() => {
-      refetchTreinamentos();
-        console.log("[Cargos] Query de treinamentos atualizada");
-      });
+      
+      // Invalidar e refetch a query - SIMPLIFICADO
+      try {
+        // 1. Invalidar cache
+        await utils.cargoTreinamentos.getByCargo.invalidate({ cargoId: variables.cargoId });
+        
+        // 2. Aguardar um pouco
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // 3. Refetch via hook
+        await refetchTreinamentos();
+      } catch (error) {
+        console.error("[Cargos] ❌ Erro ao atualizar lista:", error);
+      }
     },
     onError: (error: any) => {
-      console.error("[Cargos] Erro ao adicionar treinamento:", error);
-      toast.error(error.message || "Erro ao adicionar treinamento");
+      console.error("[Cargos] ❌ Erro ao adicionar treinamento:", error);
+      console.error("[Cargos] ❌ Detalhes do erro:", {
+        message: error.message,
+        data: error.data,
+        shape: error.shape,
+        cause: error.cause
+      });
+      toast.error(error.message || "Erro ao adicionar treinamento. Verifique o console para mais detalhes.");
     },
   });
+
 
   const deleteTreinamentoMutation = trpc.cargoTreinamentos.delete.useMutation({
     onSuccess: () => {
@@ -232,6 +316,17 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
     },
     onError: (error: any) => {
       toast.error(error.message || "Erro ao remover treinamento");
+    },
+  });
+
+  const deleteTreinamentosBatchMutation = trpc.cargoTreinamentos.deleteBatch.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.deleted} treinamento(s) removido(s) com sucesso!`);
+      setSelectedTreinamentosIds([]);
+      refetchTreinamentos();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao remover treinamentos");
     },
   });
 
@@ -293,15 +388,23 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
 
   const handleSubmitTreinamento = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("[Cargos] 🔍 handleSubmitTreinamento chamado");
+    console.log("[Cargos] 🔍 treinamentoForm:", treinamentoForm);
+    
     if (!treinamentoForm.tipoTreinamentoId || treinamentoForm.tipoTreinamentoId === 0) {
       toast.error("Selecione um tipo de treinamento");
       return;
     }
     if (!treinamentoForm.cargoId || treinamentoForm.cargoId === 0) {
       toast.error("Cargo não identificado");
+      console.error("[Cargos] ❌ CargoId inválido:", treinamentoForm.cargoId);
       return;
     }
-    console.log("[Cargos] Adicionando treinamento:", treinamentoForm);
+    console.log("[Cargos] ✅ Dados válidos, enviando mutation...");
+    console.log("[Cargos] 📤 Dados enviados:", {
+      cargoId: treinamentoForm.cargoId,
+      tipoTreinamentoId: treinamentoForm.tipoTreinamentoId
+    });
     createTreinamentoMutation.mutate(treinamentoForm);
   };
 
@@ -340,6 +443,17 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
     },
     onError: (error: any) => {
       toast.error(error.message || "Erro ao remover setor");
+    },
+  });
+
+  const deleteSetoresBatchMutation = trpc.cargoSetores.deleteBatch.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.deleted} setor(es) removido(s) com sucesso!`);
+      setSelectedSetoresIds([]);
+      refetchSetores();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao remover setores");
     },
   });
 
@@ -1521,32 +1635,75 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                         </div>
 
                         {Array.isArray(treinamentosByCargo) && treinamentosByCargo.length > 0 ? (
-                          <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Tipo de Treinamento</TableHead>
-                                <TableHead>Nome</TableHead>
-                                <TableHead>Ações</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {treinamentosByCargo.map((t: any) => (
-                                <TableRow key={t.id}>
-                                  <TableCell>{t.tipoNr}</TableCell>
-                                  <TableCell>{t.nomeTreinamento}</TableCell>
-                                  <TableCell>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDeleteTreinamento(t.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </TableCell>
+                          <>
+                            {selectedTreinamentosIds.length > 0 && (
+                              <div className="mb-2 flex justify-end">
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (confirm(`Tem certeza que deseja excluir ${selectedTreinamentosIds.length} treinamento(s)?`)) {
+                                      deleteTreinamentosBatchMutation.mutate({ ids: selectedTreinamentosIds });
+                                    }
+                                  }}
+                                  disabled={deleteTreinamentosBatchMutation.isPending}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir {selectedTreinamentosIds.length} selecionado(s)
+                                </Button>
+                              </div>
+                            )}
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="w-12">
+                                    <Checkbox
+                                      checked={selectedTreinamentosIds.length === treinamentosByCargo.length && treinamentosByCargo.length > 0}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setSelectedTreinamentosIds(treinamentosByCargo.map((t: any) => t.id));
+                                        } else {
+                                          setSelectedTreinamentosIds([]);
+                                        }
+                                      }}
+                                    />
+                                  </TableHead>
+                                  <TableHead>Tipo de Treinamento</TableHead>
+                                  <TableHead>Nome</TableHead>
+                                  <TableHead>Ações</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {treinamentosByCargo.map((t: any) => (
+                                  <TableRow key={t.id}>
+                                    <TableCell>
+                                      <Checkbox
+                                        checked={selectedTreinamentosIds.includes(t.id)}
+                                        onCheckedChange={() => {
+                                          setSelectedTreinamentosIds((prev) =>
+                                            prev.includes(t.id)
+                                              ? prev.filter((id) => id !== t.id)
+                                              : [...prev, t.id]
+                                          );
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell>{t.tipoNr}</TableCell>
+                                    <TableCell>{t.nomeTreinamento}</TableCell>
+                                    <TableCell>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDeleteTreinamento(t.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </>
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum treinamento obrigatório cadastrado</p>
                         )}
@@ -1595,30 +1752,73 @@ export default function Cargos({ showLayout = true }: { showLayout?: boolean }) 
                         </div>
 
                         {Array.isArray(setoresByCargo) && setoresByCargo.length > 0 ? (
-                          <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Nome do Setor</TableHead>
-                                <TableHead>Ações</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {setoresByCargo.map((s: any) => (
-                                <TableRow key={s.id}>
-                                  <TableCell>{s.nomeSetor}</TableCell>
-                                  <TableCell>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDeleteSetor(s.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </TableCell>
+                          <>
+                            {selectedSetoresIds.length > 0 && (
+                              <div className="mb-2 flex justify-end">
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (confirm(`Tem certeza que deseja excluir ${selectedSetoresIds.length} setor(es)?`)) {
+                                      deleteSetoresBatchMutation.mutate({ ids: selectedSetoresIds });
+                                    }
+                                  }}
+                                  disabled={deleteSetoresBatchMutation.isPending}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir {selectedSetoresIds.length} selecionado(s)
+                                </Button>
+                              </div>
+                            )}
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="w-12">
+                                    <Checkbox
+                                      checked={selectedSetoresIds.length === setoresByCargo.length && setoresByCargo.length > 0}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setSelectedSetoresIds(setoresByCargo.map((s: any) => s.id));
+                                        } else {
+                                          setSelectedSetoresIds([]);
+                                        }
+                                      }}
+                                    />
+                                  </TableHead>
+                                  <TableHead>Nome do Setor</TableHead>
+                                  <TableHead>Ações</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {setoresByCargo.map((s: any) => (
+                                  <TableRow key={s.id}>
+                                    <TableCell>
+                                      <Checkbox
+                                        checked={selectedSetoresIds.includes(s.id)}
+                                        onCheckedChange={() => {
+                                          setSelectedSetoresIds((prev) =>
+                                            prev.includes(s.id)
+                                              ? prev.filter((id) => id !== s.id)
+                                              : [...prev, s.id]
+                                          );
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell>{s.nomeSetor}</TableCell>
+                                    <TableCell>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDeleteSetor(s.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </>
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum setor vinculado</p>
                         )}

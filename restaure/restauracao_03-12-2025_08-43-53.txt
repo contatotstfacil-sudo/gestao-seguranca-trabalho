@@ -1,0 +1,35 @@
+﻿PONTO DE RESTAURACAO CRIADO
+===========================
+Data: 03-12-2025
+Hora: 08-43-53
+Tag Git: restore-point-2025-12-03_08-43-37
+
+DESCRICAO DAS ALTERACOES:
+- Correcao de inconsistencia de datas de emissao
+  * Funcoes centralizadas para formatacao de datas
+  * Consistencia de datas em popup, lista e documento
+- Criacao de tabela 'Riscos das Funcoes com Base no PGRO'
+  * Tabela sempre aparece (mesmo sem riscos)
+  * Agrupamento por categoria de agente (Fisico, Quimico, Biologico, ErgonÃ´mico, Acidentes/Mecanico)
+  * Exibicao de todos os campos do PGRO
+  * Quando nao houver riscos: mostra 'Ausente de risco.'
+- Alteracoes de termos:
+  * 'Funcao' -> 'Cargo' (em formularios de ordem de servico)
+  * 'Emitir Ficha de EPI' -> 'Ficha Admissional de EPI'
+
+ARQUIVOS MODIFICADOS:
+- client/src/pages/ListaOrdensServico.tsx
+  * Funcoes centralizadas de formatacao de data
+  * Tabela de riscos do PGRO
+  * Alteracao de termo 'Funcao' para 'Cargo'
+- client/src/pages/EmitirOrdemServico.tsx
+  * Alteracao de termo 'Funcao' para 'Cargo'
+- client/src/pages/EmitirFichaEPI.tsx
+  * Alteracao de termo para 'Ficha Admissional de EPI'
+- client/src/pages/Epis.tsx
+  * Alteracao de termo para 'Ficha Admissional de EPI'
+
+RESULTADO:
+- Datas de emissao consistentes em todo o sistema
+- Tabela de riscos do PGRO sempre visivel
+- Termos padronizados conforme solicitado

@@ -1278,25 +1278,6 @@ export default function ModelosCertificados({ showLayout = true }: { showLayout?
                     </Select>
                   </div>
 
-                  <div className="md:col-span-2">
-                    <Label htmlFor="enderecoTreinamento">Endereço do Treinamento</Label>
-                    <Textarea
-                      id="enderecoTreinamento"
-                      value={formData.enderecoTreinamento}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          enderecoTreinamento: e.target.value,
-                        })
-                      }
-                      placeholder="Ex: Rua das Flores, 123 - Centro - São Paulo/SP"
-                      rows={2}
-                      className="mt-1.5"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      Este endereço será exibido no rodapé do certificado
-                    </p>
-                  </div>
                 </div>
 
                 <div className="border-t pt-4">

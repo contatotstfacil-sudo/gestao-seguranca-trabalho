@@ -35,3 +35,5 @@ gerarHash();
 
 
 
+
+

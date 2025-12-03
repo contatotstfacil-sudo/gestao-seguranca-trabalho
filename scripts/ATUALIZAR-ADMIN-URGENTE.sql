@@ -17,3 +17,5 @@ SELECT id, name, email, cpf, role, tenantId FROM users WHERE id = 4198;
 
 
 
+
+

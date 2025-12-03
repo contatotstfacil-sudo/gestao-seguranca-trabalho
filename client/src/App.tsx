@@ -96,6 +96,9 @@ function Router() {
       <Route path="/treinamentos/lista">
         <TreinamentosPainel />
       </Route>
+      <Route path="/treinamentos/lista-presenca-emitida">
+        <TreinamentosPainel />
+      </Route>
       <Route path="/treinamentos">
         <TreinamentosPainel />
       </Route>

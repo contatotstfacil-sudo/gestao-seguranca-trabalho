@@ -46,6 +46,20 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  // Executar vínculo automático ao iniciar o servidor
+  try {
+    const { exec } = require("child_process");
+    const path = require("path");
+    const scriptPath = path.join(__dirname, "../../scripts/executar-vinculo-automatico.ts");
+    console.log("[Server] 🔄 Executando vínculo automático de setores e riscos...");
+    exec(`npx tsx "${scriptPath}"`, (error: any, stdout: any, stderr: any) => {
+      if (stdout) console.log(stdout);
+      if (stderr) console.error(stderr);
+    });
+  } catch (error) {
+    console.error("[Server] Erro ao executar vínculo automático:", error);
+  }
+  
   const app = express();
   const server = createServer(app);
   
