@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,65 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroDataEmissao, setFiltroDataEmissao] = useState<string>("");
   const [filtroDataAdmissao, setFiltroDataAdmissao] = useState<string>("");
+  
+  // Função centralizada para extrair data no formato YYYY-MM-DD (sem timezone)
+  const extrairDataYYYYMMDD = (data: any): string => {
+    if (!data) return "";
+    
+    try {
+      // Se já está no formato YYYY-MM-DD, usar diretamente
+      if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data)) {
+        return data;
+      }
+      
+      // Se tem timestamp, extrair apenas a parte da data
+      if (typeof data === 'string' && data.includes('T')) {
+        const dataPart = data.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dataPart)) {
+          return dataPart;
+        }
+      }
+      
+      // Se for Date, converter usando métodos locais (evitar UTC)
+      if (data instanceof Date) {
+        const year = data.getFullYear();
+        const month = String(data.getMonth() + 1).padStart(2, '0');
+        const day = String(data.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      
+      // Tentar converter de string
+      const date = new Date(data);
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      
+      // Se falhar, tentar extrair de ISO string
+      if (typeof data === 'string') {
+        const dataPart = data.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dataPart)) {
+          return dataPart;
+        }
+      }
+      
+      return "";
+    } catch (error) {
+      console.error("[extrairDataYYYYMMDD] Erro ao extrair data:", error, data);
+      return "";
+    }
+  };
+  
+  // Função centralizada para formatar data para exibição (DD/MM/YYYY)
+  const formatarDataParaExibicao = (data: any): string => {
+    const dataYYYYMMDD = extrairDataYYYYMMDD(data);
+    if (!dataYYYYMMDD) return "-";
+    
+    const [year, month, day] = dataYYYYMMDD.split('-');
+    return `${day}/${month}/${year}`;
+  };
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [ordemToDelete, setOrdemToDelete] = useState<number | null>(null);
@@ -80,6 +139,18 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
   const { data: ordens = [], isLoading, refetch } = trpc.ordensServico.list.useQuery({
     searchTerm: searchTerm || undefined,
   });
+  
+  // Debug: verificar dados recebidos
+  useEffect(() => {
+    if (ordens.length > 0) {
+      console.log("[ListaOrdensServico] Ordens recebidas:", ordens.map((o: any) => ({
+        id: o.id,
+        numeroOrdem: o.numeroOrdem,
+        dataEmissao: o.dataEmissao,
+        tipo: typeof o.dataEmissao
+      })));
+    }
+  }, [ordens]);
 
   const { data: colaboradores = [] } = trpc.colaboradores.list.useQuery();
   const { data: empresas = [] } = trpc.empresas.list.useQuery();
@@ -258,31 +329,9 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
     setEditColaboradorId(ordem.colaboradorId ? String(ordem.colaboradorId) : "");
     setEditFuncaoColaborador(ordem.colaboradorFuncao || "");
     
-    // Formatar data de emissão
-    let dataFormatada = "";
-    if (ordem.dataEmissao) {
-      try {
-        // Se já vier como string YYYY-MM-DD, usar diretamente
-        if (typeof ordem.dataEmissao === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ordem.dataEmissao)) {
-          dataFormatada = ordem.dataEmissao;
-        } else {
-          // Tentar converter de outros formatos
-          const date = new Date(ordem.dataEmissao);
-          if (!isNaN(date.getTime())) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            dataFormatada = `${year}-${month}-${day}`;
-          } else {
-            // Se falhar, tentar extrair de ISO string
-            dataFormatada = ordem.dataEmissao.split('T')[0] || "";
-          }
-        }
-      } catch (e) {
-        // Se falhar tudo, tentar extrair de ISO string
-        dataFormatada = typeof ordem.dataEmissao === 'string' ? ordem.dataEmissao.split('T')[0] || "" : "";
-      }
-    }
+    // Formatar data de emissão usando função centralizada
+    const dataFormatada = extrairDataYYYYMMDD(ordem.dataEmissao);
+    console.log("[handleEdit] Data extraída para edição:", dataFormatada, "de:", ordem.dataEmissao);
     setEditDataEmissao(dataFormatada);
     
     setEditCidade(ordem.cidade || "");
@@ -462,26 +511,44 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
     };
 
     // Formatar data por extenso com cidade e UF
+    // IMPORTANTE: Sempre usar a data exata, sem conversões de timezone
     const formatarDataComCidade = (data: string, cidade: string | null | undefined, uf: string | null | undefined) => {
       if (!data) return "";
       try {
         let dia: number, mes: number, ano: number;
         
-        // Se já vier como string YYYY-MM-DD, parsear diretamente sem usar Date
+        // Se já vier como string YYYY-MM-DD, parsear diretamente sem usar Date (evita timezone)
         if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data)) {
           const [year, month, day] = data.split('-').map(Number);
           dia = day;
           mes = month - 1; // Mês é 0-indexed
           ano = year;
-        } else {
-          // Caso contrário, usar Date mas com métodos locais
-          const date = new Date(data);
-          if (isNaN(date.getTime())) {
+          console.log("[formatarDataComCidade] Data parseada diretamente:", { dia, mes: mes + 1, ano });
+        } else if (typeof data === 'string' && data.includes('T')) {
+          // Se tem timestamp, extrair apenas a parte da data
+          const dataPart = data.split('T')[0];
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dataPart)) {
+            const [year, month, day] = dataPart.split('-').map(Number);
+            dia = day;
+            mes = month - 1;
+            ano = year;
+            console.log("[formatarDataComCidade] Data extraída de timestamp:", { dia, mes: mes + 1, ano });
+          } else {
+            console.warn("[formatarDataComCidade] Formato de data inválido:", data);
             return data;
           }
+        } else {
+          // Caso contrário, tentar usar Date mas com cuidado
+          const date = new Date(data);
+          if (isNaN(date.getTime())) {
+            console.warn("[formatarDataComCidade] Data inválida:", data);
+            return data;
+          }
+          // Usar métodos locais para evitar problemas de timezone
           dia = date.getDate();
           mes = date.getMonth();
           ano = date.getFullYear();
+          console.log("[formatarDataComCidade] Data convertida de Date:", { dia, mes: mes + 1, ano });
         }
         
         const meses = [
@@ -541,27 +608,10 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
     
     const dataFormatada = formatarData(dataEmissaoParaFormatar);
     
-    // Converter para string para formatarDataComCidade
-    // IMPORTANTE: Se já vier como string YYYY-MM-DD, usar diretamente
-    let dataEmissaoStr = "";
-    if (ordem.dataEmissao) {
-      if (typeof ordem.dataEmissao === 'string') {
-        // Se já está no formato YYYY-MM-DD, usar diretamente
-        if (/^\d{4}-\d{2}-\d{2}$/.test(ordem.dataEmissao)) {
-          dataEmissaoStr = ordem.dataEmissao;
-        } else {
-          dataEmissaoStr = ordem.dataEmissao;
-        }
-      } else if (ordem.dataEmissao instanceof Date) {
-        // Converter Date para YYYY-MM-DD usando métodos locais
-        const year = ordem.dataEmissao.getFullYear();
-        const month = String(ordem.dataEmissao.getMonth() + 1).padStart(2, '0');
-        const day = String(ordem.dataEmissao.getDate()).padStart(2, '0');
-        dataEmissaoStr = `${year}-${month}-${day}`;
-      } else {
-        dataEmissaoStr = String(ordem.dataEmissao);
-      }
-    }
+    // Converter para string para formatarDataComCidade usando função centralizada
+    // IMPORTANTE: Sempre usar a data exata que foi salva, sem conversões de timezone
+    const dataEmissaoStr = extrairDataYYYYMMDD(ordem.dataEmissao);
+    console.log("[gerarTemplateOrdemServico] Data extraída para documento:", dataEmissaoStr, "de:", ordem.dataEmissao);
     
     // Formatar data de admissão no formato DD/MM/YYYY
     // Usar a data de admissão do colaborador em vez da data de emissão da ordem
@@ -896,15 +946,16 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
                 <td style="width: 50%; padding: 8px; text-align: center; vertical-align: bottom;">
-                  <div style="border-top: 1px solid #000; padding-top: 4px; margin-top: 40px; font-size: 11px;">
-                    <strong>${colaboradorNome}</strong><br/>
-                    ${colaboradorFuncao}
+                  <div style="border-top: 1px solid #000; padding-top: 1px; min-height: 50px; display: flex; flex-direction: column; justify-content: flex-start; font-size: 11px; line-height: 1.1; gap: 0;">
+                    <strong style="margin: 0; padding: 0; line-height: 1.1;">${colaboradorNome}</strong>
+                    <span style="margin: 0; padding: 0; display: block; line-height: 1.1;">${colaboradorFuncao}</span>
                   </div>
                 </td>
                 <td style="width: 50%; padding: 8px; text-align: center; vertical-align: bottom;">
-                  <div style="border-top: 1px solid #000; padding-top: 4px; margin-top: 40px; font-size: 11px;">
-                    <strong>${responsavelNome}</strong><br/>
-                    ${responsavelFuncao}
+                  <div style="border-top: 1px solid #000; padding-top: 1px; min-height: 50px; display: flex; flex-direction: column; justify-content: flex-start; font-size: 11px; line-height: 1.1; gap: 0;">
+                    <strong style="margin: 0; padding: 0; line-height: 1.1;">${responsavelNome}</strong>
+                    <span style="margin: 0; padding: 0; display: block; line-height: 1.1;">${responsavelFuncao}</span>
+                    <span style="margin: 0; padding: 0; display: block; line-height: 1.1;">Responsável Técnico</span>
                   </div>
                 </td>
               </tr>
@@ -1149,29 +1200,7 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
                       <TableCell>{ordem.colaboradorNome || "-"}</TableCell>
                       <TableCell>{ordem.colaboradorFuncao || "-"}</TableCell>
                       <TableCell>
-                        {ordem.dataEmissao
-                          ? (() => {
-                              try {
-                                // Se já vier como string YYYY-MM-DD, formatar diretamente
-                                if (typeof ordem.dataEmissao === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ordem.dataEmissao)) {
-                                  const [year, month, day] = ordem.dataEmissao.split('-');
-                                  return `${day}/${month}/${year}`;
-                                }
-                                // Se vier como Date ou outra string, converter com cuidado
-                                const date = new Date(ordem.dataEmissao);
-                                if (!isNaN(date.getTime())) {
-                                  // Usar métodos locais para evitar problemas de timezone
-                                  const day = String(date.getDate()).padStart(2, '0');
-                                  const month = String(date.getMonth() + 1).padStart(2, '0');
-                                  const year = date.getFullYear();
-                                  return `${day}/${month}/${year}`;
-                                }
-                                return String(ordem.dataEmissao);
-                              } catch {
-                                return String(ordem.dataEmissao || "-");
-                              }
-                            })()
-                          : "-"}
+                        {formatarDataParaExibicao(ordem.dataEmissao)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">

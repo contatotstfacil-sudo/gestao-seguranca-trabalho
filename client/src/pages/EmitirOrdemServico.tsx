@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -122,8 +122,29 @@ export default function EmitirOrdemServico({ showLayout = true }: { showLayout?:
       );
     }
     
+    // Debug: verificar se os colaboradores têm nomeCargo
+    if (filtrados.length > 0) {
+      console.log("[EmitirOrdemServico] Colaboradores filtrados:", filtrados.map((c: any) => ({
+        id: c.id,
+        nome: c.nomeCompleto,
+        nomeCargo: c.nomeCargo,
+        cargoId: c.cargoId
+      })));
+    }
+    
     return filtrados;
   }, [colaboradores, empresaId, colaboradorSearch]);
+  
+  // Debug: verificar empresas
+  useEffect(() => {
+    if (empresas.length > 0) {
+      console.log("[EmitirOrdemServico] Empresas disponíveis:", empresas.map((e: any) => ({
+        id: e.id,
+        razaoSocial: e.razaoSocial,
+        cnpj: e.cnpj
+      })));
+    }
+  }, [empresas]);
 
   // Filtrar modelos
   const modelosFiltrados = useMemo(() => {
@@ -266,9 +287,12 @@ export default function EmitirOrdemServico({ showLayout = true }: { showLayout?:
                             value={empresa.razaoSocial}
                             onSelect={() => {
                               const newEmpresaId = empresa.id.toString();
+                              console.log("[EmitirOrdemServico] Empresa selecionada:", empresa);
                               setEmpresaId(newEmpresaId);
                               // Preencher CNPJ automaticamente
-                              setCnpjEmpresa(empresa.cnpj || "");
+                              const cnpj = empresa.cnpj || "";
+                              console.log("[EmitirOrdemServico] Preenchendo CNPJ:", cnpj);
+                              setCnpjEmpresa(cnpj);
                               setEmpresaOpen(false);
                               setEmpresaSearch("");
                               // Limpar colaborador quando trocar empresa
@@ -339,10 +363,14 @@ export default function EmitirOrdemServico({ showLayout = true }: { showLayout?:
                               value={colaborador.nomeCompleto}
                               onSelect={() => {
                                 const newColaboradorId = colaborador.id.toString();
+                                console.log("[EmitirOrdemServico] Colaborador selecionado:", colaborador);
+                                console.log("[EmitirOrdemServico] Colaborador.nomeCargo:", colaborador.nomeCargo);
                                 setColaboradorId(newColaboradorId === colaboradorId ? "" : newColaboradorId);
-                                // Preencher função automaticamente
+                                // Preencher função automaticamente (nomeCargo vem do JOIN na query)
                                 if (newColaboradorId !== colaboradorId) {
-                                  setFuncaoColaborador(colaborador.funcao || "");
+                                  const funcao = colaborador.nomeCargo || "";
+                                  console.log("[EmitirOrdemServico] Preenchendo função:", funcao);
+                                  setFuncaoColaborador(funcao);
                                 } else {
                                   setFuncaoColaborador("");
                                 }

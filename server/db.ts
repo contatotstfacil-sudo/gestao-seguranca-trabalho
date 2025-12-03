@@ -3222,7 +3222,7 @@ export async function getAllOrdensServico(tenantId: number | null, empresaId?: n
       conditions.push(eq(ordensServico.empresaId, empresaId));
     }
     
-    // Fazer JOINs com empresas, colaboradores e cargos para buscar nomes
+    // Fazer JOINs com empresas, colaboradores, cargos e responsáveis para buscar todos os dados
     let query = db.select({
       id: ordensServico.id,
       numeroOrdem: ordensServico.numeroOrdem,
@@ -3234,19 +3234,30 @@ export async function getAllOrdensServico(tenantId: number | null, empresaId?: n
       descricaoServico: ordensServico.descricaoServico,
       prioridade: ordensServico.prioridade,
       status: ordensServico.status,
+      cidade: ordensServico.cidade,
+      uf: ordensServico.uf,
       createdAt: ordensServico.createdAt,
       updatedAt: ordensServico.updatedAt,
       // JOIN com empresas
       empresaNome: empresas.razaoSocial,
+      empresaCnpj: empresas.cnpj,
       // JOIN com colaboradores
       colaboradorNome: colaboradores.nomeCompleto,
+      colaboradorDataAdmissao: colaboradores.dataAdmissao,
+      colaboradorCargoId: colaboradores.cargoId,
       // JOIN com cargos para buscar função do colaborador
       colaboradorFuncao: cargos.nomeCargo,
+      colaboradorDescricaoCargo: cargos.descricao,
+      // JOIN com responsáveis
+      responsavelNome: responsaveis.nomeCompleto,
+      responsavelFuncao: responsaveis.funcao,
+      responsavelRegistroProfissional: responsaveis.registroProfissional,
     })
     .from(ordensServico)
     .leftJoin(empresas, eq(ordensServico.empresaId, empresas.id))
     .leftJoin(colaboradores, eq(ordensServico.colaboradorId, colaboradores.id))
-    .leftJoin(cargos, eq(colaboradores.cargoId, cargos.id));
+    .leftJoin(cargos, eq(colaboradores.cargoId, cargos.id))
+    .leftJoin(responsaveis, eq(ordensServico.responsavelId, responsaveis.id));
     
     // Filtro opcional por searchTerm (busca em número, descrição ou empresa)
     // Deve ser aplicado após os JOINs
@@ -3287,7 +3298,45 @@ export async function getOrdemServicoById(id: number, tenantId?: number | null) 
       conditions.push(eq(ordensServico.tenantId, tenantId));
     }
     
-    const result = await db.select().from(ordensServico).where(and(...conditions)).limit(1);
+    // Fazer JOINs com empresas, colaboradores, cargos e responsáveis para buscar todos os dados necessários
+    const result = await db.select({
+      id: ordensServico.id,
+      numeroOrdem: ordensServico.numeroOrdem,
+      empresaId: ordensServico.empresaId,
+      colaboradorId: ordensServico.colaboradorId,
+      responsavelId: ordensServico.responsavelId,
+      modeloId: ordensServico.modeloId,
+      dataEmissao: ordensServico.dataEmissao,
+      descricaoServico: ordensServico.descricaoServico,
+      prioridade: ordensServico.prioridade,
+      status: ordensServico.status,
+      cidade: ordensServico.cidade,
+      uf: ordensServico.uf,
+      createdAt: ordensServico.createdAt,
+      updatedAt: ordensServico.updatedAt,
+      // JOIN com empresas
+      empresaNome: empresas.razaoSocial,
+      empresaCnpj: empresas.cnpj,
+      // JOIN com colaboradores
+      colaboradorNome: colaboradores.nomeCompleto,
+      colaboradorDataAdmissao: colaboradores.dataAdmissao,
+      colaboradorCargoId: colaboradores.cargoId,
+      // JOIN com cargos para buscar função do colaborador
+      colaboradorFuncao: cargos.nomeCargo,
+      colaboradorDescricaoCargo: cargos.descricao,
+      // JOIN com responsáveis
+      responsavelNome: responsaveis.nomeCompleto,
+      responsavelFuncao: responsaveis.funcao,
+      responsavelRegistroProfissional: responsaveis.registroProfissional,
+    })
+    .from(ordensServico)
+    .leftJoin(empresas, eq(ordensServico.empresaId, empresas.id))
+    .leftJoin(colaboradores, eq(ordensServico.colaboradorId, colaboradores.id))
+    .leftJoin(cargos, eq(colaboradores.cargoId, cargos.id))
+    .leftJoin(responsaveis, eq(ordensServico.responsavelId, responsaveis.id))
+    .where(and(...conditions))
+    .limit(1);
+    
     return result[0] || null;
   } catch (error) {
     console.error("[Database] Erro ao buscar ordem de serviço:", error);
