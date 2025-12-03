@@ -2270,7 +2270,8 @@ export const appRouter = router({
         searchTerm: z.string().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
-        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO
+        // ADMIN/SUPER_ADMIN SEMPRE TÊM ACESSO TOTAL - SEM VERIFICAÇÕES DE PLANO
+        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO APENAS PARA USUÁRIOS REGULARES
         if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
           if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
             throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
@@ -2292,7 +2293,8 @@ export const appRouter = router({
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input, ctx }) => {
-        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO
+        // ADMIN/SUPER_ADMIN SEMPRE TÊM ACESSO TOTAL - SEM VERIFICAÇÕES DE PLANO
+        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO APENAS PARA USUÁRIOS REGULARES
         if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
           if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
             throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
@@ -2334,14 +2336,8 @@ export const appRouter = router({
         responsavelId: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
-          if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
-            throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));
-          }
-        }
-        
-        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO
+        // ADMIN/SUPER_ADMIN SEMPRE TÊM ACESSO TOTAL - SEM VERIFICAÇÕES DE PLANO
+        // VERIFICAÇÃO DE FUNCIONALIDADE DO PLANO APENAS PARA USUÁRIOS REGULARES
         if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
           if (!checkFeatureAvailable(ctx.planLimits, "permiteOrdemServico")) {
             throw new Error(getFeatureUnavailableMessage("Ordem de Serviço", "Prata"));

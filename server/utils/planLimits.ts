@@ -47,10 +47,10 @@ export const PLANO_LIMITS: Record<PlanoType, PlanoLimits> = {
     maxSetores: -1, // Não especificado na tabela
     permiteGestaoAsos: true, // Funcionalidades básicas
     permiteLaudosOcupacionais: false, // Laudos avançados não permitidos
-    permiteOrdemServico: false, // Não mencionado
+    permiteOrdemServico: true, // LIBERADO PARA TODOS OS PLANOS
     permiteRelatoriosAvancados: false, // Não mencionado
     permiteExportacao: false, // Não mencionado
-    permiteIntegracao: false, // Não mencionado
+    permiteIntegracao: true, // LIBERADO PARA TODOS OS PLANOS (API)
     diasValidadeAso: 30,
     diasValidadeTreinamento: 180,
     diasValidadeEpi: 365,

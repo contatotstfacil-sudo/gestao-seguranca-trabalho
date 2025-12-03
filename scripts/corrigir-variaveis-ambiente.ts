@@ -74,3 +74,5 @@ if (updated) {
   console.log("\n✅ Todas as variáveis já estão configuradas!");
 }
 
+
+

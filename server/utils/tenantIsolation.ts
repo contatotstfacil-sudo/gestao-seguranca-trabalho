@@ -78,3 +78,5 @@ export function getTenantIdForNewUser(creator: User, providedTenantId?: number |
   return creator.tenantId || null;
 }
 
+
+
