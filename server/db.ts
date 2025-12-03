@@ -3222,6 +3222,7 @@ export async function getAllOrdensServico(tenantId: number | null, empresaId?: n
       conditions.push(eq(ordensServico.empresaId, empresaId));
     }
     
+    // Fazer JOINs com empresas, colaboradores e cargos para buscar nomes
     let query = db.select({
       id: ordensServico.id,
       numeroOrdem: ordensServico.numeroOrdem,
@@ -3235,13 +3236,40 @@ export async function getAllOrdensServico(tenantId: number | null, empresaId?: n
       status: ordensServico.status,
       createdAt: ordensServico.createdAt,
       updatedAt: ordensServico.updatedAt,
-    }).from(ordensServico);
+      // JOIN com empresas
+      empresaNome: empresas.razaoSocial,
+      // JOIN com colaboradores
+      colaboradorNome: colaboradores.nomeCompleto,
+      // JOIN com cargos para buscar função do colaborador
+      colaboradorFuncao: cargos.nomeCargo,
+    })
+    .from(ordensServico)
+    .leftJoin(empresas, eq(ordensServico.empresaId, empresas.id))
+    .leftJoin(colaboradores, eq(ordensServico.colaboradorId, colaboradores.id))
+    .leftJoin(cargos, eq(colaboradores.cargoId, cargos.id));
+    
+    // Filtro opcional por searchTerm (busca em número, descrição ou empresa)
+    // Deve ser aplicado após os JOINs
+    if (filters?.searchTerm) {
+      const searchTerm = `%${filters.searchTerm}%`;
+      conditions.push(
+        or(
+          like(ordensServico.numeroOrdem, searchTerm),
+          like(ordensServico.descricaoServico, searchTerm),
+          like(empresas.razaoSocial, searchTerm)
+        )
+      );
+    }
     
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as any;
     }
     
-    return await query.orderBy(asc(ordensServico.numeroOrdem));
+    const result = await query.orderBy(asc(ordensServico.numeroOrdem));
+    
+    console.log("[getAllOrdensServico] 📊 Retornando", result.length, "ordens de serviço");
+    
+    return result;
   } catch (error) {
     console.error("[Database] Erro ao buscar ordens de serviço:", error);
     throw error;
@@ -3284,9 +3312,14 @@ export async function createOrdemServico(data: InsertOrdemServico) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
+    console.log("[createOrdemServico] Criando ordem com dados:", { ...data, descricaoServico: data.descricaoServico?.substring(0, 50) + "..." });
     const result = await db.insert(ordensServico).values(data);
     const insertId = (result as any)[0]?.insertId;
-    if (insertId) return await getOrdemServicoById(insertId);
+    console.log("[createOrdemServico] Ordem criada com ID:", insertId, "tenantId:", data.tenantId);
+    if (insertId) {
+      // Passar tenantId para getOrdemServicoById para garantir que encontre a ordem recém-criada
+      return await getOrdemServicoById(insertId, data.tenantId);
+    }
     return null;
   } catch (error) {
     console.error("[Database] Erro ao criar ordem de serviço:", error);

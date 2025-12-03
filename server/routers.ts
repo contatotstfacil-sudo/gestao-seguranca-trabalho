@@ -2344,7 +2344,36 @@ export const appRouter = router({
           }
         }
         
-        return db.createOrdemServico(input);
+        // ISOLAMENTO DE TENANT: Determinar tenantId correto
+        // Admin pode criar para qualquer tenant (se empresaId for fornecido, buscar tenant da empresa)
+        // Usuários regulares só podem criar para seu próprio tenant
+        let tenantId: number | null = null;
+        
+        if (ctx.user.role === "admin" || ctx.user.role === "super_admin") {
+          // Admin: buscar tenantId da empresa selecionada
+          if (input.empresaId) {
+            const empresa = await db.getEmpresaById(input.empresaId, null);
+            if (empresa && empresa.tenantId) {
+              tenantId = empresa.tenantId;
+            }
+          }
+          // Se não encontrar tenantId da empresa, admin pode criar sem tenantId (null = sem filtro)
+          // Mas a tabela exige tenantId, então vamos usar o tenantId do usuário se disponível
+          if (!tenantId && ctx.user.tenantId) {
+            tenantId = ctx.user.tenantId;
+          }
+        } else {
+          // Usuários regulares: usar tenantId do usuário
+          tenantId = ctx.user.tenantId || null;
+        }
+        
+        if (!tenantId) {
+          throw new Error("Não é possível criar ordem de serviço sem sistema associado.");
+        }
+        
+        console.log("[ordensServico.create] Criando ordem com tenantId:", tenantId, "empresaId:", input.empresaId, "role:", ctx.user.role);
+        
+        return db.createOrdemServico({ ...input, tenantId });
       }),
     update: protectedProcedure
       .input(z.object({
