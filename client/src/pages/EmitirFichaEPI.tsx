@@ -496,7 +496,7 @@ export default function EmitirFichaEPI({ showLayout = true }: { showLayout?: boo
   const content = (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Emitir Ficha de EPI</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Ficha Admissional de EPI</h1>
         <p className="text-muted-foreground mt-1">
           Gere fichas de admissão de fornecimento de EPI em formato PDF.
         </p>
@@ -506,7 +506,7 @@ export default function EmitirFichaEPI({ showLayout = true }: { showLayout?: boo
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Emitir Ficha de Admissão de Fornecimento de EPI
+            Ficha Admissional de EPI
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 py-4">

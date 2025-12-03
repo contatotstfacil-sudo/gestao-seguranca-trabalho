@@ -1,0 +1,29 @@
+﻿PONTO DE RESTAURACAO CRIADO
+===========================
+Data: 03-12-2025
+Hora: 08-23-48
+Tag Git: restore-point-2025-12-03_08-23-32
+
+DESCRICAO DAS ALTERACOES:
+- Correcao de inconsistencia de datas de emissao
+- Criadas funcoes centralizadas para formatacao de datas:
+  * extrairDataYYYYMMDD() - Extrai data no formato YYYY-MM-DD
+  * formatarDataParaExibicao() - Formata para DD/MM/YYYY
+- Todas as partes agora usam as mesmas funcoes:
+  * Popup de edicao (formulario)
+  * Lista de ordens emitidas
+  * Documento impresso
+- Correcao de problemas de timezone
+- Logs adicionados para debug e verificacao
+- Garantia de consistencia de datas em todo o sistema
+
+ARQUIVOS MODIFICADOS:
+- client/src/pages/ListaOrdensServico.tsx
+  * Funcoes centralizadas de formatacao de data
+  * Uso unificado das funcoes em todos os lugares
+  * Logs de debug adicionados
+
+RESULTADO:
+- Data de emissao agora e consistente em todos os lugares
+- Sem problemas de timezone
+- Formato padronizado: DD/MM/YYYY para exibicao, YYYY-MM-DD para armazenamento

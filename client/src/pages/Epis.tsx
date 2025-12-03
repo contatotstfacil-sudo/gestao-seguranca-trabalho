@@ -33,7 +33,7 @@ const epiSections: EpiSection[] = [
   },
   {
     id: "emitir-ficha",
-    label: "Emitir Ficha",
+    label: "Ficha Admissional de EPI",
     icon: FileText,
     path: "/epis/emitir-ficha",
     component: EmitirFichaEPI,
@@ -163,7 +163,7 @@ export default function Epis() {
                             <FileText className="h-5 w-5 text-primary" />
                           </div>
                           <div className="flex-1">
-                            <h3 className="font-semibold mb-1">Emitir Ficha</h3>
+                            <h3 className="font-semibold mb-1">Ficha Admissional de EPI</h3>
                             <p className="text-sm text-muted-foreground">
                               Gere fichas de admissão de fornecimento de EPI em formato PDF.
                             </p>

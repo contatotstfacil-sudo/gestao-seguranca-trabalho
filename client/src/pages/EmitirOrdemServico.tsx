@@ -395,13 +395,13 @@ export default function EmitirOrdemServico({ showLayout = true }: { showLayout?:
               </div>
 
               <div>
-                <Label htmlFor="funcao">Função</Label>
+                <Label htmlFor="funcao">Cargo</Label>
                 <Input
                   id="funcao"
                   value={funcaoColaborador}
                   disabled
                   className="mt-1.5 bg-muted"
-                  placeholder="Função será preenchida automaticamente"
+                  placeholder="Cargo será preenchido automaticamente"
                 />
               </div>
             </div>

@@ -782,6 +782,199 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
       </tr>
     </table>
 
+    <table style="width: 100%; border-collapse: collapse; border: 2px solid #000; margin-top: 12px;">
+      <tr>
+        <td style="text-align: center; padding: 8px; border: 1px solid #000; background-color: #f3f4f6;">
+          <div style="font-weight: bold; font-size: 14px;">Riscos das Funções com Base no PGRO</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #000;">
+          <div style="text-align: justify; line-height: 1.6; font-size: 11px;">
+            ${(() => {
+              // Definir categorias de agentes na ordem correta
+              const categorias = [
+                { nome: "Agente Físico", chave: "Físico" },
+                { nome: "Agente Químico", chave: "Químico" },
+                { nome: "Agente Biológico", chave: "Biológico" },
+                { nome: "Agente Ergonômico", chave: "Ergonômico" },
+                { nome: "Agente Acidentes / Mecânico", chave: "Acidentes / Mecânico" }
+              ];
+              
+              // Mapear tipos de risco do banco para categorias
+              const mapeamentoTipoRisco: { [key: string]: string } = {
+                'fisico': 'Físico',
+                'quimico': 'Químico',
+                'biologico': 'Biológico',
+                'ergonomico': 'Ergonômico',
+                'mecanico': 'Acidentes / Mecânico'
+              };
+              
+              // Agrupar riscos por tipo de agente
+              const riscosPorCategoria: { [key: string]: any[] } = {};
+              categorias.forEach(cat => {
+                riscosPorCategoria[cat.chave] = [];
+              });
+              
+              // Agrupar riscos existentes
+              riscos.forEach((risco: any) => {
+                // Priorizar tipoRisco do banco (mais confiável)
+                let categoriaEncontrada = null;
+                
+                if (risco.tipoRisco && mapeamentoTipoRisco[risco.tipoRisco.toLowerCase()]) {
+                  categoriaEncontrada = mapeamentoTipoRisco[risco.tipoRisco.toLowerCase()];
+                } else {
+                  // Se não tiver tipoRisco, tentar usar tipoAgente
+                  const tipoAgente = risco.tipoAgente || "";
+                  if (tipoAgente) {
+                    // Normalizar o tipo de agente para encontrar a categoria correspondente
+                    for (const cat of categorias) {
+                      if (tipoAgente.toLowerCase().includes(cat.chave.toLowerCase()) || 
+                          cat.chave.toLowerCase().includes(tipoAgente.toLowerCase())) {
+                        categoriaEncontrada = cat.chave;
+                        break;
+                      }
+                    }
+                    // Tentar mapear variações comuns
+                    if (!categoriaEncontrada) {
+                      const tipoLower = tipoAgente.toLowerCase();
+                      if (tipoLower.includes("fisico") || tipoLower.includes("físico")) {
+                        categoriaEncontrada = "Físico";
+                      } else if (tipoLower.includes("quimico") || tipoLower.includes("químico")) {
+                        categoriaEncontrada = "Químico";
+                      } else if (tipoLower.includes("biologico") || tipoLower.includes("biológico")) {
+                        categoriaEncontrada = "Biológico";
+                      } else if (tipoLower.includes("ergonomico") || tipoLower.includes("ergonômico")) {
+                        categoriaEncontrada = "Ergonômico";
+                      } else if (tipoLower.includes("mecanico") || tipoLower.includes("mecânico") || tipoLower.includes("acidente")) {
+                        categoriaEncontrada = "Acidentes / Mecânico";
+                      }
+                    }
+                  }
+                }
+                
+                if (categoriaEncontrada && riscosPorCategoria[categoriaEncontrada]) {
+                  riscosPorCategoria[categoriaEncontrada].push(risco);
+                } else if (risco.tipoAgente && !categoriaEncontrada) {
+                  // Se não encontrou categoria padrão, criar uma com o nome do tipoAgente
+                  if (!riscosPorCategoria[risco.tipoAgente]) {
+                    riscosPorCategoria[risco.tipoAgente] = [];
+                  }
+                  riscosPorCategoria[risco.tipoAgente].push(risco);
+                }
+              });
+              
+              // Gerar HTML para cada categoria
+              let html = "";
+              categorias.forEach((categoria, index) => {
+                const riscosCategoria = riscosPorCategoria[categoria.chave] || [];
+                html += `<div style="margin-bottom: ${index < categorias.length - 1 ? '12px' : '0'};">
+                  <strong style="font-size: 11px;">${categoria.nome}:</strong> `;
+                
+                if (riscosCategoria.length > 0) {
+                  // Mostrar informações dos riscos conforme estrutura do PGRO
+                  const riscosInfo = riscosCategoria.map((risco: any) => {
+                    const partes: string[] = [];
+                    
+                    // Fonte Geradora
+                    if (risco.fonteGeradora) {
+                      partes.push(`Fonte: ${risco.fonteGeradora}`);
+                    }
+                    
+                    // Tipo
+                    if (risco.tipo) {
+                      partes.push(`Tipo: ${risco.tipo}`);
+                    }
+                    
+                    // Meio de Propagação
+                    if (risco.meioPropagacao) {
+                      partes.push(`Propagação: ${risco.meioPropagacao}`);
+                    }
+                    
+                    // Meio de Contato
+                    if (risco.meioContato) {
+                      partes.push(`Contato: ${risco.meioContato}`);
+                    }
+                    
+                    // Possíveis Danos à Saúde
+                    if (risco.possiveisDanosSaude) {
+                      partes.push(`Danos à Saúde: ${risco.possiveisDanosSaude}`);
+                    }
+                    
+                    // Tipo de Análise
+                    if (risco.tipoAnalise) {
+                      partes.push(`Análise: ${risco.tipoAnalise}`);
+                    }
+                    
+                    // Valor Análise Quantitativa
+                    if (risco.valorAnaliseQuantitativa) {
+                      partes.push(`Valor: ${risco.valorAnaliseQuantitativa}`);
+                    }
+                    
+                    // Gradação Efeitos
+                    if (risco.gradacaoEfeitos) {
+                      partes.push(`Gradação Efeitos: ${risco.gradacaoEfeitos}`);
+                    }
+                    
+                    // Gradação Exposição
+                    if (risco.gradacaoExposicao) {
+                      partes.push(`Gradação Exposição: ${risco.gradacaoExposicao}`);
+                    }
+                    
+                    // Descrição dos Riscos (conclusão) - sempre no final
+                    if (risco.descricaoRiscos) {
+                      // Tentar parsear se for JSON (array de conclusões)
+                      try {
+                        const descricaoParsed = JSON.parse(risco.descricaoRiscos);
+                        if (Array.isArray(descricaoParsed) && descricaoParsed.length > 0) {
+                          partes.push(`Conclusão: ${descricaoParsed.join("; ")}`);
+                        } else {
+                          partes.push(`Conclusão: ${risco.descricaoRiscos}`);
+                        }
+                      } catch {
+                        // Se não for JSON, usar como string
+                        partes.push(`Conclusão: ${risco.descricaoRiscos}`);
+                      }
+                    }
+                    
+                    return partes.length > 0 ? partes.join(". ") : "-";
+                  }).filter((info: string) => info && info !== "-");
+                  
+                  if (riscosInfo.length > 0) {
+                    html += `<span style="font-size: 11px;">${riscosInfo.join("; ")}</span>`;
+                  } else {
+                    html += `<span style="font-size: 11px;">-</span>`;
+                  }
+                } else {
+                  html += `<span style="font-size: 11px; color: #666;">Ausente de risco.</span>`;
+                }
+                
+                html += `</div>`;
+              });
+              
+              // Se houver riscos em categorias não padrão, adicionar também
+              Object.keys(riscosPorCategoria).forEach(tipoAgente => {
+                if (!categorias.find(cat => cat.chave === tipoAgente)) {
+                  const riscosCategoria = riscosPorCategoria[tipoAgente] || [];
+                  if (riscosCategoria.length > 0) {
+                    html += `<div style="margin-bottom: 12px;">
+                      <strong style="font-size: 11px;">${tipoAgente}:</strong> `;
+                    const riscosInfo = riscosCategoria.map((risco: any) => {
+                      return risco.descricaoRiscos || "-";
+                    }).filter((info: string) => info && info !== "-").join("; ");
+                    html += `<span style="font-size: 11px;">${riscosInfo || "-"}</span>`;
+                    html += `</div>`;
+                  }
+                }
+              });
+              
+              return html || "<div style='font-size: 11px; color: #666;'>Nenhum risco cadastrado para esta função.</div>";
+            })()}
+          </div>
+        </td>
+      </tr>
+    </table>
+
     ${riscos.length > 0 ? `
     <table style="width: 100%; border-collapse: collapse; border: 2px solid #000; margin-top: 12px;">
       <tr>
@@ -994,9 +1187,14 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
       try {
         const riscosData = await utils.cargoRiscos.getByCargo.fetch({ cargoId: ordemCompleta.colaboradorCargoId });
         riscos = riscosData || [];
+        console.log("[handleImprimirOrdemServico] Riscos encontrados:", riscos.length, riscos);
       } catch (error) {
-        console.error("Erro ao buscar riscos ocupacionais:", error);
+        console.error("[handleImprimirOrdemServico] Erro ao buscar riscos ocupacionais:", error);
+        riscos = [];
       }
+    } else {
+      console.warn("[handleImprimirOrdemServico] colaboradorCargoId não disponível:", ordemCompleta.colaboradorCargoId);
+      riscos = [];
     }
     
     // Buscar EPIs do colaborador
@@ -1392,13 +1590,13 @@ export default function ListaOrdensServico({ showLayout = true }: { showLayout?:
                 </div>
 
                 <div>
-                  <Label htmlFor="edit-funcao">Função</Label>
+                  <Label htmlFor="edit-funcao">Cargo</Label>
                   <Input
                     id="edit-funcao"
                     value={editFuncaoColaborador}
                     disabled
                     className="mt-1.5 bg-muted"
-                    placeholder="Função será preenchida automaticamente"
+                    placeholder="Cargo será preenchido automaticamente"
                   />
                 </div>
               </div>
