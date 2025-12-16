@@ -18,7 +18,7 @@
     "test:system": "tsx scripts/teste-sistema-completo.ts",
     "diagnostico:login": "tsx scripts/diagnostico-login.ts",
     "fix:env": "tsx scripts/corrigir-variaveis-ambiente.ts",
-    "check:db": "tsx -e \"import('dotenv/config').then(() => import('./server/db').then(async (db) => { const d = await db.getDb(); if (d) { await d.execute('SELECT 1'); console.log('✅ Banco OK'); } else { console.log('❌ Banco não disponível'); } process.exit(0); }))\"",
+    "check:db": "tsx -e \"import('dotenv/config').then(() => import('./server/db').then(async (db) => { const d = await db.getDb(); if (d) { await d.execute('SELECT 1'); console.log('âœ… Banco OK'); } else { console.log('âŒ Banco nÃ£o disponÃ­vel'); } process.exit(0); }))\"",
     "seed:colaboradores": "tsx ./seed-colaboradores.ts",
     "seed:adicionais": "tsx ./seed-adicionais.ts",
     "seed:construtoras": "tsx ./seed-construtoras.ts",
@@ -85,12 +85,14 @@
     "cmdk": "^1.1.1",
     "cookie": "^1.0.2",
     "date-fns": "^4.1.0",
+    "docx": "^9.5.1",
     "dotenv": "^17.2.2",
     "drizzle-orm": "^0.44.5",
     "embla-carousel-react": "^8.6.0",
     "express": "^4.21.2",
     "express-rate-limit": "^8.2.1",
     "framer-motion": "^12.23.22",
+    "file-saver": "^2.0.5",
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
     "jose": "6.1.0",
@@ -151,3 +153,4 @@
     }
   }
 }
+
