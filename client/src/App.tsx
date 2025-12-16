@@ -27,6 +27,7 @@ import LaudosOcupacionais from "./pages/LaudosOcupacionais";
 import RelatorioCargos from "./pages/RelatorioCargos";
 import CargosEFuncoes from "./pages/CargosEFuncoes";
 import AdminClientes from "./pages/AdminClientes";
+import Vendas from "./pages/Vendas";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -37,6 +38,9 @@ function Router() {
       </Route>
       <Route path="/dashboard">
         <Dashboard />
+      </Route>
+      <Route path="/vendas">
+        <Vendas />
       </Route>
       <Route path="/">
         <Home />

@@ -544,12 +544,43 @@ export default function ModelosCertificados({ showLayout = true }: { showLayout?
     setTipoTreinamentoSearch("");
     
     if (tipoSelecionado) {
+      // Construir descrição do certificado com base no tipo de treinamento
+      let descricaoCertificado = "";
+      
+      // Se o tipo de treinamento tiver descrição, usar ela como base
+      if (tipoSelecionado.descricao && tipoSelecionado.descricao.trim()) {
+        descricaoCertificado = tipoSelecionado.descricao.trim();
+      } else {
+        // Se não tiver descrição, usar padrão
+        descricaoCertificado = "em conformidade com a portaria 3.214/78";
+      }
+      
+      // Se o tipo de treinamento tiver validade (prazo), adicionar à descrição
+      if (tipoSelecionado.validadeEmMeses) {
+        const validadeMeses = tipoSelecionado.validadeEmMeses;
+        const validadeAnos = validadeMeses >= 12 ? Math.floor(validadeMeses / 12) : 0;
+        const validadeMesesRestantes = validadeMeses % 12;
+        
+        let textoValidade = "";
+        if (validadeAnos > 0 && validadeMesesRestantes > 0) {
+          textoValidade = `${validadeAnos} ano${validadeAnos > 1 ? 's' : ''} e ${validadeMesesRestantes} mês${validadeMesesRestantes > 1 ? 'es' : ''}`;
+        } else if (validadeAnos > 0) {
+          textoValidade = `${validadeAnos} ano${validadeAnos > 1 ? 's' : ''}`;
+        } else {
+          textoValidade = `${validadeMeses} mês${validadeMeses > 1 ? 'es' : ''}`;
+        }
+        
+        // Adicionar a validade à descrição
+        if (!descricaoCertificado.toLowerCase().includes('validade') && !descricaoCertificado.toLowerCase().includes('prazo')) {
+          descricaoCertificado += `, com validade de ${textoValidade}`;
+        }
+      }
+      
       setFormData({
         ...formData,
         tipoTreinamentoId: tipoTreinamentoId,
         nomeTreinamento: tipoSelecionado.nomeTreinamento || "",
-        // Se o tipo de treinamento tiver carga horária, preencheria aqui
-        // Por enquanto, mantém a carga horária manual
+        descricaoCertificado: descricaoCertificado,
       });
     } else {
       setFormData({

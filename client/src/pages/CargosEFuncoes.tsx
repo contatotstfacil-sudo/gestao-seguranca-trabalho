@@ -1,8 +1,8 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Briefcase, BarChart3, ChevronRight, Settings, FolderTree } from "lucide-react";
-import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { Briefcase, BarChart3, ChevronRight, FolderTree } from "lucide-react";
+import { useLocation } from "wouter";
 import Cargos from "./Cargos";
 import RelatorioCargos from "./RelatorioCargos";
 import Setores from "./Setores";
@@ -43,6 +43,17 @@ const cargosEFuncoesSections: CargosEFuncoesSection[] = [
 export default function CargosEFuncoes({ showLayout = true }: { showLayout?: boolean }) {
   const [location, setLocation] = useLocation();
   
+  const isEmpresasContext = location.startsWith("/empresas/cargos-e-setores");
+  
+  const resolvedSections = React.useMemo(() => {
+    return cargosEFuncoesSections.map((section) => ({
+      ...section,
+      path: isEmpresasContext
+        ? section.path.replace("/cargos-e-funcoes", "/empresas/cargos-e-setores")
+        : section.path,
+    }));
+  }, [isEmpresasContext]);
+  
   // Redirecionar rota antiga /setores para /cargos-e-funcoes/setores
   React.useEffect(() => {
     if (location === "/setores") {
@@ -60,6 +71,11 @@ export default function CargosEFuncoes({ showLayout = true }: { showLayout?: boo
   
   // Se não há seção ativa, mostrar o menu principal
   const showMenu = !activeSection || location === "/cargos-e-funcoes" || location === "/empresas/cargos-e-setores";
+  const currentTab = activeSection?.id ?? resolvedSections[0]?.id;
+
+  const handleTabChange = (path: string) => {
+    setLocation(path);
+  };
 
   const content = (
       <div className="space-y-6">
@@ -70,7 +86,7 @@ export default function CargosEFuncoes({ showLayout = true }: { showLayout?: boo
 
         {showMenu ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {cargosEFuncoesSections.map((section) => {
+            {resolvedSections.map((section) => {
               const Icon = section.icon;
               return (
                 <Card
@@ -97,76 +113,38 @@ export default function CargosEFuncoes({ showLayout = true }: { showLayout?: boo
             })}
           </div>
         ) : (
-          <div className="flex gap-2">
-            {/* Menu Lateral */}
-            <div className="w-[280px] flex-shrink-0">
-              <Card className="sticky top-6">
-                <CardHeader>
-                  <CardTitle className="text-lg">Menu</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <nav className="space-y-2">
-                    <button
-                      onClick={() => setLocation("/cargos-e-funcoes")}
-                      className={cn(
-                        "w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-left transition-colors",
-                        location === "/cargos-e-funcoes"
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-accent text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Settings className="h-5 w-5" />
-                        <span className="font-medium">Menu Principal</span>
-                      </div>
-                      <ChevronRight className={cn(
-                        "h-4 w-4 transition-transform",
-                        location === "/cargos-e-funcoes" && "rotate-90"
-                      )} />
-                    </button>
-                    
-                    {cargosEFuncoesSections.map((section) => {
-                      const Icon = section.icon;
-                      // Ajustar path baseado na localização atual
-                      const currentPath = location.startsWith("/empresas/cargos-e-setores") 
-                        ? section.path.replace("/cargos-e-funcoes", "/empresas/cargos-e-setores")
-                        : section.path;
-                      const isActive = location === section.path || location === currentPath || 
-                                      location.startsWith(section.path + "/") || location.startsWith(currentPath + "/");
-                      return (
-                        <button
-                          key={section.id}
-                          onClick={() => setLocation(currentPath)}
-                          className={cn(
-                            "w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-left transition-colors",
-                            isActive
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-accent text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <Icon className="h-5 w-5" />
-                            <span className="font-medium">{section.label}</span>
-                          </div>
-                          <ChevronRight className={cn(
-                            "h-4 w-4 transition-transform",
-                            isActive && "rotate-90"
-                          )} />
-                        </button>
-                      );
-                    })}
-                  </nav>
-                </CardContent>
-              </Card>
+          <div className="space-y-6">
+            <div className="sticky top-4 z-20">
+              <div className="border-b">
+                <nav className="flex gap-1">
+                  {resolvedSections.map((section) => {
+                    const Icon = section.icon;
+                    const isActive = currentTab === section.id;
+                    return (
+                      <button
+                        key={section.id}
+                        onClick={() => handleTabChange(section.path)}
+                        className={cn(
+                          "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                          isActive
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
+                        )}
+                        style={{ transition: "none", WebkitTapHighlightColor: "transparent" }}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{section.label}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
             </div>
 
-            {/* Conteúdo Principal */}
-            <div className="flex-1 min-w-0">
-              <div className="space-y-6">
-                {activeSection?.component && (
-                  <activeSection.component showLayout={false} />
-                )}
-              </div>
+            <div className="space-y-6">
+              {activeSection?.component && (
+                <activeSection.component showLayout={false} />
+              )}
             </div>
           </div>
         )}

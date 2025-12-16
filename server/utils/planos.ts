@@ -3,14 +3,29 @@
  */
 
 import { getDb } from "../db";
-import { planos, assinaturas, empresas, colaboradores } from "../../drizzle/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { empresas, colaboradores, users, tenants } from "../../drizzle/schema";
+import { eq, and, sql, gte, lte } from "drizzle-orm";
 
 export interface LimitesPlano {
   limiteEmpresas: number | null;
   limiteColaboradoresPorEmpresa: number | null;
   limiteColaboradoresTotal: number | null;
+  tenantId: number | null;
+  dataInicio: Date | null;
+  dataFim: Date | null;
+  planoNome: string | null;
 }
+
+// Limites hardcoded por plano (conforme oferta atual)
+const PLAN_LIMITS: Record<
+  string,
+  { limiteEmpresas: number | null; limiteColaboradoresPorEmpresa: number | null; limiteColaboradoresTotal: number | null }
+> = {
+  bronze: { limiteEmpresas: 5, limiteColaboradoresPorEmpresa: 20, limiteColaboradoresTotal: null },
+  prata: { limiteEmpresas: 20, limiteColaboradoresPorEmpresa: 20, limiteColaboradoresTotal: null },
+  ouro: { limiteEmpresas: 50, limiteColaboradoresPorEmpresa: 100, limiteColaboradoresTotal: null },
+  diamante: { limiteEmpresas: null, limiteColaboradoresPorEmpresa: null, limiteColaboradoresTotal: null }, // ilimitado
+};
 
 /**
  * Obtém os limites do plano do usuário
@@ -20,52 +35,74 @@ export async function getLimitesPlano(userId: number): Promise<LimitesPlano | nu
     const db = await getDb();
     if (!db) return null;
 
-    // Buscar assinatura ativa do usuário
-    const assinaturaAtiva = await db
+    // Obter tenant do usuário
+    const userRow = await db
       .select({
-        planoId: assinaturas.planoId,
-        status: assinaturas.status,
-        dataFim: assinaturas.dataFim,
+        tenantId: users.tenantId,
+        role: users.role,
       })
-      .from(assinaturas)
-      .where(
-        and(
-          eq(assinaturas.userId, userId),
-          eq(assinaturas.status, "ativa")
-        )
-      )
+      .from(users)
+      .where(eq(users.id, userId))
       .limit(1);
 
-    if (!assinaturaAtiva || assinaturaAtiva.length === 0) {
-      return null; // Usuário sem assinatura ativa
-    }
+    const tenantId = userRow?.[0]?.tenantId ?? null;
 
-    const assinatura = assinaturaAtiva[0];
-
-    // Verificar se a assinatura não está vencida
-    if (new Date(assinatura.dataFim) < new Date()) {
-      return null; // Assinatura vencida
-    }
-
-    // Buscar o plano
-    const plano = await db
-      .select({
-        limiteEmpresas: planos.limiteEmpresas,
-        limiteColaboradoresPorEmpresa: planos.limiteColaboradoresPorEmpresa,
-        limiteColaboradoresTotal: planos.limiteColaboradoresTotal,
-      })
-      .from(planos)
-      .where(eq(planos.id, assinatura.planoId))
-      .limit(1);
-
-    if (!plano || plano.length === 0) {
+    if (!tenantId) {
       return null;
     }
 
+    // Buscar tenant e validar período de pagamento
+    const tenantRow = await db
+      .select({
+        id: tenants.id,
+        plano: tenants.plano,
+        status: tenants.status,
+        statusPagamento: tenants.statusPagamento,
+        dataInicio: tenants.dataInicio,
+        dataFim: tenants.dataFim,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (!tenantRow || tenantRow.length === 0) return null;
+    const tenant = tenantRow[0];
+
+    if (tenant.status !== "ativo" || tenant.statusPagamento !== "pago") {
+      return null; // assinatura/tenant não ativo/pago
+    }
+
+    const agora = new Date();
+    const inicio = tenant.dataInicio ? new Date(tenant.dataInicio) : null;
+    const fim = tenant.dataFim ? new Date(tenant.dataFim) : null;
+
+    if (fim && fim < agora) {
+      return null; // ciclo vencido
+    }
+
+    // Mapear limites com base no plano do tenant
+    // Como os planos estão na tabela planos, buscamos pelo nome
+    const planoDb = await db
+      .select({
+        plano: tenants.plano,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (!planoDb || planoDb.length === 0) return null;
+
+    const planoNome = String(planoDb[0].plano);
+    const limits = PLAN_LIMITS[planoNome] || { limiteEmpresas: null, limiteColaboradoresPorEmpresa: null, limiteColaboradoresTotal: null };
+
     return {
-      limiteEmpresas: plano[0].limiteEmpresas,
-      limiteColaboradoresPorEmpresa: plano[0].limiteColaboradoresPorEmpresa,
-      limiteColaboradoresTotal: plano[0].limiteColaboradoresTotal,
+      limiteEmpresas: limits.limiteEmpresas,
+      limiteColaboradoresPorEmpresa: limits.limiteColaboradoresPorEmpresa,
+      limiteColaboradoresTotal: limits.limiteColaboradoresTotal,
+      tenantId,
+      dataInicio: inicio,
+      dataFim: fim,
+      planoNome,
     };
   } catch (error) {
     console.error("[getLimitesPlano] Erro:", error);
@@ -93,21 +130,34 @@ export async function podeCriarEmpresa(userId: number, userRole?: string): Promi
     return { pode: true };
   }
 
+   const { tenantId, dataInicio, dataFim } = limites;
+
   const db = await getDb();
   if (!db) return { pode: false, motivo: "Erro ao conectar ao banco de dados" };
 
-  // Contar empresas ativas do usuário
+  // Contar empresas criadas no ciclo da assinatura (independente de status)
+  const whereEmpresa = tenantId
+    ? [eq(empresas.tenantId, tenantId)]
+    : [];
+
+  if (dataInicio) {
+    whereEmpresa.push(gte(empresas.createdAt, dataInicio));
+  }
+  if (dataFim) {
+    whereEmpresa.push(lte(empresas.createdAt, dataFim));
+  }
+
   const empresasCount = await db
     .select({ count: sql<number>`COUNT(*)` })
     .from(empresas)
-    .where(eq(empresas.status, "ativa"));
+    .where(whereEmpresa.length ? and(...whereEmpresa) : undefined);
 
   const totalEmpresas = empresasCount[0]?.count || 0;
 
   if (totalEmpresas >= limites.limiteEmpresas) {
     return {
       pode: false,
-      motivo: `Limite de ${limites.limiteEmpresas} empresa(s) atingido. Faça upgrade do plano para adicionar mais empresas.`,
+      motivo: `Limite de ${limites.limiteEmpresas} empresa(s) do plano ${limites.planoNome || ""} neste ciclo atingido. Excluir não libera vaga até a virada do ciclo. Faça upgrade ou aguarde o próximo ciclo.`,
     };
   }
 
@@ -138,39 +188,56 @@ export async function podeCriarColaborador(
 
   // Verificar limite total de colaboradores
   if (limites.limiteColaboradoresTotal !== null) {
+    const filtrosTotal = [];
+    if (limites.tenantId) {
+      filtrosTotal.push(eq(colaboradores.tenantId, limites.tenantId));
+    }
+    if (limites.dataInicio) {
+      filtrosTotal.push(gte(colaboradores.createdAt, limites.dataInicio));
+    }
+    if (limites.dataFim) {
+      filtrosTotal.push(lte(colaboradores.createdAt, limites.dataFim));
+    }
+
     const colaboradoresTotalCount = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(colaboradores)
-      .where(eq(colaboradores.status, "ativo"));
+      .where(filtrosTotal.length ? and(...filtrosTotal) : undefined);
 
     const totalColaboradores = colaboradoresTotalCount[0]?.count || 0;
 
     if (totalColaboradores >= limites.limiteColaboradoresTotal) {
       return {
         pode: false,
-        motivo: `Limite total de ${limites.limiteColaboradoresTotal} colaborador(es) atingido. Faça upgrade do plano.`,
+        motivo: `Limite total de ${limites.limiteColaboradoresTotal} colaborador(es) do plano ${limites.planoNome || ""} neste ciclo atingido. Excluir/demitir não libera vaga até a virada do ciclo. Faça upgrade ou aguarde o próximo ciclo.`,
       };
     }
   }
 
   // Verificar limite por empresa
   if (limites.limiteColaboradoresPorEmpresa !== null) {
+    const filtrosEmpresa = [eq(colaboradores.empresaId, empresaId)];
+    if (limites.tenantId) {
+      filtrosEmpresa.push(eq(colaboradores.tenantId, limites.tenantId));
+    }
+    if (limites.dataInicio) {
+      filtrosEmpresa.push(gte(colaboradores.createdAt, limites.dataInicio));
+    }
+    if (limites.dataFim) {
+      filtrosEmpresa.push(lte(colaboradores.createdAt, limites.dataFim));
+    }
+
     const colaboradoresEmpresaCount = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(colaboradores)
-      .where(
-        and(
-          eq(colaboradores.empresaId, empresaId),
-          eq(colaboradores.status, "ativo")
-        )
-      );
+      .where(and(...filtrosEmpresa));
 
     const colaboradoresNaEmpresa = colaboradoresEmpresaCount[0]?.count || 0;
 
     if (colaboradoresNaEmpresa >= limites.limiteColaboradoresPorEmpresa) {
       return {
         pode: false,
-        motivo: `Limite de ${limites.limiteColaboradoresPorEmpresa} colaborador(es) por empresa atingido para esta empresa. Faça upgrade do plano.`,
+        motivo: `Limite de ${limites.limiteColaboradoresPorEmpresa} colaborador(es) por empresa no plano ${limites.planoNome || ""} neste ciclo atingido. Excluir/demitir não libera vaga até a virada do ciclo. Faça upgrade ou aguarde o próximo ciclo.`,
       };
     }
   }

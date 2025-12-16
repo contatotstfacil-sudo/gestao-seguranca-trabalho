@@ -146,7 +146,7 @@ async function testPlanosValidos() {
     if (count === 0) {
       addResult("Planos Válidos", "✅ PASSOU", "Todos os tenants têm planos válidos (Bronze, Prata, Ouro, Diamante)");
     } else {
-      addResult("Planos Válidos", "❌ FALHOU", `${count} tenant(s) com planos inválidos (Básico/Profissional ainda existem)`);
+      addResult("Planos Válidos", "❌ FALHOU", `${count} tenant(s) com planos fora da lista Bronze/Prata/Ouro/Diamante)`);
     }
   } catch (error: any) {
     addResult("Planos Válidos", "❌ FALHOU", error.message);
@@ -220,6 +220,7 @@ runAllTests().catch((error) => {
   console.error("❌ Erro ao executar testes:", error);
   process.exit(1);
 });
+
 
 
 

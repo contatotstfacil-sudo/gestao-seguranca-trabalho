@@ -47,6 +47,12 @@ export default function TiposTreinamentos({ showLayout = true }: { showLayout?: 
   const utils = trpc.useUtils();
   const { data: tiposTreinamentos = [], isLoading } = trpc.tiposTreinamentos.list.useQuery({
     searchTerm: searchTerm || undefined,
+  }, {
+    // Fazer refetch imediatamente quando searchTerm mudar
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    // Não usar cache para pesquisa - sempre buscar do servidor
+    staleTime: 0,
   });
 
   const createMutation = trpc.tiposTreinamentos.create.useMutation({

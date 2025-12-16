@@ -67,6 +67,8 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [emitirDialogOpen, setEmitirDialogOpen] = useState(false);
   const [orientacaoPreview, setOrientacaoPreview] = useState<"portrait" | "landscape">("landscape");
+  const [visualizarCertificadoDialogOpen, setVisualizarCertificadoDialogOpen] = useState(false);
+  const [certificadoParaVisualizar, setCertificadoParaVisualizar] = useState<{ html: string; orientacao?: "portrait" | "landscape" } | null>(null);
   const [colaboradorOpen, setColaboradorOpen] = useState(false);
   const [colaboradorSearch, setColaboradorSearch] = useState("");
 
@@ -917,7 +919,7 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
   };
 
   const handleVisualizarCertificado = (htmlGerado: string, certificado?: any) => {
-    // Remover fundo acinzentado do conteúdo programático antes de exibir
+    // Processar HTML (mesma lógica de processamento)
     let htmlProcessado = htmlGerado;
     
     // Buscar dados do colaborador se o certificado foi passado
@@ -935,71 +937,42 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
     }
     
     // FORÇAR atualização da estrutura de assinatura para incluir cargo e RG do colaborador
-    // Tentar múltiplos padrões para garantir que funcione
     const padroesAssinatura = [
-      // Padrão 1: estrutura com inline styles
       /(<div[^>]*style="[^"]*display:\s*flex[^"]*flex-direction:\s*column[^"]*align-items:\s*center[^"]*">\s*<div[^>]*style="[^"]*width:\s*192px[^"]*border-top:[^"]*"><\/div>\s*<p[^>]*>([^<]+)<\/p>)(\s*(?:<p[^>]*>.*?<\/p>)?\s*)(<\/div>)/gi,
-      // Padrão 2: estrutura mais simples
       /(<div[^>]*class="assinatura"[^>]*>\s*<div[^>]*class="assinatura-linha"[^"]*><\/div>\s*<p[^>]*class="assinatura-nome"[^>]*>([^<]+)<\/p>)(\s*(?:<p[^>]*>.*?<\/p>)?\s*)(<\/div>)/gi,
-      // Padrão 3: padrão mais genérico - qualquer p dentro de div de assinatura
       /(<div[^>]*>\s*<div[^>]*><\/div>\s*<p[^>]*>([^<]+)<\/p>)(\s*(?:<p[^>]*>.*?<\/p>)?\s*)(<\/div>)/gi,
     ];
     
-    // Verificar se a primeira assinatura (do colaborador) tem cargo e RG
-    // Procurar pelo nome do colaborador na primeira assinatura
     const nomeColaboradorNoHtml = certificado?.nomeColaborador || "";
-    if (nomeColaboradorNoHtml && !htmlProcessado.includes('<p[^>]*>' + cargoColaborador + '</p>') && !htmlProcessado.includes('RG: ' + rgColaborador)) {
-      // Tentar encontrar a estrutura de assinatura do colaborador e adicionar cargo/RG
+    if (nomeColaboradorNoHtml && !htmlProcessado.includes('RG: ' + rgColaborador)) {
       for (const padrao of padroesAssinatura) {
         const match = htmlProcessado.match(padrao);
-        if (match && match[0]) {
-          // Verificar se contém o nome do colaborador
-          if (match[0].includes(nomeColaboradorNoHtml)) {
-            // Substituir para adicionar cargo e RG
-            htmlProcessado = htmlProcessado.replace(
-              padrao,
-              (matchStr: string, p1: string, p2: string, p3: string, p4: string) => {
-                // Verificar se já tem cargo e RG
-                if (!matchStr.includes('RG:') && !matchStr.includes('CARGO')) {
-                  return p1 + 
-                    '\n          <p style="font-size: 10px; line-height: 1.2; color: #374151; margin: 0; padding: 0; margin-top: 1px;">\n            ' + (cargoColaborador || '') + 
-                    '\n          </p>\n          <p style="font-size: 10px; line-height: 1.2; color: #374151; margin: 0; padding: 0; margin-top: 1px;">\n            RG: ' + (rgColaborador || '') + 
-                    '\n          </p>\n        ' + p4;
-                }
-                return matchStr;
+        if (match && match[0] && match[0].includes(nomeColaboradorNoHtml)) {
+          htmlProcessado = htmlProcessado.replace(
+            padrao,
+            (matchStr: string, p1: string, p2: string, p3: string, p4: string) => {
+              if (!matchStr.includes('RG:') && !matchStr.includes(cargoColaborador)) {
+                return p1 + 
+                  '\n          <p style="font-size: 10px; line-height: 1.2; color: #374151; margin: 0; padding: 0; margin-top: 1px;">\n            ' + (cargoColaborador || '') + 
+                  '\n          </p>\n          <p style="font-size: 10px; line-height: 1.2; color: #374151; margin: 0; padding: 0; margin-top: 1px;">\n            RG: ' + (rgColaborador || '') + 
+                  '\n          </p>\n        ' + p4;
               }
-            );
-            break;
-          }
-        }
-      }
-      
-      // Se não encontrou pelo padrão, tentar substituição direta após o nome
-      if (nomeColaboradorNoHtml && !htmlProcessado.includes('RG: ' + rgColaborador)) {
-        htmlProcessado = htmlProcessado.replace(
-          new RegExp(`(<p[^>]*>${nomeColaboradorNoHtml.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<\/p>)(\\s*(?:<p[^>]*>.*?<\/p>)?\\s*)(<\/div>)`, 'gi'),
-          (match: string, p1: string, p2: string, p3: string) => {
-            if (!match.includes('RG:') && !match.includes(cargoColaborador)) {
-              return p1 + 
-                '\n          <p style="font-size: 10px; line-height: 1.2; color: #374151; margin: 0; padding: 0; margin-top: 1px;">\n            ' + (cargoColaborador || '') + 
-                '\n          </p>\n          <p style="font-size: 10px; line-height: 1.2; color: #374151; margin: 0; padding: 0; margin-top: 1px;">\n            RG: ' + (rgColaborador || '') + 
-                '\n          </p>\n        ' + p3;
+              return matchStr;
             }
-            return match;
-          }
-        );
+          );
+          break;
+        }
       }
     }
     
-    // Remover placeholder [NOME DO TREINAMENTO] do HTML
+    // Remover placeholder [NOME DO TREINAMENTO]
     htmlProcessado = htmlProcessado.replace(/\s+de\s+\[NOME DO TREINAMENTO\]\s*,/gi, "");
     htmlProcessado = htmlProcessado.replace(/\s+de\s+\[NOME DO TREINAMENTO\]/gi, "");
     htmlProcessado = htmlProcessado.replace(/\[NOME DO TREINAMENTO\]/g, "");
     
-    // FORÇAR atualização do rodapé e assinaturas - SEMPRE atualizar
+    // FORÇAR atualização do rodapé e assinaturas
     htmlProcessado = htmlProcessado.replace(/(\.rodape\s*\{[^}]*bottom:\s*)[^;]+(;)/gi, '$1 3cm$2');
     htmlProcessado = htmlProcessado.replace(/(\.endereco-treinamento\s*\{[^}]*bottom:\s*)[^;]+(;)/gi, '$1 2.5cm$2');
-    // Ajustar CSS de assinaturas conforme especificações
     htmlProcessado = htmlProcessado.replace(/(\.assinaturas[^}]*gap:\s*)[^;]+(;)/gi, '$1 96px$2');
     htmlProcessado = htmlProcessado.replace(/(\.assinaturas[^}]*justify-content:\s*)[^;]+(;)/gi, '$1 space-between$2');
     htmlProcessado = htmlProcessado.replace(/(\.assinaturas[^}]*margin-top:\s*)[^;]+(;)/gi, '$1 64px$2');
@@ -1017,26 +990,7 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
     htmlProcessado = htmlProcessado.replace(/(\.assinatura-cargo[^}]*line-height:\s*)[^;]+(;)/gi, '$1 1.25$2');
     htmlProcessado = htmlProcessado.replace(/(\.assinatura-cargo[^}]*color:\s*)[^;]+(;)/gi, '$1 #374151$2');
     
-    // Converter estrutura antiga para nova: mover data de emissão do rodape para ao lado do conteúdo programático
-    if (htmlProcessado.includes('rodape-data') || (htmlProcessado.includes('[DATA DE EMISSÃO]') && !htmlProcessado.includes('data-emissao-lateral'))) {
-      htmlProcessado = htmlProcessado.replace(/<div[^>]*class="rodape-data"[^>]*>.*?<\/div>/gi, '');
-      if (!htmlProcessado.includes('conteudo-programatico-wrapper')) {
-        htmlProcessado = htmlProcessado.replace(
-          /(<div[^>]*class="conteudo-programatico"[^>]*>[\s\S]*?<\/div>)/gi,
-          '<div class="conteudo-programatico-wrapper">$1<div class="data-emissao-lateral">[DATA DE EMISSÃO]</div></div>'
-        );
-      }
-    }
-    if (!htmlProcessado.includes('.conteudo-programatico-wrapper')) {
-      const cssWrapper = `.conteudo-programatico-wrapper { display: flex; justify-content: space-between; align-items: flex-start; margin: 12px 0; gap: 20px; }
-    .conteudo-programatico { flex: 1; padding: 8px 12px; background: transparent; }
-    .data-emissao-lateral { text-align: right; font-size: 12px; color: #000000; white-space: nowrap; padding-top: 8px; }`;
-      if (htmlProcessado.includes('</style>')) {
-        htmlProcessado = htmlProcessado.replace('</style>', '\n    ' + cssWrapper + '\n  </style>');
-      }
-    }
-    
-    // Adicionar/atualizar CSS de assinaturas se não existir ou atualizar
+    // Adicionar/atualizar CSS de assinaturas
     const cssAssinaturas = `.rodape { position: absolute; bottom: 3cm !important; left: 0; right: 0; width: 100%; padding: 0 50px; z-index: 1 !important; }
     .endereco-treinamento { position: absolute; bottom: 0.5cm !important; left: 50px; font-size: 10px; color: #000000; opacity: 0.7; z-index: 0 !important; max-width: 400px !important; }
     .assinaturas { display: flex !important; justify-content: space-between !important; gap: 96px !important; margin-top: 64px !important; align-items: flex-start !important; }
@@ -1045,37 +999,13 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
     .assinatura-nome { font-size: 12px !important; font-weight: 600 !important; line-height: 1.25 !important; color: #000000 !important; }
     .assinatura-cargo { font-size: 10px !important; line-height: 1.25 !important; color: #374151 !important; }`;
     if (htmlProcessado.includes('</style>')) {
-      // Remover CSS antigo de assinaturas se existir
       htmlProcessado = htmlProcessado.replace(/\.rodape\s*\{[^}]*\}/gi, '');
       htmlProcessado = htmlProcessado.replace(/\.endereco-treinamento\s*\{[^}]*\}/gi, '');
       htmlProcessado = htmlProcessado.replace(/\.assinatura-linha\s*\{[^}]*\}/gi, '');
       htmlProcessado = htmlProcessado.replace(/\.assinatura-nome\s*\{[^}]*\}/gi, '');
       htmlProcessado = htmlProcessado.replace(/\.assinatura-cargo\s*\{[^}]*\}/gi, '');
-      // Adicionar CSS novo
       htmlProcessado = htmlProcessado.replace('</style>', '\n    ' + cssAssinaturas + '\n  </style>');
     }
-    
-    // Pós-processamento AGGRESSIVO: corrigir TODOS os padrões problemáticos no HTML final
-    // Remover "Participou do treinamento de ," (com vírgula após "de")
-    htmlProcessado = htmlProcessado.replace(/Participou\s+do\s+treinamento\s+de\s*,\s*/gi, "Participou do treinamento ");
-    htmlProcessado = htmlProcessado.replace(/Participou\s+do\s+treinamento\s+de\s*,\s*Treinamento/gi, "Participou do treinamento ");
-    
-    // Remover "treinamento de ," em qualquer lugar
-    htmlProcessado = htmlProcessado.replace(/treinamento\s+de\s*,\s*/gi, "treinamento ");
-    htmlProcessado = htmlProcessado.replace(/treinamento\s+de\s*,\s*Treinamento/gi, "treinamento ");
-    
-    // Remover ", Treinamento" quando aparecer após vírgula
-    htmlProcessado = htmlProcessado.replace(/,\s*Treinamento\b/gi, "");
-    
-    // Remover "Participou do treinamento Treinamento" (duplicação)
-    htmlProcessado = htmlProcessado.replace(/Participou\s+do\s+treinamento\s+Treinamento/gi, "Participou do treinamento ");
-    
-    // Remover vírgulas duplas ou múltiplas
-    htmlProcessado = htmlProcessado.replace(/,\s*,+/g, ",");
-    htmlProcessado = htmlProcessado.replace(/,\s*,\s*/g, ", ");
-    
-    // Limpar espaços múltiplos
-    htmlProcessado = htmlProcessado.replace(/\s{2,}/g, " ");
     
     // Remover fundo acinzentado do conteúdo programático
     htmlProcessado = htmlProcessado.replace(/(\.conteudo-programatico\s*\{)([^}]*)(background:\s*[^;]+)([^}]*)(\})/gi, (match: string, p1: string, p2: string, p3: string, p4: string, p5: string) => {
@@ -1083,8 +1013,30 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
       newContent = newContent.replace(/border-radius:\s*[^;]+;?\s*/gi, '');
       return p1 + newContent + 'background: transparent; ' + p5;
     });
-    
     htmlProcessado = htmlProcessado.replace(/background:\s*rgba\(0,\s*0,\s*0,\s*0\.?\d*\)/gi, 'background: transparent');
+    
+    // Determinar orientação do certificado
+    let orientacao: "portrait" | "landscape" = "landscape";
+    if (certificado?.modeloCertificadoId) {
+      const modelo = modelos.find((m: any) => m.id === certificado.modeloCertificadoId);
+      if (modelo?.orientacao) {
+        orientacao = modelo.orientacao as "portrait" | "landscape";
+      }
+    }
+    
+    // Verificar orientação no HTML também
+    if (htmlProcessado.includes('size: 210mm 297mm') || htmlProcessado.includes('portrait')) {
+      orientacao = "portrait";
+    }
+    
+    setOrientacaoPreview(orientacao);
+    setCertificadoParaVisualizar({ html: htmlProcessado, orientacao });
+    setVisualizarCertificadoDialogOpen(true);
+  };
+
+  const handleVisualizarCertificadoPrint = (htmlGerado: string, certificado?: any) => {
+    // Processar HTML (mesma lógica de handleVisualizarCertificado)
+    let htmlProcessado = handleVisualizarCertificado(htmlGerado, certificado);
     
     const printWindow = window.open("", "_blank");
     if (printWindow) {
@@ -1909,33 +1861,7 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
                                   
                                   htmlProcessado = htmlProcessado.replace(/background:\s*rgba\(0,\s*0,\s*0,\s*0\.?\d*\)/gi, 'background: transparent');
                                   
-                                  const printWindow = window.open("", "_blank");
-                                  if (printWindow) {
-                                    // Adicionar CSS de impressão para evitar quebra de página
-                                    let htmlComPrint = htmlProcessado;
-                                    const cssPrint = `
-    @page { size: A4 landscape; margin: 0; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-    @media print {
-      html, body { margin: 0; padding: 0; overflow: hidden; width: 297mm; height: 210mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-      .certificado { width: 297mm !important; height: 210mm !important; page-break-after: avoid !important; page-break-inside: avoid !important; break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-      .cabecalho { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; background: #1e40af !important; background-color: #1e40af !important; color: #ffffff !important; }
-      .conteudo { page-break-inside: avoid !important; break-inside: avoid !important; }
-      .rodape { page-break-inside: avoid !important; break-inside: avoid !important; }
-    }`;
-                                    
-                                    if (htmlComPrint.includes('</style>')) {
-                                      htmlComPrint = htmlComPrint.replace('</style>', cssPrint + '\n  </style>');
-                                    } else if (htmlComPrint.includes('</head>')) {
-                                      htmlComPrint = htmlComPrint.replace('</head>', '<style>' + cssPrint + '</style>\n</head>');
-                                    }
-                                    printWindow.document.write(htmlComPrint);
-                                    printWindow.document.close();
-                                    // Aguardar um pouco para garantir que o conteúdo foi carregado
-                                    setTimeout(() => {
-                                      printWindow.print();
-                                    }, 250);
-                                  }
+                                  handleVisualizarCertificadoPrint(htmlProcessado, certificado);
                                 }}
                               >
                                 <Download className="h-4 w-4 mr-2" />
@@ -1959,6 +1885,107 @@ export default function EmissaoCertificados({ showLayout = true }: { showLayout?
             )}
           </CardContent>
         </Card>
+
+        {/* Dialog de Visualização de Certificado Emitido */}
+        {visualizarCertificadoDialogOpen && certificadoParaVisualizar && (
+          <div 
+            className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setVisualizarCertificadoDialogOpen(false);
+                setCertificadoParaVisualizar(null);
+              }
+            }}
+          >
+            <div 
+              className="bg-white rounded-lg shadow-2xl flex flex-col w-full h-full max-w-[98vw] max-h-[98vh] relative z-[10000]"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
+                <h2 className="text-xl font-semibold">Visualizar Certificado Emitido</h2>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Label className="text-sm">Orientação:</Label>
+                    <Select
+                      value={certificadoParaVisualizar.orientacao || orientacaoPreview}
+                      onValueChange={(value: "portrait" | "landscape") => {
+                        setOrientacaoPreview(value);
+                        setCertificadoParaVisualizar({ ...certificadoParaVisualizar, orientacao: value });
+                      }}
+                    >
+                      <SelectTrigger 
+                        className="w-40"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent 
+                        className="z-[10001]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <SelectItem 
+                          value="landscape"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Paisagem
+                        </SelectItem>
+                        <SelectItem 
+                          value="portrait"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Retrato
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setVisualizarCertificadoDialogOpen(false);
+                      setCertificadoParaVisualizar(null);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setVisualizarCertificadoDialogOpen(false);
+                      setCertificadoParaVisualizar(null);
+                    }}
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-3 cursor-pointer z-[10002]"
+                    style={{ pointerEvents: 'auto', position: 'relative' }}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Fechar
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-auto p-8 bg-gray-100 flex items-center justify-center min-h-0">
+                {certificadoParaVisualizar.html && (
+                  <div 
+                    key={`certificado-${certificadoParaVisualizar.orientacao || orientacaoPreview}`}
+                    className="bg-white shadow-2xl"
+                    style={{
+                      width: (certificadoParaVisualizar.orientacao || orientacaoPreview) === "landscape" ? "297mm" : "210mm",
+                      height: (certificadoParaVisualizar.orientacao || orientacaoPreview) === "landscape" ? "210mm" : "297mm",
+                      transform: (certificadoParaVisualizar.orientacao || orientacaoPreview) === "landscape" 
+                        ? "scale(0.75)" 
+                        : "scale(0.65)",
+                      transformOrigin: "center center",
+                      transition: "transform 0.2s ease",
+                      minWidth: (certificadoParaVisualizar.orientacao || orientacaoPreview) === "landscape" ? "297mm" : "210mm",
+                      minHeight: (certificadoParaVisualizar.orientacao || orientacaoPreview) === "landscape" ? "210mm" : "297mm",
+                    }}
+                    dangerouslySetInnerHTML={{ __html: certificadoParaVisualizar.html }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Dialog de Confirmação de Exclusão */}
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

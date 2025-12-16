@@ -146,7 +146,7 @@
   - Histórico de backups
 - **Prioridade:** MÉDIA
 
-### 5. API para Integrações (Plano Profissional/Enterprise)
+### 5. API para Integrações (Planos superiores)
 - **Status:** Não implementado
 - **O que falta:**
   - Documentação de API
@@ -157,31 +157,19 @@
 
 ---
 
-## 📋 RESUMO POR PLANO
+## 📋 RESUMO POR PLANO (COMERCIAIS ATUAIS)
 
-### Plano Básico (R$ 147/mês)
-- ✅ 1 empresa
-- ✅ Até 50 colaboradores (precisa validação)
-- ✅ Todas as funcionalidades básicas
-- ⚠️ Limite de colaboradores não validado
+### Plano Bronze (R$ 67,90/mês)
+- Limites/recursos: a definir conforme oferta comercial atual.
 
-### Plano Técnico/Engenheiro (R$ 147/mês)
-- ✅ Até 6 empresas (precisa validação)
-- ✅ Até 30 colaboradores por empresa (precisa validação)
-- ✅ Relatórios por empresa (precisa filtro automático)
-- ⚠️ Limites não validados automaticamente
+### Plano Prata (R$ 97,90/mês)
+- Limites/recursos: a definir conforme oferta comercial atual.
 
-### Plano Profissional (R$ 297/mês)
-- ✅ Múltiplas empresas ilimitadas
-- ✅ Até 200 colaboradores (precisa validação)
-- ❌ API para integrações (não implementado)
-- ⚠️ Limite de colaboradores não validado
+### Plano Ouro (R$ 137,90/mês) — mais popular
+- Limites/recursos: a definir conforme oferta comercial atual.
 
-### Plano Enterprise
-- ✅ Colaboradores ilimitados
-- ❌ Customizações exclusivas (sob demanda)
-- ❌ API completa (não implementado)
-- ❌ Consultoria especializada (serviço externo)
+### Plano Diamante (R$ 199,90/mês) — premium
+- Limites/recursos: a definir conforme oferta comercial atual.
 
 ---
 
@@ -224,6 +212,7 @@ O que falta é principalmente:
 3. **Sistema de pagamento** (essencial para vender)
 
 **Recomendação:** Podemos vender o sistema AGORA, mas precisamos implementar o sistema de planos e pagamento antes de ativar clientes pagantes.
+
 
 
 

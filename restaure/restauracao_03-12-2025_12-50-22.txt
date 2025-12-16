@@ -1,0 +1,25 @@
+PONTO DE RESTAURACAO CRIADO
+===========================
+Tag Git: restore-point-2025-12-03_12-50-22
+Data: 03/12/2025
+Hora: 12:50:22
+
+ALTERACOES SALVAS:
+  - Correcao de vínculo de setores e riscos (parametro ctx nas rotas)
+  - Funcionalidade de deletar em massa para treinamentos
+  - Funcionalidade de deletar em massa para setores
+  - Vínculo automático de 2 riscos físicos e setor "Compras" ao cargo "Analista de recursos humanos"
+  - Rotas tRPC: cargoTreinamentos.deleteBatch, cargoSetores.deleteBatch
+  - Funções no banco: deleteCargoTreinamentosBatch, deleteCargoSetoresBatch
+  - Checkboxes de seleção múltipla nas tabelas de treinamentos e setores
+  - Botões "Excluir X selecionado(s)" com confirmação
+
+ARQUIVOS MODIFICADOS:
+  - server/db.ts (funções de deletar em massa)
+  - server/routers.ts (rotas deleteBatch e correção de ctx)
+  - client/src/pages/Cargos.tsx (UI de deletar em massa)
+
+Para restaurar este ponto no futuro:
+  .\restaurar-ponto-restauracao.ps1 restore-point-2025-12-03_12-50-22
+
+

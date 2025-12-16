@@ -7,6 +7,10 @@ dist/
 build/
 *.dist
 
+# Artifacts e uploads locais
+uploads/
+server.log
+
 # Environment variables
 .env
 .env.local

@@ -2628,6 +2628,18 @@ export async function getAllTiposTreinamentos(tenantId: number | null, filters?:
       conditions.push(eq(tiposTreinamentos.empresaId, empresaId));
     }
     
+    // Filtro por termo de busca (searchTerm)
+    if (filters?.searchTerm && filters.searchTerm.trim()) {
+      const searchTerm = filters.searchTerm.trim().toLowerCase();
+      conditions.push(
+        or(
+          like(sql`LOWER(${tiposTreinamentos.nomeTreinamento})`, `%${searchTerm}%`),
+          like(sql`LOWER(${tiposTreinamentos.descricao})`, `%${searchTerm}%`),
+          like(sql`LOWER(${tiposTreinamentos.tipoNr})`, `%${searchTerm}%`)
+        )
+      );
+    }
+    
     let query = db.select().from(tiposTreinamentos);
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as any;
@@ -4699,6 +4711,30 @@ export async function getTenantById(tenantId: number) {
     };
   } catch (error) {
     console.error("[Database] Erro ao buscar tenant:", error);
+    throw error;
+  }
+}
+
+/**
+ * Deleta tenants (e seus usuários) pelos IDs.
+ * Uso restrito a admin. Não faz limpeza cascata de outros dados (empresas, etc).
+ */
+export async function deleteTenants(ids: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    if (!ids || ids.length === 0) return { success: true, deleted: 0 };
+
+    // Remove usuários vinculados
+    await db.delete(users).where(inArray(users.tenantId, ids));
+    // Remove tenants
+    const result = await db.delete(tenants).where(inArray(tenants.id, ids));
+    const deleted = (result as any)?.affectedRows ?? ids.length;
+
+    return { success: true, deleted };
+  } catch (error) {
+    console.error("[deleteTenants] Erro ao deletar tenants:", error);
     throw error;
   }
 }

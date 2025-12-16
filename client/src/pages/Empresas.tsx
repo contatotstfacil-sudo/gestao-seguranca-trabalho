@@ -101,7 +101,12 @@ export default function Empresas() {
   }, [dialogOpen, editingId, formData.grauRisco]);
   
   const createMutation = trpc.empresas.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      // Se o backend retornou sucesso=false, exibir mensagem e não resetar
+      if (data && data.success === false) {
+        toast.error(data.message || "Limite atingido ou erro ao cadastrar empresa.");
+        return;
+      }
       utils.empresas.list.invalidate();
       toast.success("Empresa cadastrada com sucesso!");
       resetForm();

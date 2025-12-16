@@ -101,3 +101,4 @@ WHERE cr.cargoId = @cargo_id
   AND cr.tenantId = @tenant_id
 ORDER BY r.nomeRisco;
 
+

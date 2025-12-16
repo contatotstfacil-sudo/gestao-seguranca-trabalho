@@ -97,3 +97,4 @@ INNER JOIN setores s ON cs.setorId = s.id
 WHERE cs.cargoId = @cargo_id AND cs.tenantId = @tenant_id
 ORDER BY s.nomeSetor;
 
+

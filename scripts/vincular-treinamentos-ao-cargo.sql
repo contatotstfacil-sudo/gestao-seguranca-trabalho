@@ -59,3 +59,4 @@ WHERE ct.cargoId = @cargo_id
   AND ct.tenantId = @tenant_id
 ORDER BY tt.nomeTreinamento;
 
+

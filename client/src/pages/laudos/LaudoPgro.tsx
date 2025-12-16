@@ -890,6 +890,65 @@ export default function LaudoPgro() {
     
     const enderecoCompleto = formatarEndereco();
     const telefoneEmpresa = empresa?.emailContato || '';
+
+    // Buscar modelo salvo (primeiro modelo em localStorage) para preencher corpo
+    const modeloSalvo = (() => {
+      try {
+        const raw = typeof window !== "undefined" ? localStorage.getItem("modelos-pgro") : null;
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed) || parsed.length === 0) return null;
+        return parsed[0];
+      } catch {
+        return null;
+      }
+    })();
+
+    const formatarTexto = (texto: string) => {
+      if (!texto) return "";
+      if (texto.includes("<img") || texto.includes("<table") || texto.includes("<div")) {
+        return texto;
+      }
+      return texto.replace(/\n/g, "<br>");
+    };
+
+    const buildPaginaConteudo = (numero: number, titulo: string, conteudo: string) => `
+      <div class="pagina" style="padding: 25px; font-family: 'Calibri Light', Calibri, sans-serif; line-height: 1.6;">
+        <table style="width: 100%; border: 1px solid #000000; border-collapse: collapse; margin: 0 0 20px 0; font-size: 11pt;">
+          <tr>
+            <td style="width: 70%; padding: 8px 12px; vertical-align: middle; border-right: 1px solid #000000; font-weight: bold; text-transform: uppercase; white-space: nowrap; text-align: center;">PGRO – PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</td>
+            <td style="width: 30%; padding: 8px 12px; vertical-align: middle; text-align: center; white-space: nowrap;">Página ${numero}</td>
+          </tr>
+        </table>
+
+        <div style="background-color: #f5f5f5; padding: 12px 14px; border: 1px solid #dcdcdc; margin-bottom: 18px; text-transform: uppercase; font-weight: bold; color: #003366; font-size: 13pt; text-align: center;">
+          ${titulo}
+        </div>
+
+        <div style="font-size: 12pt; text-align: justify;">
+          ${formatarTexto(conteudo || "Conteúdo não informado.")}
+        </div>
+
+        <div style="margin-top: 40px; border-top: 1px solid #000; padding-top: 14px; text-align: center; font-size: 10pt; color: #666;">
+          ${enderecoCompleto || ""} ${telefoneEmpresa || ""}
+        </div>
+      </div>
+    `;
+
+    const paginasConteudo = modeloSalvo
+      ? [
+          { titulo: "1. Objetivos", conteudo: modeloSalvo.objetivos },
+          { titulo: "2. Fundamentação Legal", conteudo: modeloSalvo.fundamentacaoLegal },
+          { titulo: "3. Informação/Divulgação dos Dados", conteudo: modeloSalvo.informacaoDivulgacao },
+          { titulo: "4. Periodicidade e Análise Global do PGR", conteudo: modeloSalvo.periodicidadeAnalise },
+          { titulo: "5. Monitoramento da Exposição aos Riscos", conteudo: modeloSalvo.monitoramentoExposicao },
+          { titulo: "6. Análise de Exposição dos Riscos", conteudo: modeloSalvo.analiseExposicao },
+          { titulo: "7. Responsabilidades", conteudo: modeloSalvo.responsabilidades },
+          { titulo: "8. Inventário de Reconhecimento Avaliação e Controle", conteudo: modeloSalvo.inventarioReconhecimento },
+        ]
+          .map((sec, idx) => buildPaginaConteudo(idx + 2, sec.titulo, sec.conteudo || ""))
+          .join("")
+      : "";
     
     return `
       <!DOCTYPE html>
@@ -1009,6 +1068,8 @@ export default function LaudoPgro() {
               </div>
             </div>
           </div>
+
+          ${paginasConteudo}
           <!--[if gte mso 9]>
           </div>
           <![endif]-->
@@ -1829,45 +1890,48 @@ export default function LaudoPgro() {
   }, []);
   */
 
-  const gerarPDF = useCallback((emissao: EmissaoPgro) => {
-    try {
-      // Gerar HTML com modelo padrão (capa em branco)
-      const htmlContent = gerarTemplatePGROPadrao(emissao);
-      
-      // Abrir em nova janela para impressão
-      const printWindow = window.open("", "_blank");
-      if (printWindow) {
-        try {
-          printWindow.document.open();
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          
-          // Aguardar o carregamento completo antes de imprimir
-          printWindow.onload = () => {
-            setTimeout(() => {
-              try {
-                printWindow.print();
-              } catch (printError) {
-                console.error("Erro ao imprimir:", printError);
-                toast.error("Erro ao abrir diálogo de impressão");
-              }
-            }, 500);
-          };
-          
-          toast.success("PDF pronto para impressão!");
-        } catch (error) {
-          console.error("Erro ao escrever no documento:", error);
-          printWindow.close();
-          toast.error("Erro ao gerar janela de impressão");
+  const gerarPDF = useCallback(
+    (emissao: EmissaoPgro) => {
+      try {
+        // Gerar HTML com modelo padrão (capa em branco)
+        const htmlContent = gerarTemplatePGROPadrao(emissao);
+        
+        // Abrir em nova janela para impressão
+        const printWindow = window.open("", "_blank");
+        if (printWindow) {
+          try {
+            printWindow.document.open();
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            
+            // Aguardar o carregamento completo antes de imprimir
+            printWindow.onload = () => {
+              setTimeout(() => {
+                try {
+                  printWindow.print();
+                } catch (printError) {
+                  console.error("Erro ao imprimir:", printError);
+                  toast.error("Erro ao abrir diálogo de impressão");
+                }
+              }, 500);
+            };
+            
+            toast.success("PDF pronto para impressão!");
+          } catch (error) {
+            console.error("Erro ao escrever no documento:", error);
+            printWindow.close();
+            toast.error("Erro ao gerar janela de impressão");
+          }
+        } else {
+          toast.error("Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-ups está desativado.");
         }
-      } else {
-        toast.error("Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-ups está desativado.");
+      } catch (error) {
+        console.error("Erro ao gerar PDF:", error);
+        toast.error("Erro ao gerar PDF");
       }
-    } catch (error) {
-      console.error("Erro ao gerar PDF:", error);
-      toast.error("Erro ao gerar PDF");
-    }
-  }, [gerarTemplatePGROPadrao]);
+    },
+    [gerarTemplatePGROPadrao]
+  );
 
   const gerarWord = useCallback(async (emissao: EmissaoPgro) => {
     if (gerandoWord) {
@@ -8516,10 +8580,6 @@ export default function LaudoPgro() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                              <DropdownMenuItem onClick={() => gerarPDF(emissao)}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                Gerar PDF
-                              </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={(e) => {
                                   e.stopPropagation();
