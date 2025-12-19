@@ -1,4 +1,7 @@
 ﻿{
+  "name": "tst-facil-client",
+  "private": true,
+  "version": "1.0.0",
   "dependencies": {
     "docx": "^9.5.1",
     "file-saver": "^2.0.5"
