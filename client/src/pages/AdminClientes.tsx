@@ -70,7 +70,6 @@ export default function AdminClientes() {
   const [filtroStatus, setFiltroStatus] = useState<string>("all");
   const [filtroPlano, setFiltroPlano] = useState<string>("all");
   const [filtroPagamento, setFiltroPagamento] = useState<string>("all");
-  const [filtroDemo, setFiltroDemo] = useState<string>("all"); // all | demo | prod
   const [busca, setBusca] = useState("");
   
   const [createForm, setCreateForm] = useState({
@@ -110,19 +109,14 @@ export default function AdminClientes() {
   // Verificar se o usuário tem permissão
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'tenant_admin';
 
-  // Filtrar clientes e separar produção x demonstração
-  const { clientesProd, clientesDemo } = useMemo(() => {
-    if (!tenants) return { clientesProd: [], clientesDemo: [] };
-
-    const isDemoTenant = (tenant: any) =>
-      (tenant.observacoes || "").toLowerCase().includes("modo demonstração");
+  // Filtrar clientes
+  const clientesFiltrados = useMemo(() => {
+    if (!tenants) return [];
     
-    const filtrados = tenants.filter((tenant: any) => {
+    return tenants.filter((tenant: any) => {
       if (filtroStatus !== "all" && tenant.status !== filtroStatus) return false;
       if (filtroPlano !== "all" && tenant.plano !== filtroPlano) return false;
       if (filtroPagamento !== "all" && (tenant.statusPagamento || "pendente") !== filtroPagamento) return false;
-      if (filtroDemo === "demo" && !isDemoTenant(tenant)) return false;
-      if (filtroDemo === "prod" && isDemoTenant(tenant)) return false;
       
       if (busca) {
         const buscaLower = busca.toLowerCase();
@@ -139,38 +133,7 @@ export default function AdminClientes() {
       
       return true;
     });
-
-    const clientesDemo = filtrados.filter(isDemoTenant);
-    const clientesProd = filtrados.filter((t: any) => !isDemoTenant(t));
-    return { clientesProd, clientesDemo };
-  }, [tenants, filtroStatus, filtroPlano, filtroPagamento, filtroDemo, busca]);
-
-  // Seleção para deleção de demos
-  const [selecionadosDemo, setSelecionadosDemo] = useState<number[]>([]);
-  const toggleSelecionadoDemo = (id: number) => {
-    setSelecionadosDemo((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
-  const deleteDemoMutation = trpc.admin.deleteTenantsDemo.useMutation({
-    onSuccess: (res) => {
-      toast.success(`Demos deletados: ${res.deleted ?? 0}`);
-      setSelecionadosDemo([]);
-      refetch();
-    },
-    onError: (err) => {
-      toast.error(err.message || "Erro ao deletar demonstração");
-    },
-  });
-
-  const handleDeleteDemoSelecionados = () => {
-    if (selecionadosDemo.length === 0) {
-      toast.error("Selecione pelo menos uma conta de demonstração.");
-      return;
-    }
-    deleteDemoMutation.mutate({ ids: selecionadosDemo });
-  };
+  }, [tenants, filtroStatus, filtroPlano, filtroPagamento, busca]);
 
   // Calcular estatísticas
   const estatisticas = useMemo(() => {
@@ -701,9 +664,7 @@ export default function AdminClientes() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>
-                Lista de Clientes ({(clientesProd?.length || 0) + (clientesDemo?.length || 0)})
-              </CardTitle>
+              <CardTitle>Lista de Clientes ({clientesFiltrados.length})</CardTitle>
               <Button onClick={() => setDialogCreateOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Cliente
@@ -749,64 +710,48 @@ export default function AdminClientes() {
                   ))}
                 </SelectContent>
               </Select>
-            <Select value={filtroPagamento} onValueChange={setFiltroPagamento}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Pagamento" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos Pagamentos</SelectItem>
-                {STATUS_PAGAMENTO.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filtroDemo} onValueChange={setFiltroDemo}>
-              <SelectTrigger className="w-[170px]">
-                <SelectValue placeholder="Tipo de Conta" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as contas</SelectItem>
-                <SelectItem value="demo">Somente demonstração</SelectItem>
-                <SelectItem value="prod">Somente produção</SelectItem>
-              </SelectContent>
-            </Select>
+              <Select value={filtroPagamento} onValueChange={setFiltroPagamento}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Pagamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Pagamentos</SelectItem>
+                  {STATUS_PAGAMENTO.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {(!clientesProd.length && !clientesDemo.length) ? (
+            {!clientesFiltrados || clientesFiltrados.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 Nenhum cliente encontrado com os filtros aplicados.
               </div>
             ) : (
-              <div className="space-y-8">
-                <div className="overflow-x-auto">
-                  <div className="flex items-center justify-between pb-2">
-                    <h3 className="font-semibold text-sm text-gray-700">Contas Ativas</h3>
-                    <span className="text-xs text-muted-foreground">{clientesProd.length} registros</span>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Contato</TableHead>
-                        <TableHead>Plano</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Pagamento</TableHead>
-                        <TableHead>Último Pagamento</TableHead>
-                        <TableHead>Próximo Pagamento</TableHead>
-                        <TableHead>Estatísticas</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {clientesProd.map((tenant: any) => {
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Contato</TableHead>
+                      <TableHead>Plano</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Pagamento</TableHead>
+                      <TableHead>Último Pagamento</TableHead>
+                      <TableHead>Próximo Pagamento</TableHead>
+                      <TableHead>Estatísticas</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientesFiltrados.map((tenant: any) => {
                       const dataProx = tenant.dataProximoPagamento ? new Date(tenant.dataProximoPagamento) : null;
                       const hoje = new Date();
                       const vencendo = dataProx && isAfter(dataProx, hoje) && isBefore(dataProx, addDays(hoje, 7));
                       const vencido = dataProx && isBefore(dataProx, hoje);
-                      const isDemo = (tenant.observacoes || "").toLowerCase().includes("modo demonstração");
                       
                       return (
                         <TableRow 
@@ -841,16 +786,9 @@ export default function AdminClientes() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge className={getPlanoColor(tenant.plano)}>
-                                {getPlanoLabel(tenant.plano)}
-                              </Badge>
-                              {isDemo && (
-                                <Badge className="bg-blue-100 text-blue-800 border border-blue-200">
-                                  Demo
-                                </Badge>
-                              )}
-                            </div>
+                            <Badge className={getPlanoColor(tenant.plano)}>
+                              {getPlanoLabel(tenant.plano)}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
@@ -911,168 +849,9 @@ export default function AdminClientes() {
                           </TableCell>
                         </TableRow>
                       );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <div className="flex items-center justify-between pb-2">
-                    <h3 className="font-semibold text-sm text-gray-700">Contas em Demonstração</h3>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{clientesDemo.length} registros</span>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={deleteDemoMutation.isPending}
-                        onClick={handleDeleteDemoSelecionados}
-                      >
-                        {deleteDemoMutation.isPending ? "Deletando..." : "Deletar selecionados"}
-                      </Button>
-                    </div>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8">
-                          <Checkbox
-                            checked={selecionadosDemo.length === clientesDemo.length && clientesDemo.length > 0}
-                            onCheckedChange={(v) => {
-                              if (v) setSelecionadosDemo(clientesDemo.map((t: any) => t.id));
-                              else setSelecionadosDemo([]);
-                            }}
-                          />
-                        </TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Contato</TableHead>
-                        <TableHead>Plano</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Pagamento</TableHead>
-                        <TableHead>Último Pagamento</TableHead>
-                        <TableHead>Próximo Pagamento</TableHead>
-                        <TableHead>Estatísticas</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {clientesDemo.map((tenant: any) => {
-                        const dataProx = tenant.dataProximoPagamento ? new Date(tenant.dataProximoPagamento) : null;
-                        const hoje = new Date();
-                        const vencendo = dataProx && isAfter(dataProx, hoje) && isBefore(dataProx, addDays(hoje, 7));
-                        const vencido = dataProx && isBefore(dataProx, hoje);
-                        const isDemo = true;
-                        
-                        return (
-                          <TableRow 
-                            key={tenant.id}
-                            className={vencido ? "bg-red-50" : vencendo ? "bg-yellow-50" : "bg-blue-50/40"}
-                          >
-                            <TableCell>
-                              <Checkbox
-                                checked={selecionadosDemo.includes(tenant.id)}
-                                onCheckedChange={() => toggleSelecionadoDemo(tenant.id)}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <div className="font-medium">{tenant.nome || `Cliente #${tenant.id}`}</div>
-                                {tenant.cpf && (
-                                  <div className="text-xs text-muted-foreground">CPF: {tenant.cpf}</div>
-                                )}
-                                {tenant.cnpj && (
-                                  <div className="text-xs text-muted-foreground">CNPJ: {tenant.cnpj}</div>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                {tenant.email && (
-                                  <div className="flex items-center gap-1 text-sm">
-                                    <Mail className="h-3 w-3" />
-                                    {tenant.email}
-                                  </div>
-                                )}
-                                {tenant.telefone && (
-                                  <div className="flex items-center gap-1 text-sm">
-                                    <Phone className="h-3 w-3" />
-                                    {tenant.telefone}
-                                  </div>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Badge className={getPlanoColor(tenant.plano)}>
-                                  {getPlanoLabel(tenant.plano)}
-                                </Badge>
-                                {isDemo && (
-                                  <Badge className="bg-blue-100 text-blue-800 border border-blue-200">
-                                    Demo
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <DollarSign className="h-3 w-3" />
-                                <span className="font-medium">
-                                  R$ {tenant.valorPlano || PLANOS.find(p => p.value === tenant.plano)?.valor || "0,00"}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={getStatusColor(tenant.status)}>
-                                {getStatusLabel(tenant.status)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={getStatusPagamentoColor(tenant.statusPagamento || "pendente")}>
-                                {getStatusPagamentoLabel(tenant.statusPagamento || "pendente")}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {tenant.dataUltimoPagamento
-                                ? format(new Date(tenant.dataUltimoPagamento), "dd/MM/yyyy", { locale: ptBR })
-                                : "-"}
-                            </TableCell>
-                            <TableCell>
-                              {tenant.dataProximoPagamento ? (
-                                <div className={vencido ? "text-red-600 font-semibold" : vencendo ? "text-yellow-600 font-semibold" : ""}>
-                                  {format(new Date(tenant.dataProximoPagamento), "dd/MM/yyyy", { locale: ptBR })}
-                                </div>
-                              ) : "-"}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <div className="flex items-center gap-1">
-                                  <Users className="h-3 w-3" />
-                                  {tenant.stats?.colaboradores ?? 0}
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Building2 className="h-3 w-3" />
-                                  {tenant.stats?.empresas ?? 0}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8"
-                                  onClick={() => handleEdit(tenant)}
-                                >
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
+                    })}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>

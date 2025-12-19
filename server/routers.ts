@@ -1,7 +1,5 @@
-// @ts-nocheck
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { TRPCError } from "@trpc/server";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { z } from "zod";
@@ -15,32 +13,7 @@ import bcrypt from "bcryptjs";
 import { encryptSensitiveData, decryptSensitiveData } from "./utils/encryption";
 import type { InsertAso } from "../drizzle/schema";
 import { getTenantPlanLimits, checkQuantityLimit, checkFeatureAvailable, getLimitMessage, getFeatureUnavailableMessage, type PlanoLimits } from "./utils/planLimits";
-import { podeCriarEmpresa, podeCriarColaborador } from "./utils/planos";
 import { serializeDates } from "./utils/serialization";
-// import { TRPCError } from "@trpc/server";
-
-// Helper to convert BigInt to Number recursively (avoids JSON transform errors)
-function sanitizeBigInts<T>(value: T): T {
-  if (typeof value === "bigint") {
-    return Number(value) as any;
-  }
-  if (Array.isArray(value)) {
-    return (value as any).map((v: any) => sanitizeBigInts(v)) as any;
-  }
-  if (value && typeof value === "object") {
-    const out: any = {};
-    for (const [k, v] of Object.entries(value as any)) {
-      out[k] = sanitizeBigInts(v);
-    }
-    return out;
-  }
-  return value;
-}
-
-// Stub de validação de senha (para evitar erro de função ausente)
-function validatePasswordStrength(password: string) {
-  return { valid: true, errors: [] as string[] };
-}
 
 export const appRouter = router({
   system: systemRouter,
@@ -89,15 +62,11 @@ export const appRouter = router({
           
           console.log(`[Login] 🔐 Tentativa de login iniciada para: ${identifier?.substring(0, 10)}...`);
           
-          // Rate limiting para login (pular em dev/localhost)
+          // Rate limiting para login (mais permissivo)
           const ip = ctx.req.ip || ctx.req.socket.remoteAddress || "unknown";
-          const isDev = process.env.NODE_ENV !== "production";
-          const isLocalhost = ip?.startsWith("127.") || ip === "::1" || ip === "localhost";
-          if (!isDev && !isLocalhost) {
-            const rateLimit = checkLoginRateLimit(ip);
-            if (!rateLimit.allowed) {
-              throw new Error(`Muitas tentativas de login. Tente novamente em ${Math.ceil((rateLimit.retryAfter || 0) / 60)} minutos.`);
-            }
+          const rateLimit = checkLoginRateLimit(ip);
+          if (!rateLimit.allowed) {
+            throw new Error(`Muitas tentativas de login. Tente novamente em ${Math.ceil((rateLimit.retryAfter || 0) / 60)} minutos.`);
           }
           
           // Normaliza o identificador (sem sanitização agressiva)
@@ -153,8 +122,21 @@ export const appRouter = router({
           
           console.log(`[Login] Senha correta para usuário ID=${user.id}`);
           
-          // VALIDAÇÃO DE TENANT DESATIVADA TEMPORARIAMENTE PARA DESBLOQUEAR LOGIN
-          console.log(`[Login] Usuário ID=${user.id}, Role=${user.role}, TenantId=${user.tenantId || "N/A"} (tenant validation bypassed)`);
+          // VALIDAÇÃO DE TENANT DESABILITADA - Permite acesso sem bloqueios
+          // Apenas log para informação, mas não bloqueia acesso
+          console.log(`[Login] Usuário ID=${user.id}, Role=${user.role}, TenantId=${user.tenantId || "N/A"}`);
+          
+          if (user.tenantId) {
+            try {
+              const tenant = await db.getTenantById(user.tenantId);
+              if (tenant) {
+                console.log(`[Login] Tenant encontrado: ID=${tenant.id}, Status=${tenant.status}`);
+              }
+            } catch (error) {
+              // Não bloqueia acesso mesmo se houver erro ao buscar tenant
+              console.warn(`[Login] Aviso: Não foi possível buscar informações do tenant (não bloqueia acesso)`);
+            }
+          }
           
           console.log(`[Login] ✅ Login bem-sucedido para usuário ID=${user.id}`);
           
@@ -593,13 +575,17 @@ export const appRouter = router({
           
           console.log("[empresas.create] tenantId determinado:", tenantId);
           
-          // VERIFICAÇÃO DE LIMITE DO PLANO (apenas não-admin)
-          if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin") {
-            const pode = await podeCriarEmpresa(ctx.user.id, ctx.user.role);
-            if (!pode.pode) {
-              return { success: false, message: pode.motivo || "Limite de empresas atingido para o ciclo atual." };
-            }
-          }
+          // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
+          // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && tenantId && ctx.planLimits) {
+          //   const empresasExistentes = await db.getAllEmpresas(undefined, tenantId);
+          //   const quantidadeAtual = empresasExistentes?.length || 0;
+          //   
+          //   console.log("[empresas.create] Empresas existentes:", quantidadeAtual, "Limite:", ctx.planLimits.maxEmpresas);
+          //   
+          //   if (!checkQuantityLimit(quantidadeAtual, ctx.planLimits.maxEmpresas)) {
+          //     throw new Error(getLimitMessage('empresas', quantidadeAtual, ctx.planLimits.maxEmpresas));
+          //   }
+          // }
           
           // Garantir que tenantId está presente (exceto para admin)
           if (tenantId === null && ctx.user.role !== "admin" && ctx.user.role !== "super_admin") {
@@ -617,9 +603,9 @@ export const appRouter = router({
           console.log("[empresas.create] ✅ Empresa criada com sucesso:", empresaCriada.id);
           
           // Garantir serialização correta - converter todos os Date para string
-          const empresaSerializada = sanitizeBigInts(serializeDates(empresaCriada));
+          const empresaSerializada = serializeDates(empresaCriada);
           
-          return { success: true, data: empresaSerializada };
+          return empresaSerializada;
         } catch (error: any) {
           console.error("[empresas.create] ❌ Erro:", error.message);
           console.error("[empresas.create] Stack:", error?.stack);
@@ -628,7 +614,7 @@ export const appRouter = router({
           const errorMessage = error.message || "Erro ao cadastrar empresa. Tente novamente.";
           
           // Garantir que a mensagem seja uma string simples e serializável
-          return { success: false, message: String(errorMessage) };
+          throw new Error(String(errorMessage));
         }
       }),
     update: protectedProcedure
@@ -756,13 +742,19 @@ export const appRouter = router({
         status: z.enum(["ativo", "inativo"]).default("ativo"),
       }))
       .mutation(async ({ input: formInput, ctx }) => {
-        // VERIFICAÇÃO DE LIMITE DO PLANO (apenas não-admin)
-        if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin") {
-          const pode = await podeCriarColaborador(ctx.user.id, formInput.empresaId, ctx.user.role);
-          if (!pode.pode) {
-            return { success: false, message: pode.motivo || "Limite de colaboradores atingido para o ciclo atual." };
-          }
-        }
+        // VERIFICAÇÃO DE LIMITE DO PLANO
+        // VERIFICAÇÃO DE LIMITE DO PLANO - DESABILITADA (todos têm acesso ilimitado)
+        // if (ctx.user.role !== "super_admin" && ctx.user.role !== "admin" && ctx.user.tenantId && ctx.planLimits) {
+        //   // Limite de colaboradores é POR EMPRESA
+        //   if (formInput.empresaId && ctx.planLimits.maxColaboradores > 0) {
+        //     const colaboradoresExistentes = await db.getAllColaboradores(ctx.user.tenantId, formInput.empresaId);
+        //     const quantidadeAtual = colaboradoresExistentes?.length || 0;
+        //     
+        //     if (!checkQuantityLimit(quantidadeAtual, ctx.planLimits.maxColaboradores)) {
+        //       throw new Error(getLimitMessage('colaboradores', quantidadeAtual, ctx.planLimits.maxColaboradores, true));
+        //     }
+        //   }
+        // }
         
         // ISOLAMENTO DE TENANT: Determinar tenantId correto
         let tenantId: number | null = null;
@@ -797,9 +789,9 @@ export const appRouter = router({
         console.log("[colaboradores.create] ✅ Colaborador criado com sucesso:", colaboradorCriado.id);
         
         // Garantir serialização correta - converter todos os Date para string
-        const colaboradorSerializado = sanitizeBigInts(serializeDates(colaboradorCriado));
+        const colaboradorSerializado = serializeDates(colaboradorCriado);
         
-        return { success: true, data: colaboradorSerializado };
+        return colaboradorSerializado;
       }),
     update: protectedProcedure
       .input(z.object({
@@ -833,7 +825,7 @@ export const appRouter = router({
         observacoes: z.string().optional(),
         status: z.enum(["ativo", "inativo"]).optional(),
       }))
-      .mutation(async ({ input: formInput, ctx }) => {
+      .mutation(async ({ input: formInput }) => {
         const { id, ...rest } = formInput;
         const data = {
           ...rest,
@@ -1016,7 +1008,7 @@ export const appRouter = router({
         dataFim: z.string().optional(),
         status: z.enum(["ativa", "concluida"]).optional(),
       }))
-      .mutation(async ({ input, ctx }) => {
+      .mutation(async ({ input }) => {
         const { id, ...rest } = input;
         const data = {
           ...rest,
@@ -3494,18 +3486,7 @@ export const appRouter = router({
           timestamp: new Date()
         });
         
-        // Sanitiza datas para evitar problemas de serialização
-        const safeTenant = {
-          ...tenant,
-          dataInicio: tenant.dataInicio ? new Date(tenant.dataInicio).toISOString() : null,
-          dataFim: tenant.dataFim ? new Date(tenant.dataFim).toISOString() : null,
-          dataUltimoPagamento: tenant.dataUltimoPagamento ? new Date(tenant.dataUltimoPagamento).toISOString() : null,
-          dataProximoPagamento: tenant.dataProximoPagamento ? new Date(tenant.dataProximoPagamento).toISOString() : null,
-          createdAt: (tenant as any).createdAt ? new Date((tenant as any).createdAt).toISOString() : null,
-          updatedAt: (tenant as any).updatedAt ? new Date((tenant as any).updatedAt).toISOString() : null,
-        };
-        
-        return safeTenant;
+        return tenant;
       }),
 
     // Obtém detalhes de um tenant
@@ -3591,30 +3572,6 @@ export const appRouter = router({
           new Date(input.dataInicio),
           input.dataFim ? new Date(input.dataFim) : undefined
         );
-      }),
-
-    // Deleta tenants em massa (somente demonstração)
-    deleteTenantsDemo: adminProcedure
-      .input(z.object({
-        ids: z.array(z.number()).min(1),
-      }))
-      .mutation(async ({ input }) => {
-        // Buscar tenants para validar
-        const tenantsToDelete = await db
-          .getAllTenants(); // já retorna todos; filtramos local
-
-        const alvo = tenantsToDelete.filter((t: any) => input.ids.includes(t.id));
-        if (alvo.length !== input.ids.length) {
-          throw new Error("Alguns tenants não foram encontrados.");
-        }
-
-        const naoDemo = alvo.filter((t: any) => !(t.observacoes || "").toLowerCase().includes("modo demonstração"));
-        if (naoDemo.length > 0) {
-          throw new Error("Só é permitido deletar contas de demonstração.");
-        }
-
-        const result = await db.deleteTenants(input.ids);
-        return result;
       }),
   }),
 })

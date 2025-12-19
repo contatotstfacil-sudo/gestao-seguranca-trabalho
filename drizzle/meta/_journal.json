@@ -183,6 +183,13 @@
       "when": 1764036596052,
       "tag": "0025_perfect_the_liberteens",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1766165885245,
+      "tag": "0026_glamorous_cyclops",
+      "breakpoints": true
     }
   ]
 }

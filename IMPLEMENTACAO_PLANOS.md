@@ -28,11 +28,11 @@
 - ✅ Validação ao criar colaborador (`colaboradores.create`)
 
 ### 5. **Script de Popular Planos**
-- ✅ `scripts/popular-planos.ts` criado para popular planos iniciais (novos):
-  - Bronze — R$ 67,90/mês
-  - Prata — R$ 97,90/mês
-  - Ouro — R$ 137,90/mês
-  - Diamante — R$ 199,90/mês
+- ✅ `scripts/popular-planos.ts` criado para popular planos iniciais:
+  - Básico (R$ 147/mês) - 1 empresa, até 50 colaboradores
+  - Técnico/Engenheiro (R$ 147/mês) - 6 empresas, 30 por empresa
+  - Profissional (R$ 297/mês) - Ilimitado empresas, até 200 colaboradores
+  - Enterprise - Ilimitado tudo
 
 ---
 
@@ -105,21 +105,19 @@ const plano = await trpc.assinaturas.getMinha.query();
 
 ## 📊 Estrutura dos Planos
 
-| Plano    | Preço Mensal | Empresas* | Colaboradores* |
-|----------|--------------|-----------|----------------|
-| Bronze   | R$ 67,90     | a definir | a definir      |
-| Prata    | R$ 97,90     | a definir | a definir      |
-| Ouro     | R$ 137,90    | a definir | a definir      |
-| Diamante | R$ 199,90    | a definir | a definir      |
-
-\* Limites/recursos devem ser definidos conforme oferta comercial atual. **Em todos os planos, ordens de serviço, fichas de EPI, certificados de treinamentos, cadastro de cargos/setores e gestão de ASOs são ilimitados.**
+| Plano | Preço Mensal | Preço Trimestral | Empresas | Colaboradores/Empresa | Total Colaboradores |
+|-------|--------------|------------------|----------|----------------------|---------------------|
+| Básico | R$ 147 | R$ 397 | 1 | Ilimitado | 50 |
+| Técnico | R$ 147 | R$ 397 | 6 | 30 | 180 |
+| Profissional | R$ 297 | R$ 797 | Ilimitado | Ilimitado | 200 |
+| Enterprise | Sob consulta | Sob consulta | Ilimitado | Ilimitado | Ilimitado |
 
 ---
 
 ## 🚀 Status da Implementação
 
-- ✅ **Backend completo** - Rotas e validações de planos/assinaturas implementadas
-- ⏳ **Frontend** - Pendente (páginas de planos/checkout)
+- ✅ **Backend completo** - Todas as rotas e validações implementadas
+- ⏳ **Frontend** - Pendente (próxima etapa)
 - ⏳ **Pagamento** - Pendente (integração Mercado Pago)
 - ⏳ **Renovação** - Pendente (jobs automáticos)
 

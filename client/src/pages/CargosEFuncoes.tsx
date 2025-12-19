@@ -1,7 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import { Briefcase, BarChart3, ChevronRight, FolderTree } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Briefcase, BarChart3, ChevronRight, Settings, FolderTree } from "lucide-react";
 import { useLocation } from "wouter";
 import Cargos from "./Cargos";
 import RelatorioCargos from "./RelatorioCargos";
@@ -44,6 +44,7 @@ export default function CargosEFuncoes({ showLayout = true }: { showLayout?: boo
   const [location, setLocation] = useLocation();
   
   const isEmpresasContext = location.startsWith("/empresas/cargos-e-setores");
+  const basePath = isEmpresasContext ? "/empresas/cargos-e-setores" : "/cargos-e-funcoes";
   
   const resolvedSections = React.useMemo(() => {
     return cargosEFuncoesSections.map((section) => ({
@@ -71,10 +72,18 @@ export default function CargosEFuncoes({ showLayout = true }: { showLayout?: boo
   
   // Se não há seção ativa, mostrar o menu principal
   const showMenu = !activeSection || location === "/cargos-e-funcoes" || location === "/empresas/cargos-e-setores";
-  const currentTab = activeSection?.id ?? resolvedSections[0]?.id;
+  const currentTab = activeSection?.id ?? "menu-principal";
 
-  const handleTabChange = (path: string) => {
-    setLocation(path);
+  const handleTabChange = (value: string) => {
+    if (value === "menu-principal") {
+      setLocation(basePath);
+      return;
+    }
+
+    const targetSection = resolvedSections.find((section) => section.id === value);
+    if (targetSection) {
+      setLocation(targetSection.path);
+    }
   };
 
   const content = (
@@ -115,30 +124,27 @@ export default function CargosEFuncoes({ showLayout = true }: { showLayout?: boo
         ) : (
           <div className="space-y-6">
             <div className="sticky top-4 z-20">
-              <div className="border-b">
-                <nav className="flex gap-1">
+              <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
+                <TabsList className="w-full flex flex-wrap gap-2 bg-white/90 backdrop-blur shadow-sm border rounded-xl p-1">
+                  <TabsTrigger value="menu-principal" className="flex items-center gap-2 px-3 py-2 text-sm font-medium">
+                    <Settings className="h-4 w-4" />
+                    <span>Menu Principal</span>
+                  </TabsTrigger>
                   {resolvedSections.map((section) => {
                     const Icon = section.icon;
-                    const isActive = currentTab === section.id;
                     return (
-                      <button
+                      <TabsTrigger
                         key={section.id}
-                        onClick={() => handleTabChange(section.path)}
-                        className={cn(
-                          "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-                          isActive
-                            ? "border-primary text-primary"
-                            : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
-                        )}
-                        style={{ transition: "none", WebkitTapHighlightColor: "transparent" }}
+                        value={section.id}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium"
                       >
                         <Icon className="h-4 w-4" />
                         <span>{section.label}</span>
-                      </button>
+                      </TabsTrigger>
                     );
                   })}
-                </nav>
-              </div>
+                </TabsList>
+              </Tabs>
             </div>
 
             <div className="space-y-6">

@@ -8,7 +8,6 @@ export type TrpcContext = {
   res: CreateExpressContextOptions["res"];
   user: User | null;
   planLimits?: PlanoLimits | null;
-  tenantId: number | null;
 };
 
 export async function createContext(
@@ -23,12 +22,9 @@ export async function createContext(
     user = null;
   }
 
-  const tenantId = user?.tenantId ?? null;
-
   return {
     req: opts.req,
     res: opts.res,
     user,
-    tenantId,
   };
 }

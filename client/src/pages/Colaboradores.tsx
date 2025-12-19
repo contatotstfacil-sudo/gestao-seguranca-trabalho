@@ -209,11 +209,7 @@ export default function Colaboradores() {
   );
   
   const createMutation = trpc.colaboradores.create.useMutation({
-    onSuccess: (data: any) => {
-      if (data && data.success === false) {
-        toast.error(data.message || "Limite atingido ou erro ao cadastrar colaborador.");
-        return;
-      }
+    onSuccess: () => {
       utils.colaboradores.list.invalidate();
       toast.success("Colaborador cadastrado com sucesso!");
       resetForm();

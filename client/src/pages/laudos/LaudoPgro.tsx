@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,7 @@ import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, Width
 import { saveAs } from "file-saver";
 import { useAuth } from "@/_core/hooks/useAuth";
 
-// Nota: A biblioteca docx não suporta campos dinómicos de página nativamente
+// Nota: A biblioteca docx não suporta campos dinâmicos de página nativamente
 // Por enquanto, usamos texto fixo "Página 1 de 2"
 // O usuário pode atualizar manualmente no Word se necessário
 import {
@@ -513,7 +512,7 @@ export default function LaudoPgro() {
     (open: boolean) => {
       setDialogOpen(open);
       if (!open && !emissaoEditandoId) {
-        // S| resetar se não estiver editando
+        // Só resetar se não estiver editando
         setTimeout(() => {
         resetDialogState();
         }, 100);
@@ -830,7 +829,7 @@ export default function LaudoPgro() {
     const dataEmissao = formatarData(emissao.vigenciaInicio);
     const dataVencimento = formatarData(emissao.vigenciaFim);
     
-    // Formatar mês/ano da data de vencimento em maiºsculo
+    // Formatar mês/ano da data de vencimento em maiúsculo
     const formatarMesAno = (dataString: string) => {
       if (!dataString) return '';
       try {
@@ -863,7 +862,7 @@ export default function LaudoPgro() {
         partes.push(empresa.nomeLogradouro.toUpperCase());
       }
       
-      // Nºmero
+      // Número
       if (empresa.numeroEndereco && partes.length > 0) {
         partes[partes.length - 1] += `, Nº ${empresa.numeroEndereco}`;
       }
@@ -891,120 +890,6 @@ export default function LaudoPgro() {
     
     const enderecoCompleto = formatarEndereco();
     const telefoneEmpresa = empresa?.emailContato || '';
-
-    // Sanitizar textos com resíduos de encoding corrompido
-    const sanitizeTexto = (texto?: string | null) => {
-      if (!texto) return "";
-      const fixes: Array<[string, string]> = [
-        ["aç�es", "ações"],
-        ["Aç�es", "Ações"],
-        ["açes", "ações"],
-        ["Identificaç�o", "Identificação"],
-        ["Identifica��o", "Identificação"],
-        ["IDENTIFICA��O", "IDENTIFICAÇÃO"],
-        ["IdentificaÃ§Ã£o", "Identificação"],
-        ["Cronograma de aç�es", "Cronograma de ações"],
-        ["Cronograma de açes", "Cronograma de ações"],
-        ["Raz�o", "Razão"],
-        ["atribuç�es", "atribuições"],
-        ["exposiç�", "exposição"],
-        ["exposiÃ§Ã£o", "exposição"],
-        ["an�lise", "análise"],
-        ["Fundamentaç�o", "Fundamentação"],
-        ["Informaç�o", "Informação"],
-        ["DIVULGA��O", "DIVULGAÇÃO"],
-        ["EXPOSI��O", "EXPOSIÇÃO"],
-        ["INDICE", "ÍNDICE"],
-        ["�NDICE", "ÍNDICE"],
-        ["N�MERO", "NÚMERO"],
-        ["FundamentaÃ§Ã£o", "Fundamentação"],
-        ["InformaÃ§Ã£o", "Informação"],
-        ["DIVULGAÃ‡ÃƒO", "DIVULGAÇÃO"],
-        ["EXPOSIÃ‡ÃƒO", "EXPOSIÇÃO"],
-      ];
-      let r = texto;
-      fixes.forEach(([a, b]) => {
-        if (r.includes(a)) r = r.replaceAll(a, b);
-      });
-      // remover caracteres � remanescentes
-      r = r.replace(/�/g, "");
-      return r;
-    };
-
-    const sanitizeModelo = (modelo: any) => {
-      if (!modelo) return null;
-      const copy: any = { ...modelo };
-      Object.keys(copy).forEach((k) => {
-        if (typeof copy[k] === "string") {
-          copy[k] = sanitizeTexto(copy[k]);
-        }
-      });
-      return copy;
-    };
-
-    // Buscar modelo salvo (primeiro modelo em localStorage) para preencher corpo
-    const modeloSalvo = (() => {
-      try {
-        const raw = typeof window !== "undefined" ? localStorage.getItem("modelos-pgro") : null;
-        if (!raw) return null;
-        // Se detectar caracteres corrompidos, limpar e não usar
-        if (raw.includes("�") || raw.includes("Ã")) {
-          localStorage.removeItem("modelos-pgro");
-          return null;
-        }
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed) || parsed.length === 0) return null;
-        return sanitizeModelo(parsed[0]);
-      } catch {
-        return null;
-      }
-    })();
-
-    const formatarTexto = (texto: string) => {
-      if (!texto) return "";
-      if (texto.includes("<img") || texto.includes("<table") || texto.includes("<div")) {
-        return texto;
-      }
-      return sanitizeTexto(texto).replace(/\n/g, "<br>");
-    };
-
-    const buildPaginaConteudo = (numero: number, titulo: string, conteudo: string) => `
-      <div class="pagina" style="padding: 25px; font-family: 'Calibri Light', Calibri, sans-serif; line-height: 1.6;">
-        <table style="width: 100%; border: 1px solid #000000; border-collapse: collapse; margin: 0 0 20px 0; font-size: 11pt;">
-          <tr>
-            <td style="width: 70%; padding: 8px 12px; vertical-align: middle; border-right: 1px solid #000000; font-weight: bold; text-transform: uppercase; white-space: nowrap; text-align: center;">PGRO – PROGRAMA DE GERENCIAMENTO DE RISCOS OCUPACIONAIS</td>
-            <td style="width: 30%; padding: 8px 12px; vertical-align: middle; text-align: center; white-space: nowrap;">Página ${numero}</td>
-          </tr>
-        </table>
-
-        <div style="background-color: #f5f5f5; padding: 12px 14px; border: 1px solid #dcdcdc; margin-bottom: 18px; text-transform: uppercase; font-weight: bold; color: #003366; font-size: 13pt; text-align: center;">
-          ${titulo}
-        </div>
-
-        <div style="font-size: 12pt; text-align: justify;">
-          ${formatarTexto(conteudo || "Conteúdo não informado.")}
-        </div>
-
-        <div style="margin-top: 40px; border-top: 1px solid #000; padding-top: 14px; text-align: center; font-size: 10pt; color: #666;">
-          ${enderecoCompleto || ""} ${telefoneEmpresa || ""}
-        </div>
-      </div>
-    `;
-
-    const paginasConteudo = modeloSalvo
-      ? [
-          { titulo: "1. Objetivos", conteudo: modeloSalvo.objetivos },
-          { titulo: "2. Fundamentação Legal", conteudo: modeloSalvo.fundamentacaoLegal },
-          { titulo: "3. Informação/Divulgação dos Dados", conteudo: modeloSalvo.informacaoDivulgacao },
-          { titulo: "4. Periodicidade e Análise Global do PGR", conteudo: modeloSalvo.periodicidadeAnalise },
-          { titulo: "5. Monitoramento da Exposição aos Riscos", conteudo: modeloSalvo.monitoramentoExposicao },
-          { titulo: "6. Análise de Exposição dos Riscos", conteudo: modeloSalvo.analiseExposicao },
-          { titulo: "7. Responsabilidades", conteudo: modeloSalvo.responsabilidades },
-          { titulo: "8. Inventário de Reconhecimento Avaliação e Controle", conteudo: modeloSalvo.inventarioReconhecimento },
-        ]
-          .map((sec, idx) => buildPaginaConteudo(idx + 2, sec.titulo, sec.conteudo || ""))
-          .join("")
-      : "";
     
     return `
       <!DOCTYPE html>
@@ -1093,7 +978,7 @@ export default function LaudoPgro() {
             <div style="text-align: center; font-family: 'Calibri Light', Calibri, sans-serif;">
               <div style="font-size: 20pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif;">PROGRAMA DE GERENCIAMENTO DE RISCO</div>
               <div style="font-size: 20pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif;">OCUPACIONAIS</div>
-              <div style="font-size: 12pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif; margin-top: 20px;">Referências Normativas: NR01 – NR09</div>
+              <div style="font-size: 12pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif; margin-top: 20px;">Referencias Normativas: NR01 – NR09</div>
               <br/><br/>
               <div style="font-size: 15pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif; color: #003366;">${emissao.empresaNome || ''}</div>
               <div style="font-size: 15pt; font-weight: bold; font-family: 'Calibri Light', Calibri, sans-serif; color: #003366;">CNPJ: ${empresaCnpj}</div>
@@ -1124,8 +1009,6 @@ export default function LaudoPgro() {
               </div>
             </div>
           </div>
-
-          ${paginasConteudo}
           <!--[if gte mso 9]>
           </div>
           <![endif]-->
@@ -1134,7 +1017,7 @@ export default function LaudoPgro() {
     `;
   }, [empresas]);
 
-  // C|digo antigo removido - modelo completo desconsiderado
+  // Código antigo removido - modelo completo desconsiderado
   /*
     let modelo = modeloPgro;
     if (!modelo) {
@@ -1317,7 +1200,7 @@ export default function LaudoPgro() {
           <p><strong>Total de Empregado:</strong> ${empresa?.totalFuncionarios || "04"}</p>
           <p><strong>Empregados Homens:</strong> ${empresa?.funcionariosHomens || "04"}</p>
           <p><strong>Empregados Mulheres:</strong> ${empresa?.funcionariosMulheres || "00"}</p>
-          <p><strong>Horário de Trabalho:</strong> ${empresa?.horarioTrabalho || "De segunda a quinta-feira das 07h às 17h e sexta das 07h às 16h."}</p>
+          <p><strong>Horário de Trabalho:</strong> ${empresa?.horarioTrabalho || "De segunda a quinta feira das 07h às 17h de sexta das 07h às 16h."}</p>
         </div>
 
         <div style="margin-top: 60px; border-top: 2px solid #000; padding-top: 20px; text-align: center; font-size: 11px;">
@@ -1484,7 +1367,7 @@ export default function LaudoPgro() {
 
         <div style="line-height: 1.8; text-align: justify; margin-bottom: 30px;">
           <p>
-            Comissão Interna de Prevenção de Acidentes (CIPA) é, segundo a legislação brasileira, uma comissão constituída por representantes indicados pelo empregador e membros eleitos pelos trabalhadores, de forma paritária, em cada estabelecimento da empresa, que tem a finalidade de prevenir acidentes e doenças decorrentes da vida laboral de cada trabalhador.
+            Comissão Interna de Prevenção de Acidentes (CIPA) é, segundo a legislação brasileira, uma comissão constituída por representantes indicados pelo empregador e membros eleitos pelos trabalhadores, de forma partidária, em cada estabelecimento da empresa, que tem a finalidade de prevenir acidentes e doenças decorrentes da vila laboral de cada trabalhador.
           </p>
         </div>
 
@@ -1583,7 +1466,7 @@ export default function LaudoPgro() {
             <td style="border: 1px solid #000; padding: 10px; background-color: #DC143C; color: #fff; width: 50%;"></td>
           </tr>
           <tr>
-            <td style="border: 1px solid #000; padding: 10px; background-color: #6B8E23; color: #fff; width: 50%;">Grupo 3 - Riscos Biol|gicos</td>
+            <td style="border: 1px solid #000; padding: 10px; background-color: #6B8E23; color: #fff; width: 50%;">Grupo 3 - Riscos Biológicos</td>
             <td style="border: 1px solid #000; padding: 10px; background-color: #6B8E23; color: #fff; width: 50%;"></td>
           </tr>
           <tr>
@@ -1946,8 +1829,7 @@ export default function LaudoPgro() {
   }, []);
   */
 
-  const gerarPDF = useCallback(
-    (emissao: EmissaoPgro) => {
+  const gerarPDF = useCallback((emissao: EmissaoPgro) => {
     try {
       // Gerar HTML com modelo padrão (capa em branco)
       const htmlContent = gerarTemplatePGROPadrao(emissao);
@@ -1985,9 +1867,7 @@ export default function LaudoPgro() {
       console.error("Erro ao gerar PDF:", error);
       toast.error("Erro ao gerar PDF");
     }
-    },
-    [gerarTemplatePGROPadrao]
-  );
+  }, [gerarTemplatePGROPadrao]);
 
   const gerarWord = useCallback(async (emissao: EmissaoPgro) => {
     if (gerandoWord) {
@@ -2001,7 +1881,7 @@ export default function LaudoPgro() {
       console.log("=== DEBUG GERAR WORD - DATA ===");
       console.log("Data de Emissão RAW:", emissao.dataEmissao);
       console.log("Tipo:", typeof emissao.dataEmissao);
-      console.log("Valor ap|s trim:", emissao.dataEmissao ? String(emissao.dataEmissao).trim() : "VAZIO");
+      console.log("Valor após trim:", emissao.dataEmissao ? String(emissao.dataEmissao).trim() : "VAZIO");
       console.log("===============================");
       
       // Buscar dados da empresa
@@ -2055,7 +1935,7 @@ export default function LaudoPgro() {
       const dataEmissao = formatarData(emissao.vigenciaInicio);
       const dataVencimento = formatarData(emissao.vigenciaFim);
       
-      // Formatar mês/ano da data de vencimento em maiºsculo
+      // Formatar mês/ano da data de vencimento em maiúsculo
       const formatarMesAno = (dataString: string) => {
         if (!dataString) return '';
         try {
@@ -2088,7 +1968,7 @@ export default function LaudoPgro() {
           partes.push(empresa.nomeLogradouro.toUpperCase());
         }
         
-        // Nºmero
+        // Número
         if (empresa.numeroEndereco) {
           partes[partes.length - 1] += `, Nº ${empresa.numeroEndereco}`;
         }
@@ -2173,7 +2053,7 @@ export default function LaudoPgro() {
         });
       };
 
-      // Criar conteºdo da capa
+      // Criar conteúdo da capa
       const coverContent = [
         new Paragraph({ text: "", spacing: { before: 1200, after: 0 } }),
         new Paragraph({
@@ -2192,7 +2072,7 @@ export default function LaudoPgro() {
         }),
         new Paragraph({
           children: [
-            new TextRun({ text: "Refer�ncias Normativas: NR01 â€“ NR09", font: "Calibri Light", bold: true }),
+            new TextRun({ text: "Referencias Normativas: NR01 – NR09", font: "Calibri Light", bold: true }),
           ],
           alignment: AlignmentType.CENTER,
           spacing: { after: 400 },
@@ -2378,7 +2258,7 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "POSSIVEIS DANOS A SA�DE", 
+                      text: "POSSIVEIS DANOS A SAÚDE", 
                       font: "Calibri Light", 
                       bold: true,
                       size: 18, // 9pt
@@ -2453,7 +2333,7 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "*GRADA��O EXPOSI��O", 
+                      text: "*GRADAÇÃO EXPOSIÇÃO", 
                       font: "Calibri Light", 
                       bold: true,
                       size: 18, // 9pt
@@ -2698,7 +2578,7 @@ export default function LaudoPgro() {
         const cargoCompleto = cargosCompletosMap[cargo.cargoId];
         const descricaoCargo = cargoCompleto?.descricao || cargo.descricao || cargo.descricaoCargo || "-";
         
-        // Calcular nºmero da planilha (começa em 01)
+        // Calcular número da planilha (começa em 01)
         const numeroPlanilha = (cargoIndex + 1).toString().padStart(2, '0');
         const textoPlanilha = `${numeroPlanilha} de ${totalCargos.toString().padStart(2, '0')}`;
 
@@ -2718,7 +2598,7 @@ export default function LaudoPgro() {
         const mapearTipoAgente = (tipoAgente: string): string => {
           if (!tipoAgente) return "outros";
           
-          // Normalizar removendo acentos e convertendo para minºsculas
+          // Normalizar removendo acentos e convertendo para minúsculas
           const normalizar = (str: string) => {
             return str
               .toLowerCase()
@@ -2729,23 +2609,23 @@ export default function LaudoPgro() {
           
           const tipoNormalizado = normalizar(tipoAgente);
           
-          // Mapear variaç�es de Físico
+          // Mapear variações de Físico
           if (tipoNormalizado === "fisico" || tipoNormalizado.includes("fisico")) {
             return "fisico";
           }
-          // Mapear variaç�es de Químico
+          // Mapear variações de Químico
           if (tipoNormalizado === "quimico" || tipoNormalizado.includes("quimico")) {
             return "quimico";
           }
-          // Mapear variaç�es de Biol|gico
+          // Mapear variações de Biológico
           if (tipoNormalizado === "biologico" || tipoNormalizado.includes("biologico")) {
             return "biologico";
           }
-          // Mapear variaç�es de Ergonômico
+          // Mapear variações de Ergonômico
           if (tipoNormalizado === "ergonomico" || tipoNormalizado.includes("ergonomico")) {
             return "ergonomico";
           }
-          // Mapear variaç�es de Mecónico/Acidente
+          // Mapear variações de Mecânico/Acidente
           if (tipoNormalizado === "mecanico" || tipoNormalizado.includes("mecanico") || 
               tipoNormalizado.includes("acidente") || tipoNormalizado.includes("agentes mecanicos")) {
             return "mecanico";
@@ -2773,7 +2653,7 @@ export default function LaudoPgro() {
           if (riscosPorTipo[tipo]) {
             riscosPorTipo[tipo].push(risco);
           } else if (tipo !== "outros") {
-            // Se não encontrou o tipo mas não é "outros", adicionar ao tipo mais pr|ximo
+            // Se não encontrou o tipo mas não é "outros", adicionar ao tipo mais próximo
             riscosPorTipo.fisico.push(risco);
           }
         });
@@ -2919,7 +2799,7 @@ export default function LaudoPgro() {
                   }),
                 ],
               }),
-              // Terceira linha com uma ºnica coluna
+              // Terceira linha com uma única coluna
               new TableRow({
                 children: [
                   new TableCell({
@@ -2952,7 +2832,7 @@ export default function LaudoPgro() {
                   }),
                 ],
               }),
-              // AGENTES F�SICOS (fundo verde)
+              // AGENTES FÍSICOS (fundo verde)
               new TableRow({
                 children: [
                   new TableCell({
@@ -2961,7 +2841,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({ 
-                            text: "AGENTES F�SICOS", 
+                            text: "AGENTES FÍSICOS", 
                             font: "Calibri Light", 
                             bold: true,
                             size: 18, // 9pt
@@ -2986,12 +2866,12 @@ export default function LaudoPgro() {
                 ],
               }),
               criarLinha8Colunas(),
-              // Linhas de dados para AGENTES F�SICOS
+              // Linhas de dados para AGENTES FÍSICOS
               ...(riscosPorTipo.fisico.length > 0 
                 ? riscosPorTipo.fisico.map((risco) => criarLinhaRisco(risco))
                 : [criarLinhaAusenteRiscos()]
               ),
-              // AGENTES QU�MICOS (fundo vermelho)
+              // AGENTES QUÍMICOS (fundo vermelho)
               new TableRow({
                 children: [
                   new TableCell({
@@ -3000,7 +2880,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({ 
-                            text: "AGENTES QU�MICOS", 
+                            text: "AGENTES QUÍMICOS", 
                             font: "Calibri Light", 
                             bold: true,
                             size: 18, // 9pt
@@ -3025,12 +2905,12 @@ export default function LaudoPgro() {
                 ],
               }),
               criarLinha8Colunas(),
-              // Linhas de dados para AGENTES QU�MICOS
+              // Linhas de dados para AGENTES QUÍMICOS
               ...(riscosPorTipo.quimico.length > 0 
                 ? riscosPorTipo.quimico.map((risco) => criarLinhaRisco(risco))
                 : [criarLinhaAusenteRiscos()]
               ),
-              // AGENTES BIOL�GICOS (fundo marrom)
+              // AGENTES BIOLÓGICOS (fundo marrom)
               new TableRow({
                 children: [
                   new TableCell({
@@ -3039,7 +2919,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({ 
-                            text: "AGENTES BIOL�GICOS", 
+                            text: "AGENTES BIOLÓGICOS", 
                             font: "Calibri Light", 
                             bold: true,
                             size: 18, // 9pt
@@ -3064,12 +2944,12 @@ export default function LaudoPgro() {
                 ],
               }),
               criarLinha8Colunas(),
-              // Linhas de dados para AGENTES BIOL�GICOS
+              // Linhas de dados para AGENTES BIOLÓGICOS
               ...(riscosPorTipo.biologico.length > 0 
                 ? riscosPorTipo.biologico.map((risco) => criarLinhaRisco(risco))
                 : [criarLinhaAusenteRiscos()]
               ),
-              // AGENTES ERGON�MICO (fundo amarelo)
+              // AGENTES ERGONÔMICO (fundo amarelo)
               new TableRow({
                 children: [
                   new TableCell({
@@ -3078,7 +2958,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({ 
-                            text: "AGENTES ERGON�MICO", 
+                            text: "AGENTES ERGONÔMICO", 
                             font: "Calibri Light", 
                             bold: true,
                             size: 18, // 9pt
@@ -3103,7 +2983,7 @@ export default function LaudoPgro() {
                 ],
               }),
               criarLinha8Colunas(),
-              // Linhas de dados para AGENTES ERGON�MICO
+              // Linhas de dados para AGENTES ERGONÔMICO
               ...(riscosPorTipo.ergonomico.length > 0 
                 ? riscosPorTipo.ergonomico.map((risco) => criarLinhaRisco(risco))
                 : [criarLinhaAusenteRiscos()]
@@ -3151,7 +3031,7 @@ export default function LaudoPgro() {
           }),
           // Espaçamento antes das tabelas de gradação
           new Paragraph({ text: "", spacing: { before: 400, after: 0 } }),
-          // Tabela de Gradação Efeitos � Saºde e Gradação Qualitativa de Exposição (lado a lado)
+          // Tabela de Gradação Efeitos à Saúde e Gradação Qualitativa de Exposição (lado a lado)
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
             borders: {
@@ -3166,7 +3046,7 @@ export default function LaudoPgro() {
               // Linha de cabeçalho com 4 colunas
               new TableRow({
                 children: [
-                  // Coluna 1: Categoria (Efeitos � Saºde)
+                  // Coluna 1: Categoria (Efeitos à Saúde)
                   new TableCell({
                     width: { size: 10, type: WidthType.PERCENTAGE },
                     children: [
@@ -3195,14 +3075,14 @@ export default function LaudoPgro() {
                       right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
                     },
                   }),
-                  // Coluna 2: Gradação Efeitos � Saºde
+                  // Coluna 2: Gradação Efeitos à Saúde
                   new TableCell({
                     width: { size: 40, type: WidthType.PERCENTAGE },
                     children: [
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "*Gradação Efeitos � Saºde",
+                            text: "*Gradação Efeitos à Saúde",
                             font: "Calibri Light",
                             bold: true,
                             size: 18, // 9pt
@@ -3284,7 +3164,7 @@ export default function LaudoPgro() {
                   }),
                 ],
               }),
-              // Linha 00 - Efeitos � Saºde e Exposição
+              // Linha 00 - Efeitos à Saúde e Exposição
               new TableRow({
                 children: [
                   // Categoria 00 - Efeitos
@@ -3383,7 +3263,7 @@ export default function LaudoPgro() {
                   }),
                 ],
               }),
-              // Linha 01 - Efeitos � Saºde e Exposição
+              // Linha 01 - Efeitos à Saúde e Exposição
               new TableRow({
                 children: [
                   // Categoria 01 - Efeitos
@@ -3417,7 +3297,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "Efeitos reversíveis � saºde, preocupante.",
+                            text: "Efeitos reversíveis à saúde, preocupante.",
                             font: "Calibri Light",
                             size: 18, // 9pt
                           }),
@@ -3482,7 +3362,7 @@ export default function LaudoPgro() {
                   }),
                 ],
               }),
-              // Linha 02 - Efeitos � Saºde e Exposição
+              // Linha 02 - Efeitos à Saúde e Exposição
               new TableRow({
                 children: [
                   // Categoria 02 - Efeitos
@@ -3516,7 +3396,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "Efeitos severos � saºde, preocupante.",
+                            text: "Efeitos severos à saúde, preocupante.",
                             font: "Calibri Light",
                             size: 18, // 9pt
                           }),
@@ -3563,7 +3443,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "Contato frequente c/ o agente � baixa concentração",
+                            text: "Contato frequente c/ o agente à baixa concentração",
                             font: "Calibri Light",
                             size: 18, // 9pt
                           }),
@@ -3581,7 +3461,7 @@ export default function LaudoPgro() {
                   }),
                 ],
               }),
-              // Linha 03 - Efeitos � Saºde e Exposição
+              // Linha 03 - Efeitos à Saúde e Exposição
               new TableRow({
                 children: [
                   // Categoria 03 - Efeitos
@@ -3615,7 +3495,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "Efeitos irreversíveis � saºde, preocupante.",
+                            text: "Efeitos irreversíveis à saúde, preocupante.",
                             font: "Calibri Light",
                             size: 18, // 9pt
                           }),
@@ -3662,7 +3542,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "Contato frequente c/ o agente a altas concentraç�es",
+                            text: "Contato frequente c/ o agente a altas concentrações",
                             font: "Calibri Light",
                             size: 18, // 9pt
                           }),
@@ -3680,7 +3560,7 @@ export default function LaudoPgro() {
                   }),
                 ],
               }),
-              // Linha 04 - Efeitos � Saºde e Exposição
+              // Linha 04 - Efeitos à Saúde e Exposição
               new TableRow({
                 children: [
                   // Categoria 04 - Efeitos
@@ -3714,7 +3594,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "Ameaça � vida, lesão incapacitante ocupacional.",
+                            text: "Ameaça à vida, lesão incapacitante ocupacional.",
                             font: "Calibri Light",
                             size: 18, // 9pt
                           }),
@@ -3761,7 +3641,7 @@ export default function LaudoPgro() {
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "Contato frequente � altíssima concentração",
+                            text: "Contato frequente à altíssima concentração",
                             font: "Calibri Light",
                             size: 18, // 9pt
                           }),
@@ -3784,7 +3664,7 @@ export default function LaudoPgro() {
         ];
       };
 
-      // Buscar dados completos dos cargos para obter descriç�es
+      // Buscar dados completos dos cargos para obter descrições
       const cargosCompletos: { [key: string]: any } = {};
       if (emissao.cargos && emissao.cargos.length > 0) {
         try {
@@ -3803,10 +3683,10 @@ export default function LaudoPgro() {
         }
       }
 
-      // Calcular total de páginas (11 páginas fixas + nºmero de cargos + 1 página de cronograma + 1 página de encerramento)
+      // Calcular total de páginas (11 páginas fixas + número de cargos + 1 página de cronograma + 1 página de encerramento)
       const totalPages = 11 + (emissao.cargos?.length || 0) + 2;
 
-      // Preparar páginas dinómicas para cada cargo
+      // Preparar páginas dinâmicas para cada cargo
       const totalCargos = emissao.cargos?.length || 0;
       const paginasCargos = await Promise.all(
         (emissao.cargos || []).map(async (cargo: any, index: number) => {
@@ -3871,7 +3751,7 @@ export default function LaudoPgro() {
             children: coverContent,
           },
           {
-            // Segunda página com informaç�es da empresa
+            // Segunda página com informações da empresa
             properties: {
               page: {
                 size: {
@@ -3911,7 +3791,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "IDENTIFICA��O DA EMPRESA", 
+                                  text: "IDENTIFICAÇÃO DA EMPRESA", 
                                   font: "Calibri Light", 
                                   bold: true,
                                   size: 24, // 12pt
@@ -3932,10 +3812,10 @@ export default function LaudoPgro() {
                   ],
                 }),
                 new Paragraph({ text: "", spacing: { after: 300 } }),
-                // Raz�o Social
+                // Razão Social
                 new Paragraph({
                   children: [
-                    new TextRun({ text: "Raz�o Social: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
+                    new TextRun({ text: "Razão Social: ", font: "Calibri Light", bold: true, size: 24 }), // 12pt
                     new TextRun({ text: empresa?.razaoSocial || emissao.empresaNome || '-', font: "Calibri Light", size: 24 }), // 12pt
                   ],
                   spacing: { after: 200 },
@@ -4049,7 +3929,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "�NDICE", 
+                                  text: "ÍNDICE", 
                                   font: "Calibri Light", 
                                   bold: true,
                                   size: 24, // 12pt
@@ -4082,12 +3962,12 @@ export default function LaudoPgro() {
                     { numero: 7, texto: "CIPA", pagina: 11 },
                     { numero: 8, texto: "Responsabilidades", pagina: 12 },
                     { numero: 9, texto: "Inventario de reconhecimento avaliação e controle", pagina: 13 },
-                    { numero: 10, texto: "Cronograma de aç�es", pagina: 20 },
+                    { numero: 10, texto: "Cronograma de ações", pagina: 20 },
                     { numero: 11, texto: "Termino do Programa", pagina: 21 },
                   ];
 
                   return itensIndice.map((item) => {
-                    // Criar parágrafo simples apenas com nºmero e texto
+                    // Criar parágrafo simples apenas com número e texto
                     return new Paragraph({
                       children: [
                         new TextRun({ 
@@ -4171,7 +4051,7 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "Fornece um levantamento t�cnico sobre condi��es ambientais de trabalho, indicando a presta��o de servi�o em condi��es insalubres e/ou periculosas, al�m da especifica��o da exposi��o a fatores de riscos e respectivas medidas de controle, que ir� orientar o preenchimento do Perfil Profissiogr�fico Previdenci�rio (PPP), processos de aposentadoria especial e atender � exig�ncia legal da NR 09 - Programa de Preven��o de Riscos Ambientais, e (PGR) da Constru��o Civil NR18 - Programa de Gerenciamento de Riscos, do Minist�rio do Trabalho e Emprego e do Decreto 3.048/99 e suas altera��es e Instru��o normativa 77/2015 e suas atualiza��es e dos requisitos do E-Social.", 
+                      text: "Fornece um levantamento técnico sobre condições ambientais de trabalho, indicando a prestação de serviço em condições insalubres e/ou periculosas, além da especificação da exposição a fatores de riscos e respectivas medidas de controle, que irá orientar o preenchimento do Perfil Profissiográfico Previdenciário (PPP), processos de aposentadoria especial e atender à exigência legal da NR 09 - Programa de Prevenção de Riscos Ambientais, E (PGR) da Construção Civil NR18 - Programa de Gerenciamento de Riscos, do Ministério do Trabalho e Emprego e do Decreto 3.048/99 e suas alterações e Instrução normativa 77/2015 e suas atualizações e dos requisitos do E-Social.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4190,7 +4070,7 @@ export default function LaudoPgro() {
                       size: 18, // 9pt
                     }),
                     new TextRun({ 
-                      text: "O E-Social tem por objetivo, informaç�es trabalhistas, previdenciárias, tributárias e fiscais relativas � contratação e utilização de mão obra, com ou sem vínculo empregatício e também de outras informaç�es previdenciárias e fiscais previstas na lei 8.212, de 1991.", 
+                      text: "O E-Social tem por objetivo, informações trabalhistas, previdenciárias, tributárias e fiscais relativas à contratação e utilização de mão obra, com ou sem vínculo empregatício e também de outras informações previdenciárias e fiscais previstas na lei 8.212, de 1991.", 
                       font: "Calibri Light", 
                       size: 18, // 9pt
                     }),
@@ -4269,7 +4149,7 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "Em 29 de dezembro de 1994, a Portaria N.� 25 aprovou o texto da Norma Regulamentadora NR-09, que estabelece a obrigatoriedade da elabora��o e implementa��o, por parte de todos os empregadores e institui��es que admitam trabalhadores como empregados, visando � preserva��o da sa�de e da integridade dos trabalhadores. As a��es do PPRA (Programa de Preven��o de Riscos Ambientais) devem ser desenvolvidas no �mbito de cada estabelecimento da empresa, sob a responsabilidade do empregador, com a participa��o dos trabalhadores e deve ser efetuada, sempre que necess�rio e ao menos uma vez ao ano, a sua atualiza��o.", 
+                      text: "Em 29 de dezembro de 1994, a Portaria N. º25 aprovaram o texto da Norma Regulamentadora, NR-09 que estabelece a obrigatoriedade da elaboração e implantação, por parte de todos os empregadores e instituições que admitam trabalhadores como empregados, visando à preservação da saúde e da integridade dos trabalhadores. As ações do PPRA (Programa de Prevenção de Riscos Ambientais) devem ser desenvolvidas no âmbito de cada estabelecimento da empresa, sob a responsabilidade de empregador, com a participação dos trabalhadores e deverá ser efetuada, sempre que necessário e ao menos uma vez ao ano a sua atualização.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4288,7 +4168,7 @@ export default function LaudoPgro() {
                       size: 18, // 9pt
                     }),
                     new TextRun({ 
-                      text: "Este documento serve de base para a elabora��o do Programa de Controle M�dico e Sa�de Ocupacional ? PCMSO, obrigat�rio pela NR-07.", 
+                      text: "Este documento serve de base para a elaboração do Programa de Controle Médico e Saúde Ocupacional – PCMSO, obrigatório pela NR-07.", 
                       font: "Calibri Light", 
                       size: 18, // 9pt
                     }),
@@ -4302,7 +4182,7 @@ export default function LaudoPgro() {
             })(),
           },
           {
-            // Sexta página com 3. INFORMA��O/DIVULGA��O DOS DADOS
+            // Sexta página com 3. INFORMAÇÃO/DIVULGAÇÃO DOS DADOS
             properties: {
               page: {
                 size: {
@@ -4342,7 +4222,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "3. INFORMA��O/DIVULGA��O DOS DADOS", 
+                                  text: "3. INFORMAÇÃO/DIVULGAÇÃO DOS DADOS", 
                                   font: "Calibri Light", 
                                   bold: true,
                                   size: 24, // 12pt
@@ -4367,7 +4247,7 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "As informaç�es técnicas e administrativas, tais como: Laudos Ambientais, Mapas de Risco, relação de funcionários expostos a agentes nocivos com as respectivas funç�es e setores, bem como outros dados pertinentes permanecerão disponíveis no estabelecimento para consulta pela CIPA, trabalhadores e demais interessados, como também, para eventual fiscalização pelas autoridades.", 
+                      text: "As informações técnicas e administrativas, tais como: Laudos Ambientais, Mapas de Risco, relação de funcionários expostos a agentes nocivos com as respectivas funções e setores, bem como outros dados pertinentes permanecerão disponíveis no estabelecimento para consulta pela CIPA, trabalhadores e demais interessados, como também, para eventual fiscalização pelas autoridades.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4386,7 +4266,7 @@ export default function LaudoPgro() {
                       size: 18, // 9pt
                     }),
                     new TextRun({ 
-                      text: "Serão mantidas no setor administrativo da empresa, que fará a divulgação das informaç�es e soluç�es através dos meios de comunicação existentes na empresa e/ou através de boletins, palestras e por meios eletrônicos.", 
+                      text: "Serão mantidas no setor administrativo da empresa, que fará a divulgação das informações e soluções através dos meios de comunicação existentes na empresa e/ou através de boletins, palestras e por meios eletrônicos.", 
                       font: "Calibri Light", 
                       size: 18, // 9pt
                     }),
@@ -4465,7 +4345,7 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "O PGR deverá ser atualizado anualmente ou sempre que ocorrerem mudanças significativas no ambiente de trabalho, nos processos produtivos, na organização do trabalho, na introdução de novas tecnologias ou quando houver alteraç�es nas condiç�es de trabalho que possam afetar a saºde e segurança dos trabalhadores. A análise global do PGR será realizada periodicamente, considerando os resultados das avaliaç�es, as aç�es corretivas implementadas e a eficácia das medidas de controle adotadas.", 
+                      text: "O PGR deverá ser atualizado anualmente ou sempre que ocorrerem mudanças significativas no ambiente de trabalho, nos processos produtivos, na organização do trabalho, na introdução de novas tecnologias ou quando houver alterações nas condições de trabalho que possam afetar a saúde e segurança dos trabalhadores. A análise global do PGR será realizada periodicamente, considerando os resultados das avaliações, as ações corretivas implementadas e a eficácia das medidas de controle adotadas.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4484,7 +4364,7 @@ export default function LaudoPgro() {
                       size: 18, // 9pt
                     }),
                     new TextRun({ 
-                      text: "A atualização do PGR deve ser documentada e comunicada a todos os trabalhadores envolvidos, garantindo a continuidade das aç�es de prevenção e controle dos riscos ocupacionais.", 
+                      text: "A atualização do PGR deve ser documentada e comunicada a todos os trabalhadores envolvidos, garantindo a continuidade das ações de prevenção e controle dos riscos ocupacionais.", 
                       font: "Calibri Light", 
                       size: 18, // 9pt
                     }),
@@ -4498,7 +4378,7 @@ export default function LaudoPgro() {
             })(),
           },
           {
-            // Oitava página com 5. MONITORAMENTO DA EXPOSI��O AOS RISCOS
+            // Oitava página com 5. MONITORAMENTO DA EXPOSIÇÃO AOS RISCOS
             properties: {
               page: {
                 size: {
@@ -4538,7 +4418,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "5. MONITORAMENTO DA EXPOSI��O AOS RISCOS", 
+                                  text: "5. MONITORAMENTO DA EXPOSIÇÃO AOS RISCOS", 
                                   font: "Calibri Light", 
                                   bold: true,
                                   size: 24, // 12pt
@@ -4563,12 +4443,12 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "? ", 
+                      text: "• ", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
                     new TextRun({ 
-                      text: "Avaliaç�es quantitativas da exposição aos riscos, quando aplicável: (LAUDOS E OUTROS).", 
+                      text: "Avaliações quantitativas da exposição aos riscos, quando aplicável: (LAUDOS E OUTROS).", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4581,12 +4461,12 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "? ", 
+                      text: "• ", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
                     new TextRun({ 
-                      text: "As inspeç�es de monitoramento devem incluir:", 
+                      text: "As inspeções de monitoramento devem incluir:", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4604,7 +4484,7 @@ export default function LaudoPgro() {
                       size: 24, // 12pt
                     }),
                     new TextRun({ 
-                      text: "Exemplos concretos de não conformidade ou deficiências encontradas, devidamente documentadas (fotografadas se possível), indicando através de relat|rios suas possíveis causas ou raz�es.", 
+                      text: "Exemplos concretos de não conformidade ou deficiências encontradas, devidamente documentadas (fotografadas se possível), indicando através de relatórios suas possíveis causas ou razões.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4622,7 +4502,7 @@ export default function LaudoPgro() {
                       size: 24, // 12pt
                     }),
                     new TextRun({ 
-                      text: "Os relat|rios de monitoramento devem incluir as aç�es corretivas que são sugeridas para corrigir as deficiências encontradas.", 
+                      text: "Os relatórios de monitoramento devem incluir as ações corretivas que são sugeridas para corrigir as deficiências encontradas.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4636,7 +4516,7 @@ export default function LaudoPgro() {
             })(),
           },
           {
-            // Nona página com 6. ANALISE DE EXPOSI��O DOS TRABALHADORES
+            // Nona página com 6. ANALISE DE EXPOSIÇÃO DOS TRABALHADORES
             properties: {
               page: {
                 size: {
@@ -4676,7 +4556,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "6. ANALISE DE EXPOSI��O DOS TRABALHADORES", 
+                                  text: "6. ANALISE DE EXPOSIÇÃO DOS TRABALHADORES", 
                                   font: "Calibri Light", 
                                   bold: true,
                                   size: 24, // 12pt
@@ -4697,11 +4577,11 @@ export default function LaudoPgro() {
                   ],
                 }),
                 new Paragraph({ text: "", spacing: { after: 300 } }),
-                // Parágrafo introdut|rio
+                // Parágrafo introdutório
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "A análise é feita com base em informaç�es e parómetros internacionais e nacionais:", 
+                      text: "A análise é feita com base em informações e parâmetros internacionais e nacionais:", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4714,12 +4594,12 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "? ", 
+                      text: "• ", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
                     new TextRun({ 
-                      text: "Monitoramento ambiental físico, químico biol|gico (exames médicos) dos expostos, para detecção de agravos � saºde em virtude de exposição aos riscos.", 
+                      text: "Monitoramento ambiental físico, químico biológico (exames médicos) dos expostos, para detecção de agravos à saúde em virtude de exposição aos riscos.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4732,12 +4612,12 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "? ", 
+                      text: "• ", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
                     new TextRun({ 
-                      text: "Acompanhamento dos relat|rios de inspeção quanto a realização das aç�es sugeridas.", 
+                      text: "Acompanhamento dos relatórios de inspeção quanto a realização das ações sugeridas.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4750,7 +4630,7 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "? ", 
+                      text: "• ", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -4764,11 +4644,11 @@ export default function LaudoPgro() {
                   alignment: AlignmentType.JUSTIFIED,
                   indent: { firstLine: 1134 }, // 2cm em twips (2 * 567)
                 }),
-                // Tabela ºnica com fonte na primeira linha e 6 colunas na segunda linha
+                // Tabela única com fonte na primeira linha e 6 colunas na segunda linha
                 new Table({
                   width: { size: 100, type: WidthType.PERCENTAGE },
                   rows: [
-                    // Linha 1: Fonte (célula ºnica mesclada em todas as 6 colunas)
+                    // Linha 1: Fonte (célula única mesclada em todas as 6 colunas)
                     new TableRow({
                       children: [
                         new TableCell({
@@ -4778,7 +4658,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "Fonte: AIHA â€“ AMERICAN INDUSTRIAL HYGIENE ASSOCIATION * Grada��o",
+                                  text: "Fonte: AIHA – AMERICAN INDUSTRIAL HYGIENE ASSOCIATION * Gradação",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   bold: true,
@@ -4840,7 +4720,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "*Gradação Efeitos � Saºde",
+                                  text: "*Gradação Efeitos à Saúde",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   bold: true,
@@ -5152,7 +5032,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "Efeitos reversíveis � saºde, preocupante",
+                                  text: "Efeitos reversíveis à saúde, preocupante",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   color: "000000",
@@ -5295,7 +5175,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "Efeitos severos � saºde, preocupante",
+                                  text: "Efeitos severos à saúde, preocupante",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   color: "000000",
@@ -5341,7 +5221,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "Contato frequente c/ o agente � baixa concentração",
+                                  text: "Contato frequente c/ o agente à baixa concentração",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   color: "000000",
@@ -5438,7 +5318,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "Efeitos irreversíveis � saºde, preocupante",
+                                  text: "Efeitos irreversíveis à saúde, preocupante",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   color: "000000",
@@ -5484,7 +5364,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "Contato frequente c/ o agente a altas concentraç�es",
+                                  text: "Contato frequente c/ o agente a altas concentrações",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   color: "000000",
@@ -5581,7 +5461,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "Ameaça � vida, lesão incapacitante ocupacional",
+                                  text: "Ameaça à vida, lesão incapacitante ocupacional",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   color: "000000",
@@ -5627,7 +5507,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({
-                                  text: "Contato frequente � altíssima concentração",
+                                  text: "Contato frequente à altíssima concentração",
                                   font: "Calibri Light",
                                   size: 18, // 9pt
                                   color: "000000",
@@ -5715,7 +5595,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "Fonte: AIHA â€“ AMERICAN INDUSTRIAL HYGIENE ASSOCIATION * Grada��o", 
+                                  text: "Fonte: AIHA – AMERICAN INDUSTRIAL HYGIENE ASSOCIATION * Gradação", 
                                   font: "Calibri", 
                                   size: 20, // 10pt
                                 }),
@@ -5819,7 +5699,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "*Graduação Efeitos � Saºde", 
+                                  text: "*Graduação Efeitos à Saúde", 
                                   font: "Calibri", 
                                   bold: true,
                                   size: 20, // 10pt
@@ -5974,7 +5854,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "*Graduação Efeitos � Saºde", 
+                                  text: "*Graduação Efeitos à Saúde", 
                                   font: "Calibri", 
                                   bold: true,
                                   size: 20, // 10pt
@@ -6226,7 +6106,7 @@ export default function LaudoPgro() {
                           children: [
                             new Paragraph({
                               children: [
-                                new TextRun({ text: "Efeitos reversíveis � saºde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
+                                new TextRun({ text: "Efeitos reversíveis à saúde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
                               ],
                               alignment: AlignmentType.LEFT,
                             }),
@@ -6333,7 +6213,7 @@ export default function LaudoPgro() {
                           children: [
                             new Paragraph({
                               children: [
-                                new TextRun({ text: "Efeitos severos � saºde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
+                                new TextRun({ text: "Efeitos severos à saúde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
                               ],
                               alignment: AlignmentType.LEFT,
                             }),
@@ -6367,7 +6247,7 @@ export default function LaudoPgro() {
                           children: [
                             new Paragraph({
                               children: [
-                                new TextRun({ text: "Contato frequente c/ o agente � baixa concentração", font: "Calibri Light", size: 24, color: "000000" }),
+                                new TextRun({ text: "Contato frequente c/ o agente à baixa concentração", font: "Calibri Light", size: 24, color: "000000" }),
                               ],
                               alignment: AlignmentType.LEFT,
                             }),
@@ -6440,7 +6320,7 @@ export default function LaudoPgro() {
                           children: [
                             new Paragraph({
                               children: [
-                                new TextRun({ text: "Efeitos irreversíveis � saºde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
+                                new TextRun({ text: "Efeitos irreversíveis à saúde, preocupante.", font: "Calibri Light", size: 24, color: "000000" }),
                               ],
                               alignment: AlignmentType.LEFT,
                             }),
@@ -6474,7 +6354,7 @@ export default function LaudoPgro() {
                           children: [
                             new Paragraph({
                               children: [
-                                new TextRun({ text: "Contato frequente c/ o agente a altas concentraç�es", font: "Calibri Light", size: 24, color: "000000" }),
+                                new TextRun({ text: "Contato frequente c/ o agente a altas concentrações", font: "Calibri Light", size: 24, color: "000000" }),
                               ],
                               alignment: AlignmentType.LEFT,
                             }),
@@ -6547,7 +6427,7 @@ export default function LaudoPgro() {
                           children: [
                             new Paragraph({
                               children: [
-                                new TextRun({ text: "Ameaça � vida, lesão incapacitante ocupacional.", font: "Calibri Light", size: 24, color: "000000" }),
+                                new TextRun({ text: "Ameaça à vida, lesão incapacitante ocupacional.", font: "Calibri Light", size: 24, color: "000000" }),
                               ],
                               alignment: AlignmentType.LEFT,
                             }),
@@ -6581,7 +6461,7 @@ export default function LaudoPgro() {
                           children: [
                             new Paragraph({
                               children: [
-                                new TextRun({ text: "Contato frequente � altíssima concentração", font: "Calibri Light", size: 24, color: "000000" }),
+                                new TextRun({ text: "Contato frequente à altíssima concentração", font: "Calibri Light", size: 24, color: "000000" }),
                               ],
                               alignment: AlignmentType.LEFT,
                             }),
@@ -6703,12 +6583,12 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "? ", 
+                      text: "• ", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
                     new TextRun({ 
-                      text: "Implantação do PGRO do S|cio-Diretor ou preposto da empresa:", 
+                      text: "Implantação do PGRO do Sócio-Diretor ou preposto da empresa:", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -6732,12 +6612,12 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "? ", 
+                      text: "• ", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
                     new TextRun({ 
-                      text: "Operacional do PGRO Designado pelo empregador, treinado nas aç�es de prevenção de acidentes:", 
+                      text: "Operacional do PGRO Designado pelo empregador, treinado nas ações de prevenção de acidentes:", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -6748,7 +6628,7 @@ export default function LaudoPgro() {
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: "Colaborar e participar na manutenção e execução das aç�es previstas no PGRO. Cumprir as disposiç�es legais e regulares sobre Segurança e Medicina do Trabalho inclusive as ordens de serviços de segurança expedidas pelo Empregador (item 1.7 da NR-01 da Portaria 3.214/78). Seguir as orientaç�es recebidas nos treinamentos do Programa. Informar ao superior hierárquico direto as ocorrências ou situaç�es que, a seu julgamento, possam implicar em riscos � saºde e a integridade física dos trabalhadores.", 
+                      text: "Colaborar e participar na manutenção e execução das ações previstas no PGRO. Cumprir as disposições legais e regulares sobre Segurança e Medicina do Trabalho inclusive as ordens de serviços de segurança expedidas pelo Empregador (item 1.7 da NR-01 da Portaria 3.214/78). Seguir as orientações recebidas nos treinamentos do Programa. Informar ao superior hierárquico direto as ocorrências ou situações que, a seu julgamento, possam implicar em riscos à saúde e a integridade física dos trabalhadores.", 
                       font: "Calibri Light", 
                       size: 24, // 12pt
                     }),
@@ -6802,7 +6682,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "8. INVENTARIO DE RISCOS: RECONHECIMENTOS, AVALIA��O E CONTROLE", 
+                                  text: "8. INVENTARIO DE RISCOS: RECONHECIMENTOS, AVALIAÇÃO E CONTROLE", 
                                   font: "Calibri Light", 
                                   bold: true,
                                   size: 24, // 12pt
@@ -6823,7 +6703,7 @@ export default function LaudoPgro() {
                   ],
                 }),
                 new Paragraph({ text: "", spacing: { after: 300 } }),
-                // Parágrafo introdut|rio
+                // Parágrafo introdutório
                 new Paragraph({
                   children: [
                     new TextRun({ 
@@ -6938,7 +6818,7 @@ export default function LaudoPgro() {
                         }),
                       ],
                     }),
-                    // Linha 4: Grupo 3 - Riscos Biol|gicos
+                    // Linha 4: Grupo 3 - Riscos Biológicos
                     new TableRow({
                       children: [
                         new TableCell({
@@ -6947,7 +6827,7 @@ export default function LaudoPgro() {
                             new Paragraph({
                               children: [
                                 new TextRun({ 
-                                  text: "Grupo 3 - Riscos Biol|gicos", 
+                                  text: "Grupo 3 - Riscos Biológicos", 
                                   font: "Calibri Light", 
                                   size: 24, // 12pt
                                   color: "000000", // Preto
@@ -7040,9 +6920,9 @@ export default function LaudoPgro() {
               return page11Content;
             })(),
           },
-          // Páginas dinómicas para cada cargo (começando na página 12)
+          // Páginas dinâmicas para cada cargo (começando na página 12)
           ...paginasCargos,
-          // Página de Cronograma de Aç�es
+          // Página de Cronograma de Ações
           {
             properties: {
               page: {
@@ -7088,7 +6968,7 @@ export default function LaudoPgro() {
                           new Paragraph({
                             children: [
                               new TextRun({
-                                text: "9. CRONOGRAMA DE A��ES",
+                                text: "9. CRONOGRAMA DE AÇÕES",
                                 font: "Calibri Light",
                                 bold: true,
                                 size: 24, // 12pt
@@ -7198,7 +7078,7 @@ export default function LaudoPgro() {
                       }),
                     ],
                   }),
-                  // Linhas dinómicas baseadas nas aç�es do cronograma
+                  // Linhas dinâmicas baseadas nas ações do cronograma
                   ...(emissao.cronogramaAcoes && emissao.cronogramaAcoes.length > 0
                     ? emissao.cronogramaAcoes.map((acao) => (
                         new TableRow({
@@ -7282,7 +7162,7 @@ export default function LaudoPgro() {
                         })
                       ))
                     : [
-                        // Linha vazia se não houver aç�es
+                        // Linha vazia se não houver ações
                         new TableRow({
                           children: [
                             new TableCell({
@@ -7439,7 +7319,7 @@ export default function LaudoPgro() {
                     bold: true,
                   }),
                   new TextRun({
-                    text: ", e baseado em levantamento \"in loco\" realizado na depend�ncia do cliente, foi elaborado o Programa de Preven��o de Riscos Ambientais.",
+                    text: ", e baseado em levantamento \"in loco\" realizado na dependência do cliente, foi elaborado o Programa de Prevenção de Riscos Ambientais.",
                     font: "Calibri Light",
                     size: 24, // 12pt
                   }),
@@ -7513,7 +7393,7 @@ export default function LaudoPgro() {
               }),
               // Uma linha de espaçamento apenas
               new Paragraph({ text: "", spacing: { after: 400 } }),
-              // Cidade, Estado e Data inicial formatada - alinhada � direita
+              // Cidade, Estado e Data inicial formatada - alinhada à direita
               (() => {
                 // Buscar dados da empresa
                 const empresaEncontrada = empresas.find((e) => e.id === emissao.empresaId);
@@ -7647,11 +7527,11 @@ export default function LaudoPgro() {
                 spacing: { after: 0 },
                 alignment: AlignmentType.CENTER,
               }),
-              // Raz�o social da empresa
+              // Razão social da empresa
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: empresa?.razaoSocial || emissao.empresaNome || "[Raz�o Social da Empresa]",
+                    text: empresa?.razaoSocial || emissao.empresaNome || "[Razão Social da Empresa]",
                     font: "Calibri Light",
                     size: 24, // 12pt
                     bold: true,
@@ -7737,7 +7617,7 @@ export default function LaudoPgro() {
 
   const handleSalvar = useCallback(async () => {
     if (!formularioValido) {
-      toast.error("Preencha todos os campos obrigat|rios antes de finalizar.");
+      toast.error("Preencha todos os campos obrigatórios antes de finalizar.");
       return;
     }
 
@@ -7792,7 +7672,7 @@ export default function LaudoPgro() {
       };
       
       // DEBUG - Verificar valores antes de salvar
-      console.log("=== SALVANDO EMISS�O ===");
+      console.log("=== SALVANDO EMISSÃO ===");
       console.log("cidadeEmissao STATE:", cidadeEmissao);
       console.log("estadoEmissao STATE:", estadoEmissao);
       console.log("dataEmissao STATE:", dataEmissao);
@@ -7875,7 +7755,7 @@ export default function LaudoPgro() {
                           <PopoverContent className="p-0 w-80" align="start">
                             <Command shouldFilter={false}>
                               <CommandInput
-                                placeholder="Pesquisar por raz�o social, fantasia ou CNPJ"
+                                placeholder="Pesquisar por razão social, fantasia ou CNPJ"
                                 value={empresaSearch}
                                 onValueChange={setEmpresaSearch}
                                 autoFocus
@@ -8086,7 +7966,7 @@ export default function LaudoPgro() {
                         Cargos abrangidos
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        Selecione os cargos contemplados no PGRO. O setor é preenchido automaticamente conforme vínculos já cadastrados, e o c|digo CBO é sugerido se estiver disponível.
+                        Selecione os cargos contemplados no PGRO. O setor é preenchido automaticamente conforme vínculos já cadastrados, e o código CBO é sugerido se estiver disponível.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -8121,7 +8001,7 @@ export default function LaudoPgro() {
                     </div>
                   ) : cargosDisponiveis.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">
-                      Nenhum cargo cadastrado para esta empresa. Cadastre cargos e vincule os setores no m|dulo correspondente antes de emitir o PGRO.
+                      Nenhum cargo cadastrado para esta empresa. Cadastre cargos e vincule os setores no módulo correspondente antes de emitir o PGRO.
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -8259,7 +8139,7 @@ export default function LaudoPgro() {
                             </div>
 
                             <div className="space-y-2">
-                              <Label>C|digo CBO</Label>
+                              <Label>Código CBO</Label>
                               <Input
                                 readOnly
                                 value={item.cbo}
@@ -8291,7 +8171,7 @@ export default function LaudoPgro() {
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                      Cronograma de Aç�es
+                      Cronograma de Ações
                   </h3>
                     <Button
                       type="button"
@@ -8449,7 +8329,7 @@ export default function LaudoPgro() {
 
               <DialogFooter className="sm:flex-row sm:justify-between sm:items-center px-6 pb-6 pt-4 flex-shrink-0 border-t bg-background">
                 <div className="text-xs text-muted-foreground">
-                  �ltima preparação: {format(new Date(), "dd/MM/yyyy HH:mm")}
+                  Última preparação: {format(new Date(), "dd/MM/yyyy HH:mm")}
                 </div>
                 <div className="flex gap-2">
                   <DialogClose asChild>
@@ -8578,7 +8458,7 @@ export default function LaudoPgro() {
 
           {emissoesFiltradas.length === 0 ? (
             <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">
-              Nenhum registro de PGRO encontrado. Emita um novo plano para começar a controlar as revis�es.
+              Nenhum registro de PGRO encontrado. Emita um novo plano para começar a controlar as revisões.
             </div>
           ) : (
             <div className="space-y-4">
@@ -8636,6 +8516,10 @@ export default function LaudoPgro() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenuItem onClick={() => gerarPDF(emissao)}>
+                                <FileText className="mr-2 h-4 w-4" />
+                                Gerar PDF
+                              </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -8742,7 +8626,7 @@ export default function LaudoPgro() {
                         </AccordionItem>
                       </Accordion>
 
-                      {/* Rodapé com informaç�es adicionais */}
+                      {/* Rodapé com informações adicionais */}
                       <div className="mt-4 pt-4 border-t">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs text-gray-500">
                           <div className="flex items-center gap-4">

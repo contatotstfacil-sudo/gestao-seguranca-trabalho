@@ -22,80 +22,92 @@ async function popularPlanos() {
 
   const planosIniciais = [
     {
-      nome: "bronze",
-      nomeExibicao: "Bronze",
-      descricao: "Ideal para começar",
-      precoMensal: 6790, // R$ 67,90 em centavos
-      precoTrimestral: null,
-      limiteEmpresas: null,
-      limiteColaboradoresPorEmpresa: null,
-      limiteColaboradoresTotal: null,
+      nome: "basico",
+      nomeExibicao: "Básico",
+      descricao: "Para empresas que querem sistema fácil e barato",
+      precoMensal: 14700, // R$ 147,00 em centavos
+      precoTrimestral: 39700, // R$ 397,00 em centavos
+      limiteEmpresas: 1,
+      limiteColaboradoresPorEmpresa: null, // Sem limite por empresa
+      limiteColaboradoresTotal: 50,
       recursos: JSON.stringify([
-        "Ordens de serviço ilimitadas",
-        "Fichas de EPI ilimitadas",
-        "Certificados de treinamentos ilimitados",
-        "Cadastro de cargos e setores ilimitado",
-        "Gestão de ASOs ilimitada",
+        "Gestão completa de treinamentos",
+        "Controle total de EPIs",
+        "Emissão de certificados digitais",
+        "Alertas automáticos",
+        "Suporte por email",
+        "Treinamento básico",
+        "Sistema fácil de usar",
       ]),
       ativo: true,
       ordem: 1,
     },
     {
-      nome: "prata",
-      nomeExibicao: "Prata",
-      descricao: "Para profissionais em crescimento",
-      precoMensal: 9790, // R$ 97,90 em centavos
-      precoTrimestral: null,
-      limiteEmpresas: null,
-      limiteColaboradoresPorEmpresa: null,
-      limiteColaboradoresTotal: null,
+      nome: "tecnico",
+      nomeExibicao: "Técnico/Engenheiro",
+      descricao: "O plano perfeito para profissionais autônomos que querem otimizar e ganhar tempo",
+      precoMensal: 14700, // R$ 147,00 em centavos
+      precoTrimestral: 39700, // R$ 397,00 em centavos
+      limiteEmpresas: 6,
+      limiteColaboradoresPorEmpresa: 30,
+      limiteColaboradoresTotal: null, // Total calculado: 6 × 30 = 180
       recursos: JSON.stringify([
-        "Tudo do Bronze",
-        "Ordens de serviço ilimitadas",
-        "Fichas de EPI ilimitadas",
-        "Certificados de treinamentos ilimitados",
-        "Cadastro de cargos e setores ilimitado",
-        "Gestão de ASOs ilimitada",
+        "Até 6 empresas diferentes",
+        "Até 30 colaboradores por empresa",
+        "Total: até 180 colaboradores",
+        "Ganhe 40 horas/mês de tempo livre",
+        "Controle total e qualidade garantida",
+        "Emissão ilimitada de certificados",
+        "Sistema fácil - aprenda em minutos",
+        "Relatórios profissionais por empresa",
+        "Modelos personalizáveis",
+        "Suporte especializado",
+        "Acesso mobile completo",
+        "Preço justo e acessível",
       ]),
       ativo: true,
       ordem: 2,
     },
     {
-      nome: "ouro",
-      nomeExibicao: "Ouro",
-      descricao: "Para profissionais estabelecidos (mais popular)",
-      precoMensal: 13790, // R$ 137,90 em centavos
-      precoTrimestral: null,
-      limiteEmpresas: null,
-      limiteColaboradoresPorEmpresa: null,
-      limiteColaboradoresTotal: null,
+      nome: "profissional",
+      nomeExibicao: "Profissional",
+      descricao: "Para empresas que querem otimizar processos e garantir qualidade",
+      precoMensal: 29700, // R$ 297,00 em centavos
+      precoTrimestral: 79700, // R$ 797,00 em centavos
+      limiteEmpresas: null, // Ilimitado
+      limiteColaboradoresPorEmpresa: null, // Ilimitado
+      limiteColaboradoresTotal: 200,
       recursos: JSON.stringify([
-        "Tudo do Bronze + Prata",
-        "Ordens de serviço ilimitadas",
-        "Fichas de EPI ilimitadas",
-        "Certificados de treinamentos ilimitados",
-        "Cadastro de cargos e setores ilimitado",
-        "Gestão de ASOs ilimitada",
+        "Até 200 colaboradores",
+        "Otimização completa de processos",
+        "Controle total e qualidade garantida",
+        "Múltiplas empresas ilimitadas",
+        "Relatórios avançados profissionais",
+        "Suporte prioritário 24/7",
+        "Ganhe tempo e eficiência",
+        "Sistema completo e fácil",
       ]),
       ativo: true,
       ordem: 3,
     },
     {
-      nome: "diamante",
-      nomeExibicao: "Diamante",
-      descricao: "Solução completa e inteligente (premium)",
-      precoMensal: 19990, // R$ 199,90 em centavos
-      precoTrimestral: null,
-      limiteEmpresas: null,
-      limiteColaboradoresPorEmpresa: null,
-      limiteColaboradoresTotal: null,
+      nome: "enterprise",
+      nomeExibicao: "Enterprise",
+      descricao: "Solução personalizada para grandes empresas",
+      precoMensal: 0, // Sob consulta
+      precoTrimestral: 0, // Sob consulta
+      limiteEmpresas: null, // Ilimitado
+      limiteColaboradoresPorEmpresa: null, // Ilimitado
+      limiteColaboradoresTotal: null, // Ilimitado
       recursos: JSON.stringify([
-        "Tudo do Ouro + Prata + Bronze",
-        "Ordens de serviço ilimitadas",
-        "Fichas de EPI ilimitadas",
-        "Certificados de treinamentos ilimitados",
-        "Cadastro de cargos e setores ilimitado",
-        "Gestão de ASOs ilimitada",
+        "Colaboradores ilimitados",
+        "Customizações exclusivas",
+        "API completa integrada",
+        "Suporte dedicado 24/7",
+        "Treinamento completo da equipe",
+        "Consultoria especializada mensal",
+        "SLA garantido 99.9%",
+        "Onboarding personalizado",
       ]),
       ativo: true,
       ordem: 4,
