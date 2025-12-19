@@ -174,11 +174,36 @@ export function sanitizeObject<T>(obj: T): T {
 export function validateOrigin(req: Request): boolean {
   const origin = req.headers.origin || req.headers.referer;
   const host = req.headers.host;
+  const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_PRIVATE_DOMAIN;
+  const railwaySuffix = "railway.app";
+  const allowAll = process.env.ALLOW_ALL_ORIGINS === "1";
+
+  // Flag para liberar tudo (desbloqueio rápido em produção)
+  if (allowAll) {
+    return true;
+  }
+  
+  const normalizeHost = (value?: string | null) => {
+    if (!value) return "";
+    // se vier com porta, remove
+    const hostOnly = value.split("://").pop() || value;
+    return hostOnly.split(":")[0].trim().toLowerCase();
+  };
+  
+  const normalizeOriginToHost = (value?: string | null) => {
+    if (!value) return "";
+    try {
+      const url = new URL(value);
+      return normalizeHost(url.host);
+    } catch {
+      // se não for URL válida, tenta tratar como host direto
+      return normalizeHost(value);
+    }
+  };
   
   if (!origin) {
-    // Requisições sem origin podem ser legítimas (navegador direto, Postman, etc)
-    // Mas em produção, podemos ser mais restritivos
-    return process.env.NODE_ENV === "development";
+    // Navegação direta (digitando URL) não envia Origin; aceitar para permitir acesso público
+    return true;
   }
   
   // Em desenvolvimento, aceita localhost, 127.0.0.1 e IPs da rede local (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
@@ -199,19 +224,42 @@ export function validateOrigin(req: Request): boolean {
   }
   
   // Em produção, valida contra lista de origens permitidas
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").map(o => o.trim()).filter(o => o);
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map(o => o.trim())
+    .filter(o => o);
   
-  if (allowedOrigins.length > 0) {
-    return allowedOrigins.some(allowed => origin.includes(allowed));
+  const originHost = normalizeOriginToHost(origin);
+  const requestHost = normalizeHost(host);
+  const allowedHosts = allowedOrigins.map(normalizeOriginToHost).filter(Boolean);
+  
+  // Sempre permitir se a origem for igual ao host da requisição
+  if (originHost && requestHost && originHost === requestHost) {
+    return true;
+  }
+
+  // Permitir navegação e assets a partir de extensões do navegador (evita falso positivo)
+  if (originHost.startsWith("chrome-extension")) {
+    return true;
   }
   
-  // Se não houver lista configurada, valida contra o host
-  try {
-    const originUrl = new URL(origin);
-    return originUrl.hostname === host?.split(":")[0];
-  } catch {
-    return false;
+  // Permitir se coincidir com domínios públicos/privados do Railway
+  if (publicDomain && originHost === normalizeHost(publicDomain)) {
+    return true;
   }
+
+  // Permitir qualquer subdomínio *.railway.app (ambiente próprio do Railway)
+  if (originHost.endsWith(railwaySuffix)) {
+    return true;
+  }
+  
+  // Permitir se estiver listado em ALLOWED_ORIGINS (por host)
+  if (allowedHosts.length > 0) {
+    return allowedHosts.some(allowed => originHost === allowed);
+  }
+  
+  // Sem lista configurada: fallback para comparar host da requisição
+  return originHost === requestHost;
 }
 
 /**
