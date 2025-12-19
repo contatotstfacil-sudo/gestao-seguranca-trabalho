@@ -177,6 +177,13 @@ export function validateOrigin(req: Request): boolean {
   const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_PRIVATE_DOMAIN;
   const railwaySuffix = "railway.app";
   const allowAll = process.env.ALLOW_ALL_ORIGINS === "1";
+  const method = (req.method || "GET").toUpperCase();
+  const path = (req.originalUrl || req.url || "").split("?")[0];
+
+  // ✅ Permitir acesso direto (sem Origin/Referer) apenas em rotas públicas
+  if (!origin && (path === "/" || path === "/health" || path === "/api/health")) {
+    return true;
+  }
 
   // Flag para liberar tudo (desbloqueio rápido em produção)
   if (allowAll) {
