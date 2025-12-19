@@ -344,22 +344,26 @@ export function securityMiddleware(req: Request, res: Response, next: NextFuncti
     return next();
   }
 
-  // Detecta scraping
-  if (detectScraping(req)) {
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
-    console.warn(
-      `[SECURITY] Tentativa de scraping detectada de IP: ${ip}, User-Agent: ${req.headers["user-agent"]}`
-    );
-    return res.status(403).json({
-      error: "Acesso negado",
-    });
+  // Detecta scraping (desabilitado se DISABLE_SECURITY=true)
+  if (!isSecurityDisabled()) {
+    if (detectScraping(req)) {
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      console.warn(
+        `[SECURITY] Tentativa de scraping detectada de IP: ${ip}, User-Agent: ${req.headers["user-agent"]}`
+      );
+      return res.status(403).json({
+        error: "Acesso negado",
+      });
+    }
   }
 
-  // Valida origem
-  if (!validateOrigin(req)) {
-    return res.status(403).json({
-      error: "Origem não autorizada",
-    });
+  // Valida origem (desabilitado se DISABLE_SECURITY=true)
+  if (!isSecurityDisabled()) {
+    if (!validateOrigin(req)) {
+      return res.status(403).json({
+        error: "Origem não autorizada",
+      });
+    }
   }
 
   // Headers de segurança
@@ -389,16 +393,18 @@ export function securityMiddleware(req: Request, res: Response, next: NextFuncti
     res.setHeader("Content-Security-Policy", csp);
   }
 
-  // Rate limiting
-  const ip = req.ip || req.socket.remoteAddress || "unknown";
-  const endpoint = req.path || "/";
+  // Rate limiting (desabilitado se DISABLE_SECURITY=true)
+  if (!isSecurityDisabled()) {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const endpoint = req.path || "/";
 
-  const rateLimit = checkApiRateLimit(ip, endpoint);
-  if (!rateLimit.allowed) {
-    return res.status(429).json({
-      error: "Muitas requisições. Tente novamente mais tarde.",
-      retryAfter: rateLimit.retryAfter,
-    });
+    const rateLimit = checkApiRateLimit(ip, endpoint);
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        error: "Muitas requisições. Tente novamente mais tarde.",
+        retryAfter: rateLimit.retryAfter,
+      });
+    }
   }
 
   // SQL injection check (mantido, mas cuidado com falso-positivo)
