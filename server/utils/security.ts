@@ -382,6 +382,12 @@ export function securityMiddleware(req: Request, res: Response, next: NextFuncti
   }
   
   // Em produção, aplicar todas as validações
+  // ✅ Rotas públicas: não exigir Origin (curl/healthcheck/browser direto)
+  if (req.path === "/" || req.path === "/health" || req.path === "/api/health") {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return next();
+  }
+
   // Detecta scraping
   if (detectScraping(req)) {
     const ip = req.ip || req.socket.remoteAddress || "unknown";

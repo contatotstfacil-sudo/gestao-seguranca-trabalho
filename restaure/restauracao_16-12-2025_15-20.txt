@@ -1,0 +1,3 @@
+﻿Ponto de restauracao - tag: ponto-restauracao-16-12-2025-15-20
+Commit: 5b0865effec2ade561ccf237253f219e507f2969
+Criado em 2025-12-16 15:24:22Z

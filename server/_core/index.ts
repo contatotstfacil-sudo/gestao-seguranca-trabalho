@@ -1,5 +1,6 @@
 import { config } from "dotenv";
 import { resolve } from "path";
+import { exec } from "child_process";
 
 // Carregar .env.local primeiro (prioridade), depois .env
 const envLocalPath = resolve(process.cwd(), ".env.local");
@@ -19,6 +20,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { gerarDocxPgro } from "../services/pgroDocx";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -46,18 +48,22 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
-  // Executar vínculo automático ao iniciar o servidor
-  try {
-    const { exec } = require("child_process");
-    const path = require("path");
-    const scriptPath = path.join(__dirname, "../../scripts/executar-vinculo-automatico.ts");
-    console.log("[Server] 🔄 Executando vínculo automático de setores e riscos...");
-    exec(`npx tsx "${scriptPath}"`, (error: any, stdout: any, stderr: any) => {
-      if (stdout) console.log(stdout);
-      if (stderr) console.error(stderr);
-    });
-  } catch (error) {
-    console.error("[Server] Erro ao executar vínculo automático:", error);
+  // Executar vínculo automático ao iniciar o servidor (pular em produção/Railway se solicitado)
+  const skipAutoVinculo = process.env.SKIP_AUTO_VINCULO === "1" || process.env.RAILWAY_ENVIRONMENT_NAME;
+  if (!skipAutoVinculo) {
+    try {
+      const path = await import("path");
+      const scriptPath = path.join(__dirname, "../../scripts/executar-vinculo-automatico.ts");
+      console.log("[Server] 🔄 Executando vínculo automático de setores e riscos...");
+      exec(`npx tsx "${scriptPath}"`, (error: any, stdout: any, stderr: any) => {
+        if (stdout) console.log(stdout);
+        if (stderr) console.error(stderr);
+      });
+    } catch (error) {
+      console.error("[Server] Erro ao executar vínculo automático:", error);
+    }
+  } else {
+    console.log("[Server] ⏭️ Pular vínculo automático em ambiente controlado (SKIP_AUTO_VINCULO/RAILWAY).");
   }
   
   const app = express();
@@ -76,6 +82,25 @@ async function startServer() {
   
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Endpoint para gerar PGRO em DOCX (backend)
+  app.post("/api/laudos/pgro/docx", async (req, res) => {
+    try {
+      const buffer = await gerarDocxPgro(req.body);
+      const empresa = req.body?.emissao?.empresaNome || "pgro";
+      const id = req.body?.emissao?.id || "documento";
+      const safeName = String(empresa).toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      );
+      res.setHeader("Content-Disposition", `attachment; filename=\"pgro-${safeName}-${id}.docx\"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error("[PGRO DOCX] Erro ao gerar documento:", error);
+      res.status(500).json({ message: "Erro ao gerar documento" });
+    }
+  });
   
   // Servir arquivos estáticos de uploads (fichas de EPI)
   const uploadsPath = resolve(process.cwd(), "uploads");
