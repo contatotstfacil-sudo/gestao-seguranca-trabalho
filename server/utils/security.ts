@@ -389,12 +389,10 @@ export function securityMiddleware(req: Request, res: Response, next: NextFuncti
   }
   
   // Em produção, aplicar todas as validações
-  // ✅ Rotas públicas: não exigir Origin nem anti-scraping
-  if (
-    req.originalUrl === "/" ||
-    req.originalUrl.startsWith("/health") ||
-    req.originalUrl.startsWith("/api/health")
-  ) {
+  const url = (req.originalUrl || req.url || "").split("?")[0];
+
+  // ✅ Rotas públicas: não exigir Origin nem anti-scraping (Railway/health/curl/browser)
+  if (url === "/" || url === "/health" || url === "/api/health") {
     res.setHeader("X-Content-Type-Options", "nosniff");
     return next();
   }
